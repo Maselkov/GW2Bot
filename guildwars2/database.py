@@ -46,13 +46,14 @@ class DatabaseMixin:
                 answer = await self.bot.wait_for(
                     "message", timeout=120, check=check)
             except asyncio.TimeoutError:
-                pass
+                message.edit(content="No response in time")
+                return None
             try:
                 num = int(answer.content)
                 choice = items[num]
             except:
-                await message.edit("That's not a number in the list")
-                return
+                await message.edit(content="That's not a number in the list")
+                return None
             try:
                 await answer.delete()
             except:
@@ -62,7 +63,7 @@ class DatabaseMixin:
             choice = items[0]
         data = await self.skill_embed(choice)
         try:
-            await message.edit(new_content=" ", embed=data)
+            await message.edit(content=None, embed=data)
         except discord.HTTPException:
             await ctx.send("Need permission to embed links")
 
@@ -261,12 +262,13 @@ class DatabaseMixin:
                 answer = await self.bot.wait_for(
                     "message", timeout=120, check=check)
             except asyncio.TimeoutError:
-                pass
+                message.edit(content="No response in time")
+                return None
             try:
                 num = int(answer.content)
                 choice = items[num]
             except:
-                await message.edit("That's not a number in the list")
+                await message.edit(content="That's not a number in the list")
                 return None
             try:
                 await message.delete()
