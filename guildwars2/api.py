@@ -1,5 +1,5 @@
 from .exceptions import (APIBadRequest, APIConnectionError, APIError,
-                         APIForbidden, APINotFound)
+                         APIForbidden, APIInvalidKey, APINotFound)
 
 
 class ApiMixin:
@@ -46,17 +46,25 @@ class ApiMixin:
         url = apiserv + endpoint
         async with self.session.get(url, headers=headers) as r:
             if r.status != 200 and r.status != 206:
+                try:
+                    err = await r.json()
+                    err_msg = err["text"]
+                except:
+                    err_msg = ""
                 if r.status == 400:
+                    if err_msg == "invalid key":
+                        raise APIInvalidKey("Invalid key")
                     raise APIBadRequest("Bad request")
                 if r.status == 404:
                     raise APINotFound("Not found")
                 if r.status == 403:
+                    if err_msg == "invalid key":
+                        raise APIInvalidKey("Invalid key")
                     raise APIForbidden("Access denied")
                 if r.status == 429:
                     self.log.error("API Call limit saturated")
                     raise APIConnectionError(
                         "Requests limit has been saturated. Try again later.")
                 else:
-                    raise APIConnectionError(str(r.status))
-            results = await r.json()
-        return results
+                    raise APIConnectionError("{} {}".format(r.status, err_msg))
+        return await r.json()

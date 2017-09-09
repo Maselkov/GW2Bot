@@ -18,5 +18,9 @@ class APINotFound(APIError):
     pass
 
 
+class APIInvalidKey(APIError):
+    pass
+
+
 class APIKeyError(APIError):
     pass
