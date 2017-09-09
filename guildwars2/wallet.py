@@ -29,16 +29,12 @@ class WalletMixin:
     @commands.cooldown(1, 5, BucketType.user)
     async def wallet_currency(self, ctx, *, currency: str):
         """Info about a currency. See $wallet currencies for list"""
-        cursor = self.db.currencies.find()
-        results = []
-        async for x in cursor:
-            results.append(x)
         if currency.lower() == "gold":
             currency = "coin"
         cid = None
-        for curr in results:
+        async for curr in self.db.currencies.find():
             if curr["name"].lower() == currency.lower():
-                cid = curr["id"]
+                cid = curr["_id"]
                 desc = curr["description"]
                 icon = curr["icon"]
         if not cid:
