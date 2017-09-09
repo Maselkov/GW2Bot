@@ -1,3 +1,4 @@
+import asyncio
 import re
 import time
 
@@ -41,8 +42,11 @@ class DatabaseMixin:
             def check(m):
                 return m.channel == ctx.channel and m.author == user
 
-            answer = await self.bot.wait_for(
-                "message", timeout=120, check=check)
+            try:
+                answer = await self.bot.wait_for(
+                    "message", timeout=120, check=check)
+            except asyncio.TimeoutError:
+                pass
             try:
                 num = int(answer.content)
                 choice = items[num]
@@ -253,8 +257,11 @@ class DatabaseMixin:
                 msg += "\n{}: {} ({})".format(c, m["name"], m["rarity"])
             msg += "```"
             message = await ctx.send(msg)
-            answer = await self.bot.wait_for(
-                "message", timeout=120, check=check)
+            try:
+                answer = await self.bot.wait_for(
+                    "message", timeout=120, check=check)
+            except asyncio.TimeoutError:
+                pass
             try:
                 num = int(answer.content)
                 choice = items[num]
