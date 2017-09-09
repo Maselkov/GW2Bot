@@ -27,8 +27,6 @@ class CommerceMixin:
             try:
                 doc = await self.fetch_key(user, ["tradingpost"])
                 results = await self.call_api(endpoint, key=doc["key"])
-            except APIBadRequest:
-                return await ctx.send("No ongoing transactions")
             except APIError as e:
                 return await self.error_handler(ctx, e)
         else:
@@ -59,6 +57,9 @@ class CommerceMixin:
         # Call API once for all items
         try:
             listings = await self.call_api(endpoint_listing)
+        except APIBadRequest:
+            return await ctx.send("{.mention} you don't have any ongoing "
+                                  "transactions".format(user))
         except APIError as e:
             return await self.error_handler(ctx, e)
         for result in results:

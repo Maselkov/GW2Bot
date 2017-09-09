@@ -26,7 +26,7 @@ class GuildMixin:
             guild_id = guild_id[0]
             endpoint = "guild/{0}".format(guild_id)
             results = await self.call_api(endpoint, ctx.author, ["guilds"])
-        except APINotFound:
+        except (IndexError, APINotFound):
             return await ctx.send("Invalid guild name")
         except APIError as e:
             return await self.error_handler(ctx, e)
@@ -72,7 +72,7 @@ class GuildMixin:
                 "guild/{}/ranks".format(guild_id)
             ]
             results, ranks = await self.call_multiple(endpoints, user, scopes)
-        except APINotFound:
+        except (IndexError, APINotFound):
             return await ctx.send("Invalid guild name")
         except APIForbidden:
             return await ctx.send(
@@ -118,7 +118,7 @@ class GuildMixin:
             guild_id = guild_id[0]
             endpoint = "guild/{0}/treasury".format(guild_id)
             treasury = await self.call_api(endpoint, ctx.author, ["guilds"])
-        except APINotFound:
+        except (IndexError, APINotFound):
             return await ctx.send("Invalid guild name")
         except APIForbidden:
             return await ctx.send(

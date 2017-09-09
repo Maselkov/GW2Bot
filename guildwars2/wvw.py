@@ -55,7 +55,7 @@ class WvwMixin:
             matches, worldinfo = await self.call_multiple(endpoints)
         except APIError as e:
             return await self.error_handler(ctx, e)
-        for key, value in results["all_worlds"].items():
+        for key, value in matches["all_worlds"].items():
             if wid in value:
                 worldcolor = key
         if not worldcolor:
@@ -67,18 +67,18 @@ class WvwMixin:
             color = discord.Colour.green()
         else:
             color = discord.Colour.blue()
-        score = results["scores"][worldcolor]
+        score = matches["scores"][worldcolor]
         ppt = 0
-        victoryp = results["victory_points"][worldcolor]
-        for m in results["maps"]:
+        victoryp = matches["victory_points"][worldcolor]
+        for m in matches["maps"]:
             for objective in m["objectives"]:
                 if objective["owner"].lower() == worldcolor:
                     ppt += objective["points_tick"]
         population = worldinfo["population"]
         if population == "VeryHigh":
             population = "Very high"
-        kills = results["kills"][worldcolor]
-        deaths = results["deaths"][worldcolor]
+        kills = matches["kills"][worldcolor]
+        deaths = matches["deaths"][worldcolor]
         kd = round((kills / deaths), 2)
         data = discord.Embed(description="Performance", colour=color)
         data.add_field(name="Score", value=score)
