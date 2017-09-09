@@ -1,0 +1,203 @@
+{
+    "professions" : {
+      "elementalist" : {
+        "color" : "0xDC423E",
+        "icon" : "https://wiki.guildwars2.com/images/a/a0/Elementalist_tango_icon_200px.png",
+        "name" : "Elementalist"
+      },
+      "engineer" : {
+        "color" : "0x87581D",
+        "icon" : "https://wiki.guildwars2.com/images/2/2f/Engineer_tango_icon_200px.png",
+        "name" : "Engineer"
+      },
+      "guardian" : {
+        "color" : "0x186885",
+        "icon" : "https://wiki.guildwars2.com/images/6/6c/Guardian_tango_icon_200px.png",
+        "name" : "Guardian"
+      },
+      "mesmer" : {
+        "color" : "0x69278A",
+        "icon" : "https://wiki.guildwars2.com/images/7/73/Mesmer_tango_icon_200px.png",
+        "name" : "Mesmer"
+      },
+      "necromancer" : {
+        "color" : "0x2C9D5D",
+        "icon" : "https://wiki.guildwars2.com/images/c/cd/Necromancer_tango_icon_200px.png",
+        "name" : "Necromancer"
+      },
+      "ranger" : {
+        "color" : "0x67A833",
+        "icon" : "https://wiki.guildwars2.com/images/5/51/Ranger_tango_icon_200px.png",
+        "name" : "Necromancer"
+      },
+      "revenant" : {
+        "color" : "0xA66356",
+        "icon" : "https://wiki.guildwars2.com/images/a/a8/Revenant_tango_icon_200px.png",
+        "name" : "Revenant"
+      },
+      "thief" : {
+        "color" : "0x974550",
+        "icon" : "https://wiki.guildwars2.com/images/1/19/Thief_tango_icon_200px.png",
+        "name" : "Thief"
+      },
+      "warrior" : {
+        "color" : "0xCAAA2A",
+        "icon" : "https://wiki.guildwars2.com/images/d/db/Warrior_tango_icon_200px.png",
+        "name" : "Warrior"
+      }
+    },
+    "items" : {
+      "rarity_colors" : {
+        "Junk" : "0xAAA",
+        "Basic" : "0x000",
+        "Fine" : "0x62A4DA",
+        "Masterwork" : "0x1a9306",
+        "Rare" : "0xfcd00b",
+        "Exotic" : "0xffa405",
+        "Ascended" : "0xfb3e8d",
+        "Legendary" : "0x4C139D"
+      },
+      "types" : {
+        "Armor" : "Armor",
+        "Back" : "Backpiece",
+        "Bag" : "Bag",
+        "Consumable" : "Consumable",
+        "Container" : "Container",
+        "CraftingMaterial" : "Crafting material",
+        "Gathering" : "Gathering tool",
+        "Gizmo" : "Gizmo",
+        "MiniPet" : "Mini",
+        "Tool" : "Salvage kit",
+        "Trait" : "Trait guide",
+        "Trinket" : "Trinket",
+        "Trophy" : "Trophy",
+        "UpgradeComponent" : "Upgrade component",
+        "Weapon" : "Weapon"
+      }
+    },
+    "bosses" : {
+      "vale_guardian" : { "name" : "Vale Guardian", "order" : 0 },
+      "spirit_woods" : { "name" : "Spirit Woods", "order" : 1 },
+      "gorseval" : { "name" : "Gorseval the Multifarious", "order" : 2 },
+      "sabetha" : { "name" : "Sabetha the Saboteur", "order" : 3 },
+      "slothasor" :  { "name" : "Slothasor", "order" : 4 },
+      "bandit_trio" :  { "name" : "Bandit Trio", "order" : 5 },
+      "matthias" : { "name" : "Matthias Gabrel", "order" : 6 },
+      "escort" :  { "name" : "Siege the Stronghold", "order" : 7 },
+      "keep_construct" :  { "name" : "Keep Construct", "order" : 8 },
+      "twisted_castle" :  { "name" : "Twisted Castle", "order" : 9 },
+      "xera" : { "name" : "Xera", "order" : 10 },
+      "cairn" :  { "name" : "Cairn the Indomitable", "order" : 11 },
+      "mursaat_overseer" :  { "name" : "Mursaat Overseer", "order" : 12 },
+      "samarog" :  { "name" : "Samarog", "order" : 13 },
+      "deimos" :  { "name" : "Deimos", "order" : 14 }
+    },
+    "pact_supply" : [
+      "[&BA8CAAA=][&BKYBAAA=][&BEwDAAA=][&BIcHAAA=][&BNIEAAA=][&BIMCAAA=]",
+      "[&BIMBAAA=][&BBkAAAA=][&BEgAAAA=][&BH8HAAA=][&BKgCAAA=][&BGQCAAA=]",
+      "[&BPEBAAA=][&BKYAAAA=][&BMIBAAA=][&BH4HAAA=][&BP0CAAA=][&BDgDAAA=]",
+      "[&BOcBAAA=][&BIMAAAA=][&BF0AAAA=][&BKsHAAA=][&BO4CAAA=][&BF0GAAA=]",
+      "[&BNMAAAA=][&BNUGAAA=][&BMwCAAA=][&BJQHAAA=][&BJsCAAA=][&BHsBAAA=]",
+      "[&BBABAAA=][&BJIBAAA=][&BLkCAAA=][&BH8HAAA=][&BBEDAAA=][&BEICAAA=]",
+      "[&BCECAAA=][&BC0AAAA=][&BDoBAAA=][&BIkHAAA=][&BO4CAAA=][&BIUCAAA=]"
+    ],
+    "event_timers" : {
+      "bosses" : {
+        "normal" : [
+          {"name" : "Admiral Taidha Covington", "start_time" : [0, 0], "interval" : 3, "waypoint" : "[&BKgBAAA=]"},
+          {"name" : "Svanir Shaman Chief", "start_time" : [0, 15], "interval" : 2, "waypoint" : "[&BMIDAAA=]"},
+          {"name" : "Megadestroyer", "start_time" : [0, 30], "interval" : 3, "waypoint" : "[&BM0CAAA=]"},
+          {"name" : "Fire Elemental", "start_time" : [0, 45], "interval" : 2, "waypoint" : "[&BEcAAAA=]"},
+          {"name" : "The Shatterer", "start_time" : [1, 0], "interval" : 3, "waypoint" : "[&BE4DAAA=]"},
+          {"name" : "Great Jungle Wurm", "start_time" : [1, 15], "interval" : 2, "waypoint" : "[&BEEFAAA=]"},
+          {"name" : "Modniir Ulgoth", "start_time" : [1, 30], "interval" : 3, "waypoint" : "[&BLAAAAA=]"},
+          {"name" : "Shadow Behemoth", "start_time" : [1, 45], "interval" : 2, "waypoint" : "[&BPcAAAA=]"},
+          {"name" : "Golem Mark II", "start_time" : [2, 0], "interval" : 3, "waypoint" : "[&BNQCAAA=]"},
+          {"name" : "Claw of Jormag", "start_time" : [2, 30], "interval" : 3, "waypoint" : "[&BHoCAAA=]"}
+        ],
+        "hardcore" : [
+          {"name" : "Evolved Jungle Wurm", "times" : [[1, 0], [4, 0], [8, 0], [12, 30], [17, 0], [20, 0]], "waypoint" : "[&BKoBAAA=]"},
+          {"name" : "Tequatl the Sunless", "times" : [[0, 0], [3, 0], [7, 0], [11, 30], [16, 0], [19, 0]], "waypoint" : "[&BNABAAA=]"},
+          {"name" : "Karka Queen",         "times" : [[2, 0], [6, 0], [10, 30], [15, 0], [18, 0], [23, 0]], "waypoint" : "[&BNUGAAA=]"}
+        ]
+      },
+      "maps" : [
+        {"name": "Verdant Brink",
+         "phases": [
+            { "name": "",  "duration": 10, "color": "0x84C147" },
+            { "name": "Night Bosses",  "duration": 20, "color": "0x6DAC2F" },
+            { "name": "Daytime", "duration": 75,  "color": "0xC4E2A5" },
+            { "name": "Night",  "duration": 15, "color": "0x84C147" }]},
+        {"name": "Auric Basin",
+         "phases": [
+            { "name": "Pillars",  "duration": 45, "color": "0xFFE37F" },
+            { "name": "Challenges",  "duration": 15, "color": "0xFFD53D" },
+            { "name": "Octovine",  "duration": 20, "color": "0xEAB700" },
+            { "name": "Reset",  "duration": 10, "color": "0xFFF1C1" },
+            { "name": "Pillars",  "duration": 30, "color": "0xFFE37F" }]},
+        {"name": "Tangled Depths",
+         "phases": [
+            { "name": "",  "duration": 25, "color": "0xFFD7D7" },
+            { "name": "Prep",  "duration": 5, "color": "0xffbdbd" },
+            { "name": "Chak Gerent",  "duration": 20, "color": "0xf99" },
+            { "name": "Help the Outposts",  "duration": 70, "color": "0xFFD7D7" }]},
+
+        {"name": "Dragon's Stand",
+         "phases": [
+            { "name": "",  "duration": 90, "color": "0xDFDDF7" },
+            { "name": "Start",  "duration": 30, "color": "0xc8c5e5"}]},
+
+          {"name": "Dry Top",
+           "phases": [
+            { "name": "Crash Site", "duration": 40,  "color": "0xFCFADC" },
+            { "name": "Sandstorm",  "duration": 20, "color": "0xDED98A" },
+            { "name": "Crash Site",  "duration": 40, "color": "0xFCFADC" },
+            { "name": "Sandstorm",  "duration": 20, "color": "0xDED98A" }]}
+      ]
+    },
+    "insights": {
+      "legendary_insight":  77302,
+      "gift_of_prowess":    78989,
+      "envoy_insignia":     80516,
+      "refined_envoy_armor": {
+        "refined_envoy_helmet":       80387,
+        "refined_envoy_pauldrons":    80236,
+        "refined_envoy_breastplate":  80648,
+        "refined_envoy_gauntlets":    80673,
+        "refined_envoy_tassets":      80427,
+        "refined_envoy_greaves":      80127,
+        "refined_envoy_mask":         80634,
+        "refined_envoy_shoulderpads": 80366,
+        "refined_envoy_jerkin":       80607,
+        "refined_envoy_vambraces":    80658,
+        "refined_envoy_leggings":     80675,
+        "refined_envoy_boots":        80177,
+        "refined_envoy_cowl":         80441,
+        "refined_envoy_mantle":       80264,
+        "refined_envoy_vestments":    80120,
+        "refined_envoy_gloves":       80460,
+        "refined_envoy_pants":        80275,
+        "refined_envoy_shoes":        80583
+      },
+      "perfected_envoy_armor": {
+        "perfected_envoy_helmet":       80384,
+        "perfected_envoy_pauldrons":    80435,
+        "perfected_envoy_breastplate":  80254,
+        "perfected_envoy_gauntlets":    80205,
+        "perfected_envoy_tassets":      80277,
+        "perfected_envoy_greaves":      80557,
+        "perfected_envoy_mask":         80296,
+        "perfected_envoy_shoulderpads": 80145,
+        "perfected_envoy_jerkin":       80578,
+        "perfected_envoy_vambraces":    80161,
+        "perfected_envoy_leggings":     80252,
+        "perfected_envoy_boots":        80281,
+        "perfected_envoy_cowl":         80248,
+        "perfected_envoy_mantle":       80131,
+        "perfected_envoy_vestments":    80190,
+        "perfected_envoy_gloves":       80111,
+        "perfected_envoy_pants":        80356,
+        "perfected_envoy_shoes":        80399
+      }
+   }
+}
