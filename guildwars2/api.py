@@ -67,4 +67,4 @@ class ApiMixin:
                         "Requests limit has been saturated. Try again later.")
                 else:
                     raise APIConnectionError("{} {}".format(r.status, err_msg))
-        return await r.json()
+            return await r.json()
