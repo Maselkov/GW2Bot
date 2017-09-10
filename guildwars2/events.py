@@ -97,3 +97,45 @@ class EventsMixin:
             return "{} hours and {} minutes".format(hours, minutes)
         else:
             return "{} minutes".format(minutes)
+
+    @commands.command(aliases=["hottimer", "hottimers"])
+    async def hotet(self, ctx):
+        """The event timer. Shows current progression of hot maps."""
+        time = datetime.datetime.utcnow()
+        position = int(
+            (60 * time.hour + time.minute) %
+            120)  # this gets the minutes elapsed in the current 2 hour window
+        maps = self.gamedata["event_timers"]["maps"]
+        output = ""
+        for hotmap in maps:
+            overlap = 0
+            output = output + "#" + hotmap["name"] + "\n"
+            for phases in hotmap[
+                    "phases"]:  # loops through phases to find current phase
+                if position < phases["end"]:
+                    output = (output + "Current phase is " +
+                              phases["name"] + ".\n")
+                    nextphase = position + 1 + (phases["end"] - position)
+                    if nextphase > 120:
+                        overlap = 120 - position
+                        nextphase = nextphase - 120
+                    break
+            for phases in hotmap[
+                    "phases"]:  # loops through phases to find next phase
+                if nextphase < phases["end"]:
+                    if overlap == 0:
+                        nextstart = phases["end"] - phases["duration"]
+                        timetostart = nextstart - position
+                        name = phases["name"]
+                    # dry top event starts at the 2 hour reset
+                    elif overlap > 0 and hotmap["name"] == "Dry Top":
+                        timetostart = 120 - position
+                        name = phases["name"]
+                    else:
+                        timetostart = phases["end"] + overlap
+                        name = phases["nextname"]
+                    output = output + "Next phase is " + name + " in " + str(
+                        timetostart) + " minutes.\n"
+                    break
+            output = output + "\n"
+        await ctx.send("```markdown\n" + output + "```")

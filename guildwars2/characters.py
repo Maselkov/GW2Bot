@@ -22,6 +22,7 @@ class CharactersMixin:
 
         Required permissions: characters
         """
+
         def format_age(age):
             hours, remainder = divmod(int(age), 3600)
             minutes, seconds = divmod(remainder, 60)
@@ -32,7 +33,8 @@ class CharactersMixin:
                 fmt = '{h} hours, {m} minutes, and {s} seconds'
             return fmt.format(d=days, h=hours, m=minutes, s=seconds)
 
-        endpoint = "characters/" + character.title().replace(" ", "%20")
+        character = character.title()
+        endpoint = "characters/" + character.replace(" ", "%20")
         try:
             results = await self.call_api(endpoint, ctx.author, ["characters"])
         except APINotFound:
@@ -77,7 +79,7 @@ class CharactersMixin:
     @commands.cooldown(1, 15, BucketType.user)
     async def character_list(self, ctx):
         """Lists all your characters
-        
+
         Required permissions: characters
         """
         user = ctx.author
@@ -113,7 +115,8 @@ class CharactersMixin:
                     formatted_list.append(x)
             return formatted_list
 
-        endpoint = "characters/" + character.title().replace(" ", "%20")
+        character = character.title()
+        endpoint = "characters/" + character.replace(" ", "%20")
         await ctx.trigger_typing()
         try:
             results = await self.call_api(endpoint, ctx.author, ["characters"])
