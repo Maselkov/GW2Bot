@@ -124,18 +124,18 @@ class DatabaseMixin:
     async def db_stats(self, ctx):
         """Some statistics
         """
-        cursor = self.bot.database.get_user_cursor({
+        cursor = self.bot.database.get_users_cursor({
             "key": {
                 "$ne": None
             }
         }, self)
         result = await cursor.count()
         await ctx.send("{} registered users".format(result))
-        cursor_updates = self.bot.database.get_guild_cursor({
+        cursor_updates = self.bot.database.get_guilds_cursor({
             "updates.on": True
         })
-        cursor_daily = self.bot.database.get_guild_cursor({"daily.on": True})
-        cursor_news = self.bot.database.get_guild_cursor({"news.on": True})
+        cursor_daily = self.bot.database.get_guilds_cursor({"daily.on": True})
+        cursor_news = self.bot.database.get_guilds_cursor({"news.on": True})
         result_updates = await cursor_updates.count()
         result_daily = await cursor_daily.count()
         result_news = await cursor_news.count()
