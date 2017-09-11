@@ -372,7 +372,7 @@ class NotiifiersMixin:
                         embeds.append(self.news_embed(item))
                     await self.send_news(embeds)
                 await asyncio.sleep(300)
-            except APIError as e:
+            except Exception as e:
                 self.log.exception(e)
                 await asyncio.sleep(300)
                 continue
