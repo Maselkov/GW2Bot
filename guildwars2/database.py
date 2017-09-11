@@ -233,13 +233,15 @@ class DatabaseMixin:
         self.log.info(
             "Database done! Time elapsed: {} seconds".format(end - start))
 
-    async def itemname_to_id(self, ctx, item, user):
+    async def itemname_to_id(self, ctx, item, user, *, flags=[], filters={}):
         def check(m):
             return m.channel == ctx.channel and m.author == user
 
         item_sanitized = re.escape(item)
         search = re.compile(item_sanitized + ".*", re.IGNORECASE)
-        cursor = self.db.items.find({"name": search})
+        cursor = self.db.items.find({"name": search,
+                                     "flags": {"$nin": flags},
+                                     **filters})
         number = await cursor.count()
         if not number:
             await ctx.send(

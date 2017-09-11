@@ -85,7 +85,8 @@ class CommerceMixin:
     async def tp_price(self, ctx, *, item: str):
         """Check price of an item"""
         user = ctx.author
-        choice = await self.itemname_to_id(ctx, item, user)
+        flags = ["AccountBound", "SoulbindOnAcquire"]
+        choice = await self.itemname_to_id(ctx, item, user, flags=flags)
         if not choice:
             return
         try:
