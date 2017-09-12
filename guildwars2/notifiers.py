@@ -78,6 +78,14 @@ class NotiifiersMixin:
             msg = ("Daily notifier disabled")
         await ctx.send(msg)
 
+    @commands.cooldown(1, 5, BucketType.guild)
+    @dailynotifier.command(name="autodelete")
+    async def daily_notifier_autodelete(self, ctx, on_off: bool):
+        """Toggles automatically deleting last day's dailies"""
+        guild = ctx.guild
+        await self.bot.database.set_guild(guild, {"daily.autodelete": on_off}, self)
+        await ctx.send("Autodeletion for daily notifs enabled")
+
     @commands.group()
     @commands.guild_only()
     @commands.has_permissions(manage_guild=True)
@@ -260,7 +268,6 @@ class NotiifiersMixin:
 
     async def send_daily_notifs(self):
         try:
-            channels = []
             name = self.__class__.__name__
             cursor = self.bot.database.get_guilds_cursor({
                 "daily.on": True,
@@ -268,10 +275,17 @@ class NotiifiersMixin:
                     "$ne": None
                 }
             }, self)
+            to_message = []
             async for doc in cursor:
                 try:
                     guild = doc["cogs"][name]["daily"]
-                    channels.append(guild["channel"])
+                    destination = {"channel": guild["channel"]}
+                    autodelete = guild.get("autodelete", False)
+                    if autodelete:
+                        message = guild.get("message")
+                        if message:
+                            destination.update(old_message=message)
+                    to_message.append(destination)
                 except:
                     pass
             try:
@@ -282,9 +296,16 @@ class NotiifiersMixin:
                 return
             message = await self.display_all_dailies(results, True)
             message = "```markdown\n" + message + "```\nHave a nice day!"
-            for chanid in channels:
+            for destination in to_message:
                 try:
-                    await self.bot.get_channel(chanid).send(message)
+                    channel = self.bot.get_channel(destination["channel"])
+                    new_message = await channel.send(message)
+                    await self.bot.database.set_guild(
+                        channel.guild, {"daily.message": new_message.id}, self)
+                    old_message = destination.get("old_message")
+                    if old_message:
+                        to_delete = await channel.get_message(old_message)
+                        await to_delete.delete()
                 except:
                     pass
         except Exception as e:
