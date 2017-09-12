@@ -154,7 +154,11 @@ class DatabaseMixin:
 
     async def fetch_statname(self, item):
         statset = await self.db.itemstats.find_one({"_id": item})
-        return statset["name"]
+        try:
+            name = statset["name"]
+        except:
+            name = ""
+        return name
 
     async def fetch_item(self, item):
         return await self.db.items.find_one({"_id": item})
