@@ -83,7 +83,8 @@ class NotiifiersMixin:
     async def daily_notifier_autodelete(self, ctx, on_off: bool):
         """Toggles automatically deleting last day's dailies"""
         guild = ctx.guild
-        await self.bot.database.set_guild(guild, {"daily.autodelete": on_off}, self)
+        await self.bot.database.set_guild(guild, {"daily.autodelete": on_off},
+                                          self)
         await ctx.send("Autodeletion for daily notifs enabled")
 
     @commands.group()
@@ -240,7 +241,11 @@ class NotiifiersMixin:
         doc = await self.bot.database.get_cog_config(self)
         if not doc:
             return False
-        day = doc["cache"]["day"]
+        cache = doc["cache"]
+        day = cache.get("day")
+        dailies = cache.get("dailies")
+        if not dailies:
+            await self.cache_dailies()
         if day != current:
             await self.bot.database.set_cog_config(self,
                                                    {"cache.day": current})
@@ -281,6 +286,7 @@ class NotiifiersMixin:
                     guild = doc["cogs"][name]["daily"]
                     destination = {"channel": guild["channel"]}
                     autodelete = guild.get("autodelete", False)
+                    destination["categories"] = guild.get("categories")
                     if autodelete:
                         message = guild.get("message")
                         if message:
@@ -288,20 +294,27 @@ class NotiifiersMixin:
                     to_message.append(destination)
                 except:
                     pass
-            try:
-                endpoint = "achievements/daily"
-                results = await self.call_api(endpoint)
-            except APIError as e:
-                self.log.exception(e)
-                return
-            message = await self.display_all_dailies(results, True)
-            message = "```markdown\n" + message + "```\nHave a nice day!"
+            daily_doc = await self.bot.database.get_cog_config(self)
             sent = 0
             deleted = 0
             for destination in to_message:
                 try:
+                    categories = destination["categories"]
+                    if not categories:
+                        categories = [
+                            "psna", "psna_later", "pve", "pvp", "wvw",
+                            "fractals"
+                        ]
+                    embed = await self.daily_embed(categories, doc=daily_doc)
                     channel = self.bot.get_channel(destination["channel"])
-                    new_message = await channel.send(message)
+                    try:
+                        new_message = await channel.send(embed=embed)
+                    except discord.Forbidden:
+                        new_message = await channel.send(
+                            "Need permission to "
+                            "embed links in order "
+                            "to send daily "
+                            "notifs!")
                     sent += 1
                     await self.bot.database.set_guild(
                         channel.guild, {"daily.message": new_message.id}, self)
@@ -312,7 +325,8 @@ class NotiifiersMixin:
                         deleted += 1
                 except:
                     pass
-            self.log.info("Daily notifs: sent {}, deleted {}".format(sent, deleted))
+            self.log.info(
+                "Daily notifs: sent {}, deleted {}".format(sent, deleted))
         except Exception as e:
             self.log.exception(e)
             return
@@ -381,6 +395,7 @@ class NotiifiersMixin:
             try:
                 if await self.check_day():
                     await asyncio.sleep(300)
+                    await self.cache_dailies()
                     await self.send_daily_notifs()
                 await asyncio.sleep(60)
             except Exception as e:

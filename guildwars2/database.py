@@ -181,6 +181,37 @@ class DatabaseMixin:
                     "command: `{}`".format(user, missing))
         return doc["key"]
 
+    async def cache_dailies(self):
+        try:
+            results = await self.call_api("achievements/daily")
+        except:
+            return
+        try:
+            doc = {}
+            for category, dailies in results.items():
+                daily_list = []
+                for daily in dailies:
+                    if not daily["level"]["max"] == 80:
+                        continue
+                    daily_doc = await self.db.achievements.find_one({
+                        "_id":
+                        daily["id"]
+                    })
+                    name = daily_doc["name"]
+                    if category == "fractals":
+                        if name.startswith(
+                                "Daily Tier"
+                        ) and not name.startswith("Daily Tier 4"):
+                            continue
+                    daily_list.append(name)
+                doc[category] = sorted(daily_list)
+            doc["psna"] = [self.get_psna()]
+            doc["psna_later"] = [self.get_psna(offset_days=1)]
+            await self.bot.database.set_cog_config(self,
+                                                   {"cache.dailies": doc})
+        except Exception as e:
+            self.log.exception("Exception caching dailies: ", exc_info=e)
+
     async def cache_endpoint(self, endpoint, all=False):
         try:
             items = await self.call_api(endpoint)
