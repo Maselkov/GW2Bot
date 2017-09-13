@@ -234,5 +234,14 @@ class CharactersMixin:
                 suffix = 'th'
             output += "\n{} {} days until {}{} birthday".format(
                 name, days, years, suffix)
+            if len(output) > 1900 and '*' not in output:
+                output += '*'
         output += "```"
-        await ctx.send(output.format(user))
+        if '*' not in output:
+            await ctx.send(output.format(user))
+        else:
+            first, second = output.split('*')
+            first += "```"
+            second = "```" + second
+            await ctx.send(first.format(user))
+            await ctx.send(second)
