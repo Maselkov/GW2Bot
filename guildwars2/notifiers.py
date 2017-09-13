@@ -317,60 +317,49 @@ class NotiifiersMixin:
                     "$ne": None
                 }
             }, self)
-            to_message = []
-            async for doc in cursor:
-                try:
-                    guild = doc["cogs"][name]["daily"]
-                    destination = {"channel": guild["channel"]}
-                    autodelete = guild.get("autodelete", False)
-                    destination["categories"] = guild.get("categories")
-                    if autodelete:
-                        message = guild.get("message")
-                        if message:
-                            destination.update(old_message=message)
-                    to_message.append(destination)
-                except:
-                    pass
             daily_doc = await self.bot.database.get_cog_config(self)
             sent = 0
             deleted = 0
-            for destination in to_message:
+            forbidden = 0
+            async for doc in cursor:
                 try:
-                    categories = destination["categories"]
+                    guild = doc["cogs"][name]["daily"]
+                    categories = guild.get("categories")
                     if not categories:
                         categories = [
                             "psna", "psna_later", "pve", "pvp", "wvw",
                             "fractals"
                         ]
                     embed = await self.daily_embed(categories, doc=daily_doc)
-                    channel = self.bot.get_channel(destination["channel"])
+                    channel = self.bot.get_channel(guild["channel"])
                     try:
-                        new_message = await channel.send(embed=embed)
+                        message = await channel.send(embed=embed)
+                        sent += 1
                     except discord.Forbidden:
-                        new_message = await channel.send(
-                            "Need permission to "
-                            "embed links in order "
-                            "to send daily "
-                            "notifs!")
-                    sent += 1
+                        forbidden += 1
+                        message = await channel.send("Need permission to "
+                                                     "embed links in order "
+                                                     "to send daily "
+                                                     "notifs!")
                     await self.bot.database.set_guild(
-                        channel.guild, {"daily.message": new_message.id}, self)
-                    old_message = destination.get("old_message")
-                    if old_message:
-                        to_delete = await channel.get_message(old_message)
-                        await to_delete.delete()
-                        deleted += 1
+                        channel.guild, {"daily.message": message.id}, self)
+                    autodelete = guild.get("autodelete", False)
+                    if autodelete:
+                        old_message = guild.get("message")
+                        if old_message:
+                            to_delete = await channel.get_message(old_message)
+                            await to_delete.delete()
+                            deleted += 1
                 except:
                     pass
-            self.log.info(
-                "Daily notifs: sent {}, deleted {}".format(sent, deleted))
+            self.log.info("Daily notifs: sent {}, deleted {}, forbidden {}".
+                          format(sent, deleted, forbidden))
         except Exception as e:
             self.log.exception(e)
             return
 
     async def send_news(self, embeds):
         try:
-            channels = []
             name = self.__class__.__name__
             cursor = self.bot.database.get_guilds_cursor({
                 "news.on": True,
@@ -381,35 +370,17 @@ class NotiifiersMixin:
             async for doc in cursor:
                 try:
                     guild = doc["cogs"][name]["news"]
-                    channels.append(guild["channel"])
-                except:
-                    pass
-            for chanid in channels:
-                try:
+                    channel = self.bot.get_channel(guild["channel"])
                     for embed in embeds:
-                        await self.bot.get_channel(chanid).send(embed=embed)
+                        await channel.send(embed=embed)
                 except:
                     pass
         except Exception as e:
-            self.log.exception(e)
-            return
+            self.log.exception("Exception sending daily notifs: ", exc_info=e)
 
     async def send_update_notifs(self):
         try:
-            channels = []
             name = self.__class__.__name__
-            cursor = self.bot.database.get_guilds_cursor({
-                "updates.on": True,
-                "updates.channel": {
-                    "$ne": None
-                }
-            }, self)
-            async for doc in cursor:
-                try:
-                    guild = doc["cogs"][name]["updates"]
-                    channels.append(guild["channel"])
-                except:
-                    pass
             try:
                 link = await self.get_patchnotes()
                 patchnotes = "\nUpdate notes: " + link
@@ -419,9 +390,16 @@ class NotiifiersMixin:
                 patchnotes = ""
             message = ("@here Guild Wars 2 has just updated! New build: "
                        "`{0}`{1}".format(build, patchnotes))
-            for chanid in channels:
+            cursor = self.bot.database.get_guilds_cursor({
+                "updates.on": True,
+                "updates.channel": {
+                    "$ne": None
+                }
+            }, self)
+            async for doc in cursor:
                 try:
-                    await self.bot.get_channel(chanid).send(message)
+                    guild = doc["cogs"][name]["updates"]
+                    await self.bot.get_channel(guild["channel"]).send(message)
                 except:
                     pass
         except Exception as e:
