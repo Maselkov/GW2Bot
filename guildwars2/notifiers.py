@@ -192,12 +192,12 @@ class NotiifiersMixin:
         await ctx.send(msg)
 
     async def get_patchnotes(self):
-        url = "https://forum-en.guildwars2.com/forum/info/updates"
+        url = "https://en-forum.guildwars2.com/categories/game-release-notes"
         async with self.session.get(url) as r:
             results = await r.text()
         soup = BeautifulSoup(results, 'html.parser')
-        post = soup.find(class_="arenanet topic")
-        return "https://forum-en.guildwars2.com" + post.find("a")["href"]
+        post = soup.find(class_="Title")
+        return "https://forum-en.guildwars2.com" + post["href"]
 
     async def check_news(self):
         doc = await self.bot.database.get_cog_config(self)
@@ -296,18 +296,23 @@ class NotiifiersMixin:
                 return
             message = await self.display_all_dailies(results, True)
             message = "```markdown\n" + message + "```\nHave a nice day!"
+            sent = 0
+            deleted = 0
             for destination in to_message:
                 try:
                     channel = self.bot.get_channel(destination["channel"])
                     new_message = await channel.send(message)
+                    sent += 1
                     await self.bot.database.set_guild(
                         channel.guild, {"daily.message": new_message.id}, self)
                     old_message = destination.get("old_message")
                     if old_message:
                         to_delete = await channel.get_message(old_message)
                         await to_delete.delete()
+                        deleted += 1
                 except:
                     pass
+            self.log.info("Daily notifs: sent {}, deleted {}".format(sent, deleted))
         except Exception as e:
             self.log.exception(e)
             return
