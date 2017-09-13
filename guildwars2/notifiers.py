@@ -35,14 +35,8 @@ class NotiifiersMixin:
         doc = await self.bot.database.get_guild(guild, self)
         enabled = doc["daily"].get("on", False)
         if enabled:
-            try:
-                endpoint = "achievements/daily"
-                results = await self.call_api(endpoint)
-            except APIError as e:
-                return await self.error_handler(ctx, e)
-            example = await self.display_all_dailies(results, True)
             msg = ("I will now send dailies to {.mention}. "
-                   "Example:\n```markdown\n{}```".format(channel, example))
+                   "".format(channel))
         else:
             msg = ("Channel set to {.mention}. In order to receive "
                    "dailies, you still need to enable it using "
@@ -59,17 +53,10 @@ class NotiifiersMixin:
             doc = await self.bot.database.get_guild(guild, self)
             channel = doc["daily"].get("channel")
             if channel:
-                try:
-                    endpoint = "achievements/daily"
-                    results = await self.call_api(endpoint)
-                except APIError as e:
-                    return await self.error_handler(ctx, e)
                 channel = guild.get_channel(channel)
                 if channel:
-                    example = await self.display_all_dailies(results, True)
                     msg = ("I will now send dailies to {.mention}. "
-                           "Example:\n```markdown\n{}```".format(
-                               channel, example))
+                           "".format(channel))
             else:
                 msg = ("Daily notifier toggled on. In order to reeceive "
                        "dailies, you still need to set a channel using "
@@ -86,6 +73,56 @@ class NotiifiersMixin:
         await self.bot.database.set_guild(guild, {"daily.autodelete": on_off},
                                           self)
         await ctx.send("Autodeletion for daily notifs enabled")
+
+    @commands.cooldown(1, 5, BucketType.guild)
+    @dailynotifier.command(name="categories")
+    async def daily_notifier_categories(self, ctx, *categories):
+        """Set daily notifier to only display specific categories
+
+        Separate multiple categories with space, possible values:
+        all
+        psna
+        psna_later
+        pve
+        pvp
+        wvw
+        fractals
+
+        psna_later is psna, 8 hours later
+        PSNA changes 8 hours after dailies change.
+
+        Example: $dailynotifier categories psna psna_later pve fractals
+        """
+        if not categories:
+            await self.bot.send_cmd_help(ctx)
+            return
+        guild = ctx.guild
+        possible_values = [
+            "all", "psna", "psna_later", "pve", "pvp", "wvw", "fractals"
+        ]
+        categories = [x.lower() for x in categories]
+        if len(categories) > 6:
+            await self.bot.send_cmd_help(ctx)
+            return
+        for category in categories:
+            if category not in possible_values:
+                await self.bot.send_cmd_help(ctx)
+                return
+            if categories.count(category) > 1:
+                await self.bot.send_cmd_help(ctx)
+                return
+            if category == "all":
+                categories = [
+                    "psna", "psna_later", "pve", "pvp", "wvw", "fractals"
+                ]
+                break
+        embed = await self.daily_embed(categories)
+        await self.bot.database.set_guild(
+            guild, {"daily.categories": categories}, self)
+        await ctx.send(
+            "Your categories have been saved. Here's an example of "
+            "your daily notifs:",
+            embed=embed)
 
     @commands.group()
     @commands.guild_only()
