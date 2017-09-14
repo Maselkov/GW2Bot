@@ -242,12 +242,23 @@ class NotiifiersMixin:
         await ctx.send(msg)
 
     async def get_patchnotes(self):
-        url = "https://en-forum.guildwars2.com/categories/game-release-notes"
-        async with self.session.get(url) as r:
+        base_url = "https://en-forum.guildwars2.com"
+        url_updates = base_url + "/categories/game-release-notes"
+        async with self.session.get(url_updates) as r:
             results = await r.text()
         soup = BeautifulSoup(results, 'html.parser')
         post = soup.find(class_="Title")
-        return post["href"]
+        link = post["href"]
+        try:
+            async with self.session.get(link) as r:
+                results = await r.text()
+            soup = BeautifulSoup(results, 'html.parser')
+            new_link = soup.find_all(class_="Permalink")[-1].get('href')
+            if new_link != link:
+                link = base_url + new_link
+        except:
+            pass
+        return "<{}>".format(link)
 
     async def check_news(self):
         doc = await self.bot.database.get_cog_config(self)
