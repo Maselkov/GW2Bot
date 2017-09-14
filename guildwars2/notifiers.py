@@ -124,6 +124,18 @@ class NotiifiersMixin:
             "your daily notifs:",
             embed=embed)
 
+    @commands.cooldown(1, 5, BucketType.guild)
+    @dailynotifier.command(name="autopin")
+    async def daily_notifier_autopin(self, ctx, on_off: bool):
+        """Set daily notifier to automatically pin the message for the day
+
+        If enabled, will try to unpin last day's message as well
+        """
+        guild = ctx.guild
+        await self.bot.database.set_guild(guild, {"daily.autopin": on_off},
+                                          self)
+        await ctx.send("Autopinning for daily notifs enabled")
+
     @commands.group()
     @commands.guild_only()
     @commands.has_permissions(manage_guild=True)
@@ -345,11 +357,27 @@ class NotiifiersMixin:
                         channel.guild, {"daily.message": message.id}, self)
                     autodelete = guild.get("autodelete", False)
                     if autodelete:
-                        old_message = guild.get("message")
-                        if old_message:
-                            to_delete = await channel.get_message(old_message)
-                            await to_delete.delete()
-                            deleted += 1
+                        try:
+                            old_message = guild.get("message")
+                            if old_message:
+                                to_delete = await channel.get_message(
+                                    old_message)
+                                await to_delete.delete()
+                                deleted += 1
+                        except:
+                            pass
+                    autopin = guild.get("autopin", False)
+                    if autopin:
+                        try:
+                            await message.pin()
+                            old_message = guild.get("message")
+                            if old_message:
+                                to_unpin = await channel.get_message(
+                                    old_message)
+                                await to_unpin.unpin()
+                        except:
+                            pass
+
                 except:
                     pass
             self.log.info("Daily notifs: sent {}, deleted {}, forbidden {}".
