@@ -333,6 +333,7 @@ class NotiifiersMixin:
             sent = 0
             deleted = 0
             forbidden = 0
+            pinned = 0
             async for doc in cursor:
                 try:
                     guild = doc["cogs"][name]["daily"]
@@ -370,6 +371,7 @@ class NotiifiersMixin:
                     if autopin:
                         try:
                             await message.pin()
+                            pinned += 1
                             old_message = guild.get("message")
                             if old_message:
                                 to_unpin = await channel.get_message(
@@ -380,8 +382,9 @@ class NotiifiersMixin:
 
                 except:
                     pass
-            self.log.info("Daily notifs: sent {}, deleted {}, forbidden {}".
-                          format(sent, deleted, forbidden))
+            self.log.info(
+                "Daily notifs: sent {}, deleted {}, forbidden {}, pinned {}".
+                format(sent, deleted, forbidden, pinned))
         except Exception as e:
             self.log.exception(e)
             return
