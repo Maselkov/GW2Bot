@@ -235,7 +235,7 @@ class NotiifiersMixin:
             results = await r.text()
         soup = BeautifulSoup(results, 'html.parser')
         post = soup.find(class_="Title")
-        return "https://forum-en.guildwars2.com" + post["href"]
+        return post["href"]
 
     async def check_news(self):
         doc = await self.bot.database.get_cog_config(self)
