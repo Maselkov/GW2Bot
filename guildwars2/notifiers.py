@@ -288,8 +288,9 @@ class NotiifiersMixin:
         return to_post
 
     def news_embed(self, item):
+        soup = BeautifulSoup(item["description"], 'html.parser')
         description = "[Click here]({0})\n{1}".format(item["link"],
-                                                      item["description"])
+                                                      soup.get_text())
         data = discord.Embed(
             title="{0}".format(item["title"]),
             description=description,
