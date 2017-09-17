@@ -88,9 +88,12 @@ class AccountMixin:
         __pre_filter = ids_perfected_envoy_armor.union(
             {id_legendary_insight, id_gift_of_prowess,
              id_envoy_insignia}, ids_refined_envoy_armor)
+
         # If an item slot is empty, or the item is not interesting,
         # filter it out.
-        pre_filter = lambda a, b=__pre_filter: a is not None and a["id"] in b
+        def pre_filter(a, b=__pre_filter):
+            return a is not None and a["id"] in b
+
         inv_bank = list(filter(pre_filter, bank))
         del bank  # We don't need these anymore, free them.
 
@@ -126,12 +129,15 @@ class AccountMixin:
                     # Step 1: get all character equipment
                     map(itemgetter("equipment"), characters))))
         del characters
+
         # Like the bags, we now have a simple list of character gear
 
         # Filter out items that don't match the ones we want.
         # Step 1: Define a test function for filter(). The id is passed in with
         # an optional argument to avoid any potential issues with scope.
-        li_scan = lambda a, b=id_legendary_insight: a["id"] == b
+        def li_scan(a, b=id_legendary_insight):
+            return a["id"] == b
+
         # Step 2: Filter out all items we don't care about
         # Step 3: Extract the `count` field.
         li_bank = map(itemgetter("count"), filter(li_scan, inv_bank))
@@ -139,13 +145,17 @@ class AccountMixin:
         li_shared = map(itemgetter("count"), filter(li_scan, inv_shared))
         li_bags = map(itemgetter("count"), filter(li_scan, inv_bags))
 
-        prowess_scan = lambda a, b=id_gift_of_prowess: a["id"] == b
+        def prowess_scan(a, b=id_gift_of_prowess):
+            return a["id"] == b
+
         prowess_bank = map(itemgetter("count"), filter(prowess_scan, inv_bank))
         prowess_shared = map(
             itemgetter("count"), filter(prowess_scan, inv_shared))
         prowess_bags = map(itemgetter("count"), filter(prowess_scan, inv_bags))
 
-        insignia_scan = lambda a, b=id_envoy_insignia: a["id"] == b
+        def insignia_scan(a, b=id_envoy_insignia):
+            return a["id"] == b
+
         insignia_bank = map(
             itemgetter("count"), filter(insignia_scan, inv_bank))
         insignia_shared = map(
@@ -169,7 +179,9 @@ class AccountMixin:
         perfect_armor_equipped = list(filter(perfect_armor_scan, equipped))
 
         # Repeat for Refined Armor
-        refined_armor_scan = lambda a, b=ids_refined_envoy_armor: a["id"] in b
+        def refined_armor_scan(a, b=ids_refined_envoy_armor):
+            return a["id"] in b
+
         refined_armor_bank = map(
             itemgetter("count"), filter(refined_armor_scan, inv_bank))
         refined_armor_shared = map(
