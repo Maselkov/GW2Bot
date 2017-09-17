@@ -409,10 +409,12 @@ class AccountMixin:
                 try:
                     hint = cat["hint"]
                 except:
-                    if cat_id == 36:
-                        hint = "bluecatmander"
-                    elif cat_id == 37:
-                        hint = "yellowcatmander"
+                    thanks_anet = {
+                        34: "holographic",
+                        36: "bluecatmander",
+                        37: "yellowcatmander"
+                    }
+                    hint = thanks_anet.get(cat_id)
                 listofcats.append(hint)
             catslist = list(set(list(self.gamedata["cats"])) ^ set(listofcats))
             if not catslist:

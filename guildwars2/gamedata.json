@@ -571,6 +571,10 @@
     "yellowcatmander": {
       "name": "Can of Spicy Meat Chili - Desert Borderland Quaggan Room",
       "order": 33
+    },
+    "holographic": {
+      "name": "Holographic Cat - Purchased from Holomancer Netto (next to [&BLgEAAA=]) for 1g",
+      "order": 34
     }
   }
 }
