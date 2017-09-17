@@ -388,3 +388,46 @@ class AccountMixin:
                            "correct item.")
         else:
             await ctx.send("```" + output + "```")
+
+    @commands.command()
+    @commands.cooldown(1, 10, BucketType.user)
+    async def cats(self, ctx):
+        """Displays the cats you haven't unlocked yet
+
+        Required permissions: progression"""
+        user = ctx.message.author
+        endpoint = "account/home/cats"
+        try:
+            results = await self.call_api(endpoint, user, ["progression"])
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+        else:
+            listofcats = []
+            for cat in results:
+                cat_id = cat["id"]
+                try:
+                    hint = cat["hint"]
+                except:
+                    if cat_id == 36:
+                        hint = "bluecatmander"
+                    elif cat_id == 37:
+                        hint = "yellowcatmander"
+                listofcats.append(hint)
+            catslist = list(set(list(self.gamedata["cats"])) ^ set(listofcats))
+            if not catslist:
+                await ctx.send(
+                    ":cat: Congratulations {0.mention}, "
+                    "you've collected all the cats :cat:. Here's another: "
+                    ":cat2:".format(user))
+            else:
+                formattedlist = []
+                output = (":cat: {0.mention}, you haven't collected the "
+                          "following cats yet: :cat:\n```")
+                catslist.sort(
+                    key=lambda val: self.gamedata["cats"][val]["order"])
+                for cat in catslist:
+                    formattedlist.append(self.gamedata["cats"][cat]["name"])
+                for x in formattedlist:
+                    output += "\n" + x
+                output += "```"
+                await ctx.send(output.format(user))

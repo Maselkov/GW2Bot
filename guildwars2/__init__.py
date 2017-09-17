@@ -65,7 +65,7 @@ def setup(bot):
                 "day": datetime.datetime.utcnow().weekday(),
                 "news": [],
                 "build": 0,
-                "dailies" : {}
+                "dailies": {}
             }
         }))
     loop.create_task(cog.game_update_checker())
