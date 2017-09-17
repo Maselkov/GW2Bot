@@ -50,7 +50,7 @@ class AccountMixin:
             await ctx.send("Need permission to embed links")
 
     @commands.command()
-    @commands.cooldown(1, 60, BucketType.user)
+    @commands.cooldown(1, 15, BucketType.user)
     async def li(self, ctx):
         """Shows how many Legendary Insights you have earned
 
@@ -60,11 +60,12 @@ class AccountMixin:
         scopes = ["inventories", "characters"]
         await ctx.trigger_typing()
         try:
+            doc = await self.fetch_key(user, scopes)
             endpoints = [
                 "account/bank", "account/materials", "account/inventory",
                 "characters?page=0"
             ]
-            results = await self.call_multiple(endpoints, user, scopes)
+            results = await self.call_multiple(endpoints, key=doc["key"])
             bank, materials, shared, characters = results
         except APIError as e:
             return await self.error_handler(ctx, e)
@@ -232,7 +233,7 @@ class AccountMixin:
         # Right up front, the information everyone wants:
         embed.title = "{0} Legendary Insights Earned".format(total_li)
         # Identify the user that asked
-        embed.set_author(name=user.name, icon_url=user.avatar_url)
+        embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
         # LI icon as thumbnail looks pretty cool.
         embed.set_thumbnail(url="https://render.guildwars2.com/file"
                             "/6D33B7387BAF2E2CC9B5D37D1D1B01246AB6FA22"
