@@ -233,10 +233,15 @@ class NotiifiersMixin:
                         "include `@here` mention. Take away bot's permissions "
                         "to mention everyone if you don't "
                         "want it.".format(channel))
+                else:  # TODO change it, ugly
+                    msg = (
+                        "Update notifier toggled on. In order to reeceive "
+                        "update notifs, you still need to set a channel using "
+                        "`updatenotifier channel <channel>`.")
             else:
                 msg = ("Update notifier toggled on. In order to reeceive "
                        "update notifs, you still need to set a channel using "
-                       "`updatenotifier channel <channel>`.".format(channel))
+                       "`updatenotifier channel <channel>`.")
         else:
             msg = ("Update notifier disabled")
         await ctx.send(msg)
