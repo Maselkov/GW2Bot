@@ -144,3 +144,48 @@ class CommerceMixin:
 
     def rarity_to_color(self, rarity):
         return int(self.gamedata["items"]["rarity_colors"][rarity], 0)
+
+    @commands.group()
+    async def gem(self, ctx):
+        """Commands related to gems"""
+        if ctx.invoked_subcommand is None:
+            await self.bot.send_cmd_help(ctx)
+
+    @gem.command(name="price")
+    async def gem_price(self, ctx, quantity: int=400):
+        """Lists current gold/gem exchange prices.
+
+        You can specify a custom amount, defaults to 400
+        """
+        if quantity == 1:
+            return await ctx.send("Quantity must be higher than 1")
+        try:
+            gem_price = await self.get_gem_price(quantity)
+            coin_price = await self.get_coin_price(quantity)
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+        data = discord.Embed(
+            title="Currency exchange", colour=self.embed_color)
+        data.add_field(
+            name="{} gems would cost you".format(quantity),
+            value=self.gold_to_coins(gem_price),
+            inline=False)
+        data.add_field(
+            name="{} gems could buy you".format(quantity),
+            value=self.gold_to_coins(coin_price),
+            inline=False)
+        try:
+            await ctx.send(embed=data)
+        except discord.Forbidden:
+            await ctx.send("Need permission to embed links")
+
+    async def get_gem_price(self, quantity=400):
+        endpoint = "commerce/exchange/coins?quantity=10000000"
+        results = await self.call_api(endpoint)
+        cost = results['coins_per_gem'] * quantity
+        return cost
+
+    async def get_coin_price(self, quantity=400):
+        endpoint = "commerce/exchange/gems?quantity={}".format(quantity)
+        results = await self.call_api(endpoint)
+        return results["quantity"]
