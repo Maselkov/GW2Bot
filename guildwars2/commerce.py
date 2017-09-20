@@ -157,7 +157,7 @@ class CommerceMixin:
 
         You can specify a custom amount, defaults to 400
         """
-        if quantity == 1:
+        if quantity <= 1:
             return await ctx.send("Quantity must be higher than 1")
         try:
             gem_price = await self.get_gem_price(quantity)
