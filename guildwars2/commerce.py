@@ -200,8 +200,8 @@ class CommerceMixin:
         user = ctx.author
         price = gold * 10000
         try:
-            await user.send("You will be notiifed when price of 400 drops "
-                            "below {} gold".format(gold))
+            await user.send("You will be notiifed when price of 400 gems "
+                            "drops below {} gold".format(gold))
         except:
             return await ctx.send("Couldn't send a DM to you. Either you have "
                                   "me blocked, or disabled DMs in this "
