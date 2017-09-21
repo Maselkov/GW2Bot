@@ -185,3 +185,24 @@ class CommerceMixin:
         endpoint = "commerce/exchange/gems?quantity={}".format(quantity)
         results = await self.call_api(endpoint)
         return results["quantity"]
+
+    @gem.command(name="track")
+    async def gem_track(self, ctx, gold: int):
+        """Receive a notification when cost of 400 gems drops below the specified cost (in gold)
+
+        For example, if you set cost to 100, you will get a notification when
+        price of 400 gems drops below 100 gold
+        """
+        if not 0 <= gold <= 500:
+            return await ctx.send("Invalid value")
+        user = ctx.author
+        price = gold * 10000
+        try:
+            await user.send("You will be notiifed when price of 400 drops "
+                            "below {} gold".format(gold))
+        except:
+            return await ctx.send("Couldn't send a DM to you. Either you have "
+                                  "me blocked, or disabled DMs in this "
+                                  "server. Aborting.")
+        await self.bot.database.set_user(user, {"gemtrack": price}, self)
+        await ctx.send("Succesfully set")

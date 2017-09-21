@@ -71,4 +71,5 @@ def setup(bot):
     loop.create_task(cog.game_update_checker())
     loop.create_task(cog.daily_checker())
     loop.create_task(cog.news_checker())
+    loop.create_task(cog.gem_tracker())
     bot.add_cog(cog)

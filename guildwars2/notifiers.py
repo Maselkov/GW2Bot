@@ -444,12 +444,15 @@ class NotiifiersMixin:
                     "$ne": None
                 }
             }, self)
+            sent = 0
             async for doc in cursor:
                 try:
                     guild = doc["cogs"][name]["updates"]
                     await self.bot.get_channel(guild["channel"]).send(message)
+                    sent += 1
                 except:
                     pass
+            self.log.info("Update notifs: sent {}".format(sent))
         except Exception as e:
             self.log.exception(e)
 
@@ -492,3 +495,34 @@ class NotiifiersMixin:
                 self.log.exception(e)
                 await asyncio.sleep(60)
                 continue
+
+    async def gem_tracker(self):
+        while self is self.bot.get_cog("GuildWars2"):
+            try:
+                name = self.__class__.__name__
+                cost = await self.get_gem_price()
+                cost_coins = self.gold_to_coins(cost)
+                cursor = self.bot.database.get_users_cursor({
+                    "gemtrack": {
+                        "$ne": None
+                    }
+                }, self)
+                async for doc in cursor:
+                    try:
+                        user_price = doc["cogs"][name]["gemtrack"]
+                        if cost < user_price:
+                            user = await self.bot.get_user_info(doc["_id"])
+                            user_price = self.gold_to_coins(user_price)
+                            msg = ("Hey, {.mention}! You asked to be notified "
+                                   "when 400 gems were cheaper than {}. Guess "
+                                   "what? They're now only "
+                                   "{}!".format(user, user_price, cost_coins))
+                            await user.send(msg)
+                            await self.bot.database.set_user(
+                                user, {"gemtrack": None}, self)
+                    except:
+                        pass
+                await asyncio.sleep(150)
+            except Exception as e:
+                self.log.exception("Exception during gemtracker: ", exc_info=e)
+                await asyncio.sleep(150)
