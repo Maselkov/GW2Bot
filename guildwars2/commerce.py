@@ -166,6 +166,8 @@ class CommerceMixin:
             name="{} gems would cost you".format(quantity),
             value=self.gold_to_coins(gem_price),
             inline=False)
+        data.set_thumbnail(url="https://render.guildwars2.com/file/220061640EC"
+                               "A41C0577758030357221B4ECCE62C/502065.png")
         data.add_field(
             name="{} gems could buy you".format(quantity),
             value=self.gold_to_coins(coin_price),
