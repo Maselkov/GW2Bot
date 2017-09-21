@@ -133,14 +133,10 @@ class CommerceMixin:
     def gold_to_coins(self, money):
         gold, remainder = divmod(money, 10000)
         silver, copper = divmod(remainder, 100)
-        if not gold:
-            if not silver:
-                return "{0} copper".format(copper)
-            else:
-                return "{0} silver and {1} copper".format(silver, copper)
-        else:
-            return "{0} gold, {1} silver and {2} copper".format(
-                gold, silver, copper)
+        gold = "{} gold".format(gold) if gold else ""
+        silver = "{} silver".format(silver) if silver else ""
+        copper = "{} copper".format(copper) if copper else ""
+        return ", ".join(filter(None, [gold, silver, copper]))
 
     def rarity_to_color(self, rarity):
         return int(self.gamedata["items"]["rarity_colors"][rarity], 0)
