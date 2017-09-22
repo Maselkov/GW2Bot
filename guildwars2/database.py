@@ -251,7 +251,8 @@ class DatabaseMixin:
             status=discord.Status.dnd)
         endpoints = [["items"], ["achievements"], ["itemstats", True],
                      ["titles", True], ["recipes"], ["skins"],
-                     ["currencies", True], ["skills", True]]
+                     ["currencies", True], ["skills", True],
+                     ["specializations", True], ["traits", True]]
         for e in endpoints:
             await self.db[e[0]].drop()
             await self.cache_endpoint(*e)
