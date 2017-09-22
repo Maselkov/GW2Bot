@@ -45,7 +45,7 @@ class DailyMixin:
     @daily.command(name="fractals", aliases=["f", "F", "Fractals"])
     @commands.cooldown(1, 2, BucketType.user)
     async def daily_fractals(self, ctx):
-        """Show today's fractal dailie"""
+        """Show today's fractal dailies"""
         embed = await self.daily_embed(["fractals"])
         try:
             await ctx.send(embed=embed)
