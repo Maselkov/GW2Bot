@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 from discord.ext.commands.cooldowns import BucketType
 
-from .exceptions import APIError
+from .exceptions import APIError, APIInactiveError
 
 
 class KeyMixin:
@@ -50,6 +50,9 @@ class KeyMixin:
         try:
             endpoints = ["tokeninfo", "account"]
             token, acc = await self.call_multiple(endpoints, key=key)
+        except APIInactiveError:
+            return await ctx.send("{.mention}, the API is currently down. "
+                                  "Try again later. {}".format(user, output))
         except APIError:
             return await ctx.send(
                 "{.mention}, invalid key. {}".format(user, output))

@@ -17,7 +17,7 @@ from .notifiers import NotiifiersMixin
 from .pvp import PvpMixin
 from .wallet import WalletMixin
 from .wvw import WvwMixin
-from .exceptions import APIKeyError, APIError, APIInvalidKey
+from .exceptions import APIKeyError, APIError, APIInvalidKey, APIInactiveError
 
 
 class GuildWars2(AccountMixin, ApiMixin, CharactersMixin, CommerceMixin,
@@ -44,6 +44,10 @@ class GuildWars2(AccountMixin, ApiMixin, CharactersMixin, CommerceMixin,
         user = ctx.author
         if isinstance(exc, APIKeyError):
             await ctx.send(exc)
+            return
+        if isinstance(exc, APIInactiveError):
+            await ctx.send("{.mention}, the API is currently down. "
+                           "Try again later.".format(user))
             return
         if isinstance(exc, APIInvalidKey):
             await ctx.send("{.mention}, your API key is invalid! Remove your "

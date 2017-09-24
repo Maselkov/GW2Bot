@@ -10,6 +10,10 @@ class APIConnectionError(APIError):
     pass
 
 
+class APIInactiveError(APIError):
+    pass
+
+
 class APIForbidden(APIError):
     pass
 
