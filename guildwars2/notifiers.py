@@ -389,6 +389,15 @@ class NotiifiersMixin:
                         try:
                             await message.pin()
                             pinned += 1
+                            try:
+                                async for m in channel.history(
+                                    after=message, limit=3):
+                                    if (m.type == discord.MessageType.pins_add
+                                            and m.author == self.bot.user):
+                                        await m.delete()
+                                        break
+                            except:
+                                pass
                             old_message = guild.get("message")
                             if old_message:
                                 to_unpin = await channel.get_message(
