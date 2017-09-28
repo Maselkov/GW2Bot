@@ -255,7 +255,13 @@ class DatabaseMixin:
                      ["specializations", True], ["traits", True]]
         for e in endpoints:
             await self.db[e[0]].drop()
-            await self.cache_endpoint(*e)
+            try:
+                await self.cache_endpoint(*e)
+            except:
+                msg = "Caching {} failed".format(e)
+                self.log.warn(msg)
+                owner = self.bot.get_user(self.bot.owner_id)
+                await owner.send(msg)
         await self.db.items.create_index("name")
         await self.db.achievements.create_index("name")
         await self.db.titles.create_index("name")
