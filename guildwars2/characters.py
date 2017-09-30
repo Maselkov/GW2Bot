@@ -246,7 +246,7 @@ class CharactersMixin:
             await ctx.send(first.format(user))
             await ctx.send(second)
 
-    @character.command(name="build")
+    @character.command(name="build", aliases=["pvebuild"])
     @commands.cooldown(1, 10, BucketType.user)
     async def character_build(self, ctx, *, character: str):
         """Displays the build of given character
@@ -263,28 +263,87 @@ class CharactersMixin:
             return await ctx.send("Invalid character name")
         except APIError as e:
             return await self.error_handler(ctx, e)
+        embed = await self.build_embed(results, "pve")
+        try:
+            await ctx.send(embed=embed)
+        except discord.Forbidden:
+            await ctx.send("Need permission to embed links")
+
+    @character.command(name="pvpbuild")
+    @commands.cooldown(1, 10, BucketType.user)
+    async def character_pvpbuild(self, ctx, *, character: str):
+        """Displays the build of given character
+        You must be the owner of the character.
+
+        Required permissions: characters
+        """
+        character = character.title()
+        endpoint = "characters/" + character.replace(" ", "%20")
+        await ctx.trigger_typing()
+        try:
+            results = await self.call_api(endpoint, ctx.author, ["characters"])
+        except APINotFound:
+            return await ctx.send("Invalid character name")
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+        embed = await self.build_embed(results, "pvp")
+        try:
+            await ctx.send(embed=embed)
+        except discord.Forbidden:
+            await ctx.send("Need permission to embed links")
+
+    @character.command(name="wvwbuild")
+    @commands.cooldown(1, 10, BucketType.user)
+    async def character_wvwbuild(self, ctx, *, character: str):
+        """Displays the build of given character
+        You must be the owner of the character.
+
+        Required permissions: characters
+        """
+        character = character.title()
+        endpoint = "characters/" + character.replace(" ", "%20")
+        await ctx.trigger_typing()
+        try:
+            results = await self.call_api(endpoint, ctx.author, ["characters"])
+        except APINotFound:
+            return await ctx.send("Invalid character name")
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+        embed = await self.build_embed(results, "wvw")
+        try:
+            await ctx.send(embed=embed)
+        except discord.Forbidden:
+            await ctx.send("Need permission to embed links")
+
+    async def build_embed(self, results, mode):
         profession = results["profession"].lower()
         level = results["level"]
         color = self.gamedata["professions"][profession]["color"]
         icon = self.gamedata["professions"][profession]["icon"]
         color = int(color, 0)
-        specializations = results["specializations"]["pve"]
-        embed = discord.Embed(title="Build", color=color)
-        embed.set_author(name=character)
+        specializations = results["specializations"][mode]
+        embed = discord.Embed(
+            title="{} build".format(mode.upper()), color=color)
+        embed.set_author(name=results["name"])
         for spec in specializations:
+            if spec is None:
+                continue
             spec_doc = await self.db.specializations.find_one({
                 "_id": spec["id"]
             })
             spec_name = spec_doc["name"]
             traits = []
             for trait in spec["traits"]:
+                if trait is None:
+                    continue
                 trait_doc = await self.db.traits.find_one({"_id": trait})
                 tier = trait_doc["tier"] - 1
                 trait_index = spec_doc["major_traits"].index(trait)
                 trait_index = 1 + trait_index - tier * 3
                 traits.append("{} ({})".format(trait_doc["name"], trait_index))
-            embed.add_field(
-                name=spec_name, value="\n".join(traits), inline=False)
+            if traits:
+                embed.add_field(
+                    name=spec_name, value="\n".join(traits), inline=False)
             embed.set_footer(
                 text="A level {} {} ".format(level, profession), icon_url=icon)
-        await ctx.send(embed=embed)
+        return embed
