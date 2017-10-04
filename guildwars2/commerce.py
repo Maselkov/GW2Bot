@@ -70,10 +70,19 @@ class CommerceMixin:
             item_name = itemlist[index]["name"]
             offers = listings[index][state]
             max_price = offers[0]["unit_price"]
+            undercuts = 0
+            for offer in offers:
+                if offer["unit_price"] < price:
+                    break
+                undercuts += offer["listings"]
+            undercuts = "· Undercuts: {}".format(
+                undercuts) if undercuts else ""
             data.add_field(
                 name=item_name,
-                value=str(quantity) + " x " + self.gold_to_coins(price) +
-                " | Max. offer: " + self.gold_to_coins(max_price),
+                value="{} x {} · Max. offer: {} {}".format(
+                    quantity,
+                    self.gold_to_coins(price),
+                    self.gold_to_coins(max_price), undercuts),
                 inline=False)
         try:
             await ctx.send(embed=data)
@@ -167,7 +176,7 @@ class CommerceMixin:
             value=self.gold_to_coins(gem_price),
             inline=False)
         data.set_thumbnail(url="https://render.guildwars2.com/file/220061640EC"
-                               "A41C0577758030357221B4ECCE62C/502065.png")
+                           "A41C0577758030357221B4ECCE62C/502065.png")
         data.add_field(
             name="{} gems could buy you".format(quantity),
             value=self.gold_to_coins(coin_price),
