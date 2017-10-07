@@ -17,6 +17,7 @@ class AccountMixin:
         Required permissions: account
         """
         user = ctx.author
+        await ctx.trigger_typing()
         try:
             doc = await self.fetch_key(user, ["account"])
             results = await self.call_api("account", key=doc["key"])
@@ -27,8 +28,21 @@ class AccountMixin:
         hascommander = "Yes" if results["commander"] else "No"
         data = discord.Embed(colour=self.embed_color)
         data.add_field(name="Created account on", value=created)
-        data.add_field(
-            name="Has commander tag", value=hascommander, inline=False)
+        if "progression" in doc["permissions"]:
+            try:
+                endpoints = ["account/achievements", "account"]
+                achievements, account = await self.call_multiple(
+                    endpoints, ctx.author, ["progression"])
+            except APIError as e:
+                return await self.error_handler(ctx, e)
+            possible_ap = await self.total_possible_ap()
+            user_ap = await self.calculate_user_ap(achievements, account)
+            data.add_field(
+                name="Achievement Points",
+                value="{} earned out of {} possible".format(
+                    user_ap, possible_ap),
+                inline=False)
+        data.add_field(name="Commander tag", value=hascommander, inline=False)
         if "fractal_level" in results:
             fractallevel = results["fractal_level"]
             data.add_field(name="Fractal level", value=fractallevel)
@@ -39,8 +53,7 @@ class AccountMixin:
             try:
                 pvp = await self.call_api("pvp/stats", user)
             except APIError as e:
-                await self.error_handler(ctx, e)
-                return
+                return await self.error_handler(ctx, e)
             pvprank = pvp["pvp_rank"] + pvp["pvp_rank_rollovers"]
             data.add_field(name="PVP rank", value=pvprank)
         data.set_author(name=accountname)
