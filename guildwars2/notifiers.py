@@ -470,6 +470,8 @@ class NotiifiersMixin:
             try:
                 if await self.check_day():
                     await asyncio.sleep(300)
+                    if not self.bot.available:
+                        await asyncio.sleep(360)
                     await self.cache_dailies()
                     await self.send_daily_notifs()
                 await asyncio.sleep(60)
