@@ -4,6 +4,7 @@ import logging
 
 import aiohttp
 from .account import AccountMixin
+from .achievements import AchievementsMixin
 from .api import ApiMixin
 from .characters import CharactersMixin
 from .commerce import CommerceMixin
@@ -20,9 +21,10 @@ from .wvw import WvwMixin
 from .exceptions import APIKeyError, APIError, APIInvalidKey, APIInactiveError
 
 
-class GuildWars2(AccountMixin, ApiMixin, CharactersMixin, CommerceMixin,
-                 DailyMixin, DatabaseMixin, EventsMixin, GuildMixin, KeyMixin,
-                 MiscMixin, NotiifiersMixin, PvpMixin, WalletMixin, WvwMixin):
+class GuildWars2(AccountMixin, AchievementsMixin, ApiMixin, CharactersMixin,
+                 CommerceMixin, DailyMixin, DatabaseMixin, EventsMixin,
+                 GuildMixin, KeyMixin, MiscMixin, NotiifiersMixin, PvpMixin,
+                 WalletMixin, WvwMixin):
     """Guild Wars 2 commands"""
 
     def __init__(self, bot):
