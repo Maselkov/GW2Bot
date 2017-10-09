@@ -85,3 +85,9 @@ class MiscMixin:
                 value="[Click here]({})".format(url),
                 inline=False)
         return embed
+
+
+    @commands.command(hidden=True)
+    async def praisejoko(self, ctx):
+        """To defy his Eminence is to defy life itself"""
+        await ctx.send("Praise Joko " * 40)
