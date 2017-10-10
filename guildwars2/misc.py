@@ -1,3 +1,5 @@
+import random
+
 import discord
 from bs4 import BeautifulSoup
 from discord.ext import commands
@@ -86,8 +88,9 @@ class MiscMixin:
                 inline=False)
         return embed
 
-
     @commands.command(hidden=True)
     async def praisejoko(self, ctx):
         """To defy his Eminence is to defy life itself"""
-        await ctx.send("Praise Joko " * 40)
+        praise_art = ("```fixP R A I S E\nR J     O S\nA   O K   I\nI   O K   "
+                      "A\nS J     O R\nE S I A R P")
+        await ctx.send(random.choice([praise_art, "Praise joko " * 40]))
