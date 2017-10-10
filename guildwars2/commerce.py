@@ -70,10 +70,19 @@ class CommerceMixin:
             item_name = itemlist[index]["name"]
             offers = listings[index][state]
             max_price = offers[0]["unit_price"]
+            undercuts = 0
+            for offer in offers:
+                if offer["unit_price"] < price:
+                    break
+                undercuts += offer["listings"]
+            undercuts = "· Undercuts: {}".format(
+                undercuts) if undercuts else ""
             data.add_field(
                 name=item_name,
-                value=str(quantity) + " x " + self.gold_to_coins(price) +
-                " | Max. offer: " + self.gold_to_coins(max_price),
+                value="{} x {} · Max. offer: {} {}".format(
+                    quantity,
+                    self.gold_to_coins(price),
+                    self.gold_to_coins(max_price), undercuts),
                 inline=False)
         try:
             await ctx.send(embed=data)
@@ -133,14 +142,78 @@ class CommerceMixin:
     def gold_to_coins(self, money):
         gold, remainder = divmod(money, 10000)
         silver, copper = divmod(remainder, 100)
-        if not gold:
-            if not silver:
-                return "{0} copper".format(copper)
-            else:
-                return "{0} silver and {1} copper".format(silver, copper)
-        else:
-            return "{0} gold, {1} silver and {2} copper".format(
-                gold, silver, copper)
+        gold = "{} gold".format(gold) if gold else ""
+        silver = "{} silver".format(silver) if silver else ""
+        copper = "{} copper".format(copper) if copper else ""
+        return ", ".join(filter(None, [gold, silver, copper]))
 
     def rarity_to_color(self, rarity):
         return int(self.gamedata["items"]["rarity_colors"][rarity], 0)
+
+    @commands.group()
+    async def gem(self, ctx):
+        """Commands related to gems"""
+        if ctx.invoked_subcommand is None:
+            await self.bot.send_cmd_help(ctx)
+
+    @gem.command(name="price")
+    async def gem_price(self, ctx, quantity: int=400):
+        """Lists current gold/gem exchange prices.
+
+        You can specify a custom amount, defaults to 400
+        """
+        if quantity <= 1:
+            return await ctx.send("Quantity must be higher than 1")
+        try:
+            gem_price = await self.get_gem_price(quantity)
+            coin_price = await self.get_coin_price(quantity)
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+        data = discord.Embed(
+            title="Currency exchange", colour=self.embed_color)
+        data.add_field(
+            name="{} gems would cost you".format(quantity),
+            value=self.gold_to_coins(gem_price),
+            inline=False)
+        data.set_thumbnail(url="https://render.guildwars2.com/file/220061640EC"
+                           "A41C0577758030357221B4ECCE62C/502065.png")
+        data.add_field(
+            name="{} gems could buy you".format(quantity),
+            value=self.gold_to_coins(coin_price),
+            inline=False)
+        try:
+            await ctx.send(embed=data)
+        except discord.Forbidden:
+            await ctx.send("Need permission to embed links")
+
+    async def get_gem_price(self, quantity=400):
+        endpoint = "commerce/exchange/coins?quantity=10000000"
+        results = await self.call_api(endpoint)
+        cost = results['coins_per_gem'] * quantity
+        return cost
+
+    async def get_coin_price(self, quantity=400):
+        endpoint = "commerce/exchange/gems?quantity={}".format(quantity)
+        results = await self.call_api(endpoint)
+        return results["quantity"]
+
+    @gem.command(name="track")
+    async def gem_track(self, ctx, gold: int):
+        """Receive a notification when cost of 400 gems drops below the specified cost (in gold)
+
+        For example, if you set cost to 100, you will get a notification when
+        price of 400 gems drops below 100 gold
+        """
+        if not 0 <= gold <= 500:
+            return await ctx.send("Invalid value")
+        user = ctx.author
+        price = gold * 10000
+        try:
+            await user.send("You will be notiifed when price of 400 gems "
+                            "drops below {} gold".format(gold))
+        except:
+            return await ctx.send("Couldn't send a DM to you. Either you have "
+                                  "me blocked, or disabled DMs in this "
+                                  "server. Aborting.")
+        await self.bot.database.set_user(user, {"gemtrack": price}, self)
+        await ctx.send("Succesfully set")

@@ -17,6 +17,7 @@ class AccountMixin:
         Required permissions: account
         """
         user = ctx.author
+        await ctx.trigger_typing()
         try:
             doc = await self.fetch_key(user, ["account"])
             results = await self.call_api("account", key=doc["key"])
@@ -27,8 +28,21 @@ class AccountMixin:
         hascommander = "Yes" if results["commander"] else "No"
         data = discord.Embed(colour=self.embed_color)
         data.add_field(name="Created account on", value=created)
-        data.add_field(
-            name="Has commander tag", value=hascommander, inline=False)
+        if "progression" in doc["permissions"]:
+            try:
+                endpoints = ["account/achievements", "account"]
+                achievements, account = await self.call_multiple(
+                    endpoints, ctx.author, ["progression"])
+            except APIError as e:
+                return await self.error_handler(ctx, e)
+            possible_ap = await self.total_possible_ap()
+            user_ap = await self.calculate_user_ap(achievements, account)
+            data.add_field(
+                name="Achievement Points",
+                value="{} earned out of {} possible".format(
+                    user_ap, possible_ap),
+                inline=False)
+        data.add_field(name="Commander tag", value=hascommander, inline=False)
         if "fractal_level" in results:
             fractallevel = results["fractal_level"]
             data.add_field(name="Fractal level", value=fractallevel)
@@ -39,8 +53,7 @@ class AccountMixin:
             try:
                 pvp = await self.call_api("pvp/stats", user)
             except APIError as e:
-                await self.error_handler(ctx, e)
-                return
+                return await self.error_handler(ctx, e)
             pvprank = pvp["pvp_rank"] + pvp["pvp_rank_rollovers"]
             data.add_field(name="PVP rank", value=pvprank)
         data.set_author(name=accountname)
@@ -50,7 +63,7 @@ class AccountMixin:
             await ctx.send("Need permission to embed links")
 
     @commands.command()
-    @commands.cooldown(1, 60, BucketType.user)
+    @commands.cooldown(1, 15, BucketType.user)
     async def li(self, ctx):
         """Shows how many Legendary Insights you have earned
 
@@ -60,11 +73,12 @@ class AccountMixin:
         scopes = ["inventories", "characters"]
         await ctx.trigger_typing()
         try:
+            doc = await self.fetch_key(user, scopes)
             endpoints = [
                 "account/bank", "account/materials", "account/inventory",
                 "characters?page=0"
             ]
-            results = await self.call_multiple(endpoints, user, scopes)
+            results = await self.call_multiple(endpoints, key=doc["key"])
             bank, materials, shared, characters = results
         except APIError as e:
             return await self.error_handler(ctx, e)
@@ -88,9 +102,12 @@ class AccountMixin:
         __pre_filter = ids_perfected_envoy_armor.union(
             {id_legendary_insight, id_gift_of_prowess,
              id_envoy_insignia}, ids_refined_envoy_armor)
+
         # If an item slot is empty, or the item is not interesting,
         # filter it out.
-        pre_filter = lambda a, b=__pre_filter: a is not None and a["id"] in b
+        def pre_filter(a, b=__pre_filter):
+            return a is not None and a["id"] in b
+
         inv_bank = list(filter(pre_filter, bank))
         del bank  # We don't need these anymore, free them.
 
@@ -126,12 +143,15 @@ class AccountMixin:
                     # Step 1: get all character equipment
                     map(itemgetter("equipment"), characters))))
         del characters
+
         # Like the bags, we now have a simple list of character gear
 
         # Filter out items that don't match the ones we want.
         # Step 1: Define a test function for filter(). The id is passed in with
         # an optional argument to avoid any potential issues with scope.
-        li_scan = lambda a, b=id_legendary_insight: a["id"] == b
+        def li_scan(a, b=id_legendary_insight):
+            return a["id"] == b
+
         # Step 2: Filter out all items we don't care about
         # Step 3: Extract the `count` field.
         li_bank = map(itemgetter("count"), filter(li_scan, inv_bank))
@@ -139,13 +159,17 @@ class AccountMixin:
         li_shared = map(itemgetter("count"), filter(li_scan, inv_shared))
         li_bags = map(itemgetter("count"), filter(li_scan, inv_bags))
 
-        prowess_scan = lambda a, b=id_gift_of_prowess: a["id"] == b
+        def prowess_scan(a, b=id_gift_of_prowess):
+            return a["id"] == b
+
         prowess_bank = map(itemgetter("count"), filter(prowess_scan, inv_bank))
         prowess_shared = map(
             itemgetter("count"), filter(prowess_scan, inv_shared))
         prowess_bags = map(itemgetter("count"), filter(prowess_scan, inv_bags))
 
-        insignia_scan = lambda a, b=id_envoy_insignia: a["id"] == b
+        def insignia_scan(a, b=id_envoy_insignia):
+            return a["id"] == b
+
         insignia_bank = map(
             itemgetter("count"), filter(insignia_scan, inv_bank))
         insignia_shared = map(
@@ -169,7 +193,9 @@ class AccountMixin:
         perfect_armor_equipped = list(filter(perfect_armor_scan, equipped))
 
         # Repeat for Refined Armor
-        refined_armor_scan = lambda a, b=ids_refined_envoy_armor: a["id"] in b
+        def refined_armor_scan(a, b=ids_refined_envoy_armor):
+            return a["id"] in b
+
         refined_armor_bank = map(
             itemgetter("count"), filter(refined_armor_scan, inv_bank))
         refined_armor_shared = map(
@@ -220,7 +246,7 @@ class AccountMixin:
         # Right up front, the information everyone wants:
         embed.title = "{0} Legendary Insights Earned".format(total_li)
         # Identify the user that asked
-        embed.set_author(name=user.name, icon_url=user.avatar_url)
+        embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
         # LI icon as thumbnail looks pretty cool.
         embed.set_thumbnail(url="https://render.guildwars2.com/file"
                             "/6D33B7387BAF2E2CC9B5D37D1D1B01246AB6FA22"
@@ -376,3 +402,48 @@ class AccountMixin:
                            "correct item.")
         else:
             await ctx.send("```" + output + "```")
+
+    @commands.command()
+    @commands.cooldown(1, 10, BucketType.user)
+    async def cats(self, ctx):
+        """Displays the cats you haven't unlocked yet
+
+        Required permissions: progression"""
+        user = ctx.message.author
+        endpoint = "account/home/cats"
+        try:
+            results = await self.call_api(endpoint, user, ["progression"])
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+        else:
+            listofcats = []
+            for cat in results:
+                cat_id = cat["id"]
+                try:
+                    hint = cat["hint"]
+                except:
+                    thanks_anet = {
+                        34: "holographic",
+                        36: "bluecatmander",
+                        37: "yellowcatmander"
+                    }
+                    hint = thanks_anet.get(cat_id)
+                listofcats.append(hint)
+            catslist = list(set(list(self.gamedata["cats"])) ^ set(listofcats))
+            if not catslist:
+                await ctx.send(
+                    ":cat: Congratulations {0.mention}, "
+                    "you've collected all the cats :cat:. Here's another: "
+                    ":cat2:".format(user))
+            else:
+                formattedlist = []
+                output = (":cat: {0.mention}, you haven't collected the "
+                          "following cats yet: :cat:\n```")
+                catslist.sort(
+                    key=lambda val: self.gamedata["cats"][val]["order"])
+                for cat in catslist:
+                    formattedlist.append(self.gamedata["cats"][cat]["name"])
+                for x in formattedlist:
+                    output += "\n" + x
+                output += "```"
+                await ctx.send(output.format(user))

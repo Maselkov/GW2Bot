@@ -45,7 +45,7 @@ class DailyMixin:
     @daily.command(name="fractals", aliases=["f", "F", "Fractals"])
     @commands.cooldown(1, 2, BucketType.user)
     async def daily_fractals(self, ctx):
-        """Show today's fractal dailie"""
+        """Show today's fractal dailies"""
         embed = await self.daily_embed(["fractals"])
         try:
             await ctx.send(embed=embed)
@@ -66,7 +66,8 @@ class DailyMixin:
     @commands.cooldown(1, 2, BucketType.user)
     async def daily_all(self, ctx):
         """Show today's all dailies"""
-        embed = await self.daily_embed(["psna", "pve", "pvp", "wvw"])
+        embed = await self.daily_embed(
+            ["psna", "pve", "pvp", "wvw", "fractals"])
         try:
             await ctx.send(embed=embed)
         except discord.Forbidden:

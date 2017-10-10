@@ -114,12 +114,10 @@ class CharactersMixin:
                 else:
                     formatted_list.append(x)
             return formatted_list
-
         character = character.title()
-        endpoint = "characters/" + character.replace(" ", "%20")
         await ctx.trigger_typing()
         try:
-            results = await self.call_api(endpoint, ctx.author, ["characters"])
+            results = await self.get_character(ctx, character)
         except APINotFound:
             return await ctx.send("Invalid character name")
         except APIError as e:
@@ -245,3 +243,159 @@ class CharactersMixin:
             second = "```" + second
             await ctx.send(first.format(user))
             await ctx.send(second)
+
+    @character.command(name="build", aliases=["pvebuild"])
+    @commands.cooldown(1, 10, BucketType.user)
+    async def character_build(self, ctx, *, character: str):
+        """Displays the build of given character
+        You must be the owner of the character.
+
+        Required permissions: characters
+        """
+        character = character.title()
+        await ctx.trigger_typing()
+        try:
+            results = await self.get_character(ctx, character)
+        except APINotFound:
+            return await ctx.send("Invalid character name")
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+        embed = await self.build_embed(results, "pve")
+        try:
+            await ctx.send(embed=embed)
+        except discord.Forbidden:
+            await ctx.send("Need permission to embed links")
+
+    @character.command(name="pvpbuild")
+    @commands.cooldown(1, 10, BucketType.user)
+    async def character_pvpbuild(self, ctx, *, character: str):
+        """Displays the build of given character
+        You must be the owner of the character.
+
+        Required permissions: characters
+        """
+        character = character.title()
+        await ctx.trigger_typing()
+        try:
+            results = await self.get_character(ctx, character)
+        except APINotFound:
+            return await ctx.send("Invalid character name")
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+        embed = await self.build_embed(results, "pvp")
+        try:
+            await ctx.send(embed=embed)
+        except discord.Forbidden:
+            await ctx.send("Need permission to embed links")
+
+    @character.command(name="wvwbuild")
+    @commands.cooldown(1, 10, BucketType.user)
+    async def character_wvwbuild(self, ctx, *, character: str):
+        """Displays the build of given character
+        You must be the owner of the character.
+
+        Required permissions: characters
+        """
+        character = character.title()
+        await ctx.trigger_typing()
+        try:
+            results = await self.get_character(ctx, character)
+        except APINotFound:
+            return await ctx.send("Invalid character name")
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+        embed = await self.build_embed(results, "wvw")
+        try:
+            await ctx.send(embed=embed)
+        except discord.Forbidden:
+            await ctx.send("Need permission to embed links")
+
+    async def build_embed(self, results, mode):
+        profession = results["profession"].lower()
+        level = results["level"]
+        color = self.gamedata["professions"][profession]["color"]
+        icon = self.gamedata["professions"][profession]["icon"]
+        color = int(color, 0)
+        specializations = results["specializations"][mode]
+        embed = discord.Embed(
+            title="{} build".format(mode.upper()), color=color)
+        embed.set_author(name=results["name"])
+        for spec in specializations:
+            if spec is None:
+                continue
+            spec_doc = await self.db.specializations.find_one({
+                "_id": spec["id"]
+            })
+            spec_name = spec_doc["name"]
+            traits = []
+            for trait in spec["traits"]:
+                if trait is None:
+                    continue
+                trait_doc = await self.db.traits.find_one({"_id": trait})
+                tier = trait_doc["tier"] - 1
+                trait_index = spec_doc["major_traits"].index(trait)
+                trait_index = 1 + trait_index - tier * 3
+                traits.append("{} ({})".format(trait_doc["name"], trait_index))
+            if traits:
+                embed.add_field(
+                    name=spec_name, value="\n".join(traits), inline=False)
+            embed.set_footer(
+                text="A level {} {} ".format(level, profession), icon_url=icon)
+        return embed
+
+    @character.command(name="togglepublic")
+    @commands.cooldown(1, 1, BucketType.user)
+    async def character_togglepublic(self, ctx, *, character: str):
+        """Toggle your character's status to public
+
+        Public characters can have their gear and build checked by anyone.
+        The rest is still private.
+
+        Required permissions: characters
+        """
+        character = character.title()
+        user = ctx.author
+        await ctx.trigger_typing()
+        try:
+            key = await self.fetch_key(user, ["characters"])
+            results = await self.call_api("characters", key=key["key"])
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+        if character not in results:
+            return await ctx.send("Invalid character name")
+        doc = await self.db.characters.find_one({"name": character})
+        if doc:
+            await self.db.characters.delete_one({"name": character})
+            return await ctx.send("Character now private")
+        await self.db.characters.insert_one({
+            "name": character,
+            "owner": user.id,
+            "owner_acc_name": key["account_name"]
+        })
+        await ctx.send("Character successfully set to public. Anyone can "
+                       "check the characters gear and build - the rest is "
+                       "still private. To make the character private "
+                       "again, type the same command.")
+
+    async def get_character(self, ctx, character):
+        character = character.title()
+        endpoint = "characters/" + character.replace(" ", "%20")
+        try:
+            results = await self.call_api(endpoint, ctx.author, ["characters"])
+        except APINotFound:
+            results = await self.get_public_character(character)
+            if not results:
+                raise APINotFound
+        return results
+
+    async def get_public_character(self, character):
+        character = character.title()
+        endpoint = "characters/" + character.replace(" ", "%20")
+        doc = await self.db.characters.find_one({"name": character})
+        if doc:
+            user = await self.bot.get_user_info(doc["owner"])
+            try:
+                return await self.call_api(endpoint, user)
+            except:
+                return None
+        return None

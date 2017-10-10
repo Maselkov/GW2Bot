@@ -1,5 +1,6 @@
 from .exceptions import (APIBadRequest, APIConnectionError, APIError,
-                         APIForbidden, APIInvalidKey, APINotFound)
+                         APIForbidden, APIInvalidKey, APINotFound,
+                         APIInactiveError)
 
 
 class ApiMixin:
@@ -61,6 +62,8 @@ class ApiMixin:
                     if err_msg == "invalid key":
                         raise APIInvalidKey("Invalid key")
                     raise APIForbidden("Access denied")
+                if r.status == 503 and err_msg == "API not active":
+                    raise APIInactiveError("API is dead")
                 if r.status == 429:
                     self.log.error("API Call limit saturated")
                     raise APIConnectionError(

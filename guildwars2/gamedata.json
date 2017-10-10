@@ -434,5 +434,147 @@
       "perfected_envoy_pants": 80356,
       "perfected_envoy_shoes": 80399
     }
+  },
+  "cats": {
+    "chicken": {
+      "name": "Slab of Poultry Meat - WP: [&BPoAAAA=]",
+      "order": 0
+    },
+    "grilled_chicken": {
+      "name": "Grilled Poultry - WP: [&BDEEAAA=]",
+      "order": 1
+    },
+    "spicy_flank": {
+      "name": "Spicy Flank Steak - WP: [&BBAEAAA=]",
+      "order": 2
+    },
+    "spicier_flank": {
+      "name": "Spicier Flank Steak - WP: [&BNMAAAA=]",
+      "order": 3
+    },
+    "fire_flank": {
+      "name": "Plate of Fire Flank Steak - WP: [&BCoDAAA=]",
+      "order": 4
+    },
+    "prickley_pear_sorbet": {
+      "name": "Bowl of Prickly Pear Sorbet - WP: [&BIAHAAA=]",
+      "order": 5
+    },
+    "ginger_lime_icecream": {
+      "name": "Bowl of Ginger-Lime Ice Cream - WP: [&BHoHAAA=]",
+      "order": 6
+    },
+    "saffron_mango_icecream": {
+      "name": "Bowl of Saffron-Mango Ice Cream WP: [&BH8HAAA=]",
+      "order": 7
+    },
+    "peach_raspberry_icecream": {
+      "name": "Bowl of Peach Raspberry Swirl Ice Cream WP: [&BKwHAAA=]",
+      "order": 8
+    },
+    "chicken_day": {
+      "name": "Daytime - Slab of Poultry Meat WP: [&BLwEAAA=]",
+      "order": 9
+    },
+    "chicken_night": {
+      "name": "Nighttime - Slab of Poultry Meat WP: [&BLwEAAA=]",
+      "order": 10
+    },
+    "warrior": {
+      "name": "Warrior - Cheeseburger WP: [&BO8AAAA=]",
+      "order": 11
+    },
+    "mesmer": {
+      "name": "Mesmer - Mystery Tonic WP: [&BO8AAAA=]",
+      "order": 12
+    },
+    "ranger": {
+      "name": "Ranger - Healing Seed Pod WP: [&BDQBAAA=]",
+      "order": 13
+    },
+    "guardian": {
+      "name": "Guardian - Bowl of Curry Mussel Soup WP: [&BEAAAAA=]",
+      "order": 14
+    },
+    "elementalist": {
+      "name": "Elementalist - Slice of Rainbow Cake WP: [&BDQBAAA=]",
+      "order": 15
+    },
+    "engineer": {
+      "name": "Engineer - Flask of Pumpkin Oil WP: [&BIABAAA=]",
+      "order": 16
+    },
+    "revenant": {
+      "name": "Revenant - 39 Carrots - PvP Lobby",
+      "order": 17
+    },
+    "thief": {
+      "name": "Thief - Harpy Feathers - WP: [&BIABAAA=]",
+      "order": 18
+    },
+    "necromancer": {
+      "name": "Necromancer - Grumble Cake - WP: [&BHQBAAA=]",
+      "order": 19
+    },
+    "lava_skritt": {
+      "name": "Fire Flank Steak + Carry Injured Skritt WP: [&BFUJAAA=]",
+      "order": 20
+    },
+    "ghost_peppers": {
+      "name": "3 Ghost Peppers: [&BHgJAAA=]",
+      "order": 21
+    },
+    "halloween": {
+      "name": "Frog in a Jar - Feline Familiar from Enchanted Broom",
+      "order": 22
+    },
+    "snow_leopard": {
+      "name": "Use Koda's Flame to unfreeze - WP: [&BH0JAAA=]",
+      "order": 23
+    },
+    "frozen": {
+      "name": "Super-Hot Poultry and Leek Soup - WP: [&BDcEAAA=]",
+      "order": 24
+    },
+    "ice": {
+      "name": "Super-Hot Poultry and Winter Vegetable Soup - WP: [&BIcDAAA=]",
+      "order": 25
+    },
+    "freezer": {
+      "name": "Super-Hot Lemongrass Poultry Soup - WP: [&BLgEAAA=]",
+      "order": 26
+    },
+    "cold": {
+      "name": "Super-Hot Saffron-Scented Poultry Soup - WP: [&BLwEAAA=]",
+      "order": 27
+    },
+    "cadeucus": {
+      "name": "Bowl of Bloodstone Bisque - At the end of LS3E4 Head of the Snake",
+      "order": 28
+    },
+    "ghost": {
+      "name": "Strawberry Ghost - Also need ghost effect on player - WP: [&BK8JAAA=]",
+      "order": 29
+    },
+    "sab": {
+      "name": "SAB World 2 Zone 2 - Bring piranha to cat on top of gong room",
+      "order": 30
+    },
+    "simon": {
+      "name": "Shattered Observatory side room - [&AgF+NQEA][&AgHoHAEA][&AgEYwQAA][&AgGxHQEA][&AgFPPwEA]",
+      "order": 31
+    },
+    "bluecatmander": {
+      "name": "Gift of Battle - Blue Alpine Borderland Cat Room",
+      "order": 32
+    },
+    "yellowcatmander": {
+      "name": "Can of Spicy Meat Chili - Desert Borderland Quaggan Room",
+      "order": 33
+    },
+    "holographic": {
+      "name": "Holographic Cat - Purchased from Holomancer Netto (next to [&BLgEAAA=]) for 1g",
+      "order": 34
+    }
   }
 }

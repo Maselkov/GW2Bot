@@ -4,6 +4,7 @@ import logging
 
 import aiohttp
 from .account import AccountMixin
+from .achievements import AchievementsMixin
 from .api import ApiMixin
 from .characters import CharactersMixin
 from .commerce import CommerceMixin
@@ -17,12 +18,13 @@ from .notifiers import NotiifiersMixin
 from .pvp import PvpMixin
 from .wallet import WalletMixin
 from .wvw import WvwMixin
-from .exceptions import APIKeyError, APIError, APIInvalidKey
+from .exceptions import APIKeyError, APIError, APIInvalidKey, APIInactiveError
 
 
-class GuildWars2(AccountMixin, ApiMixin, CharactersMixin, CommerceMixin,
-                 DailyMixin, DatabaseMixin, EventsMixin, GuildMixin, KeyMixin,
-                 MiscMixin, NotiifiersMixin, PvpMixin, WalletMixin, WvwMixin):
+class GuildWars2(AccountMixin, AchievementsMixin, ApiMixin, CharactersMixin,
+                 CommerceMixin, DailyMixin, DatabaseMixin, EventsMixin,
+                 GuildMixin, KeyMixin, MiscMixin, NotiifiersMixin, PvpMixin,
+                 WalletMixin, WvwMixin):
     """Guild Wars 2 commands"""
 
     def __init__(self, bot):
@@ -45,6 +47,10 @@ class GuildWars2(AccountMixin, ApiMixin, CharactersMixin, CommerceMixin,
         if isinstance(exc, APIKeyError):
             await ctx.send(exc)
             return
+        if isinstance(exc, APIInactiveError):
+            await ctx.send("{.mention}, the API is currently down. "
+                           "Try again later.".format(user))
+            return
         if isinstance(exc, APIInvalidKey):
             await ctx.send("{.mention}, your API key is invalid! Remove your "
                            "key and add a new one".format(user))
@@ -65,10 +71,11 @@ def setup(bot):
                 "day": datetime.datetime.utcnow().weekday(),
                 "news": [],
                 "build": 0,
-                "dailies" : {}
+                "dailies": {}
             }
         }))
     loop.create_task(cog.game_update_checker())
     loop.create_task(cog.daily_checker())
     loop.create_task(cog.news_checker())
+    loop.create_task(cog.gem_tracker())
     bot.add_cog(cog)

@@ -35,14 +35,8 @@ class NotiifiersMixin:
         doc = await self.bot.database.get_guild(guild, self)
         enabled = doc["daily"].get("on", False)
         if enabled:
-            try:
-                endpoint = "achievements/daily"
-                results = await self.call_api(endpoint)
-            except APIError as e:
-                return await self.error_handler(ctx, e)
-            example = await self.display_all_dailies(results, True)
             msg = ("I will now send dailies to {.mention}. "
-                   "Example:\n```markdown\n{}```".format(channel, example))
+                   "".format(channel))
         else:
             msg = ("Channel set to {.mention}. In order to receive "
                    "dailies, you still need to enable it using "
@@ -59,17 +53,10 @@ class NotiifiersMixin:
             doc = await self.bot.database.get_guild(guild, self)
             channel = doc["daily"].get("channel")
             if channel:
-                try:
-                    endpoint = "achievements/daily"
-                    results = await self.call_api(endpoint)
-                except APIError as e:
-                    return await self.error_handler(ctx, e)
                 channel = guild.get_channel(channel)
                 if channel:
-                    example = await self.display_all_dailies(results, True)
                     msg = ("I will now send dailies to {.mention}. "
-                           "Example:\n```markdown\n{}```".format(
-                               channel, example))
+                           "".format(channel))
             else:
                 msg = ("Daily notifier toggled on. In order to reeceive "
                        "dailies, you still need to set a channel using "
@@ -86,6 +73,68 @@ class NotiifiersMixin:
         await self.bot.database.set_guild(guild, {"daily.autodelete": on_off},
                                           self)
         await ctx.send("Autodeletion for daily notifs enabled")
+
+    @commands.cooldown(1, 5, BucketType.guild)
+    @dailynotifier.command(name="categories")
+    async def daily_notifier_categories(self, ctx, *categories):
+        """Set daily notifier to only display specific categories
+
+        Separate multiple categories with space, possible values:
+        all
+        psna
+        psna_later
+        pve
+        pvp
+        wvw
+        fractals
+
+        psna_later is psna, 8 hours later
+        PSNA changes 8 hours after dailies change.
+
+        Example: $dailynotifier categories psna psna_later pve fractals
+        """
+        if not categories:
+            await self.bot.send_cmd_help(ctx)
+            return
+        guild = ctx.guild
+        possible_values = [
+            "all", "psna", "psna_later", "pve", "pvp", "wvw", "fractals"
+        ]
+        categories = [x.lower() for x in categories]
+        if len(categories) > 6:
+            await self.bot.send_cmd_help(ctx)
+            return
+        for category in categories:
+            if category not in possible_values:
+                await self.bot.send_cmd_help(ctx)
+                return
+            if categories.count(category) > 1:
+                await self.bot.send_cmd_help(ctx)
+                return
+            if category == "all":
+                categories = [
+                    "psna", "psna_later", "pve", "pvp", "wvw", "fractals"
+                ]
+                break
+        embed = await self.daily_embed(categories)
+        await self.bot.database.set_guild(
+            guild, {"daily.categories": categories}, self)
+        await ctx.send(
+            "Your categories have been saved. Here's an example of "
+            "your daily notifs:",
+            embed=embed)
+
+    @commands.cooldown(1, 5, BucketType.guild)
+    @dailynotifier.command(name="autopin")
+    async def daily_notifier_autopin(self, ctx, on_off: bool):
+        """Set daily notifier to automatically pin the message for the day
+
+        If enabled, will try to unpin last day's message as well
+        """
+        guild = ctx.guild
+        await self.bot.database.set_guild(guild, {"daily.autopin": on_off},
+                                          self)
+        await ctx.send("Autopinning for daily notifs enabled")
 
     @commands.group()
     @commands.guild_only()
@@ -184,21 +233,37 @@ class NotiifiersMixin:
                         "include `@here` mention. Take away bot's permissions "
                         "to mention everyone if you don't "
                         "want it.".format(channel))
+                else:  # TODO change it, ugly
+                    msg = (
+                        "Update notifier toggled on. In order to reeceive "
+                        "update notifs, you still need to set a channel using "
+                        "`updatenotifier channel <channel>`.")
             else:
                 msg = ("Update notifier toggled on. In order to reeceive "
                        "update notifs, you still need to set a channel using "
-                       "`updatenotifier channel <channel>`.".format(channel))
+                       "`updatenotifier channel <channel>`.")
         else:
             msg = ("Update notifier disabled")
         await ctx.send(msg)
 
     async def get_patchnotes(self):
-        url = "https://en-forum.guildwars2.com/categories/game-release-notes"
-        async with self.session.get(url) as r:
+        base_url = "https://en-forum.guildwars2.com"
+        url_updates = base_url + "/categories/game-release-notes"
+        async with self.session.get(url_updates) as r:
             results = await r.text()
         soup = BeautifulSoup(results, 'html.parser')
         post = soup.find(class_="Title")
-        return "https://forum-en.guildwars2.com" + post["href"]
+        link = post["href"]
+        try:
+            async with self.session.get(link) as r:
+                results = await r.text()
+            soup = BeautifulSoup(results, 'html.parser')
+            new_link = soup.find_all(class_="Permalink")[-1].get('href')
+            if new_link != link:
+                link = base_url + new_link
+        except:
+            pass
+        return "<{}>".format(link)
 
     async def check_news(self):
         doc = await self.bot.database.get_cog_config(self)
@@ -228,8 +293,9 @@ class NotiifiersMixin:
         return to_post
 
     def news_embed(self, item):
+        soup = BeautifulSoup(item["description"], 'html.parser')
         description = "[Click here]({0})\n{1}".format(item["link"],
-                                                      item["description"])
+                                                      soup.get_text())
         data = discord.Embed(
             title="{0}".format(item["title"]),
             description=description,
@@ -280,60 +346,77 @@ class NotiifiersMixin:
                     "$ne": None
                 }
             }, self)
-            to_message = []
-            async for doc in cursor:
-                try:
-                    guild = doc["cogs"][name]["daily"]
-                    destination = {"channel": guild["channel"]}
-                    autodelete = guild.get("autodelete", False)
-                    destination["categories"] = guild.get("categories")
-                    if autodelete:
-                        message = guild.get("message")
-                        if message:
-                            destination.update(old_message=message)
-                    to_message.append(destination)
-                except:
-                    pass
             daily_doc = await self.bot.database.get_cog_config(self)
             sent = 0
             deleted = 0
-            for destination in to_message:
+            forbidden = 0
+            pinned = 0
+            async for doc in cursor:
                 try:
-                    categories = destination["categories"]
+                    guild = doc["cogs"][name]["daily"]
+                    categories = guild.get("categories")
                     if not categories:
                         categories = [
                             "psna", "psna_later", "pve", "pvp", "wvw",
                             "fractals"
                         ]
                     embed = await self.daily_embed(categories, doc=daily_doc)
-                    channel = self.bot.get_channel(destination["channel"])
+                    channel = self.bot.get_channel(guild["channel"])
                     try:
-                        new_message = await channel.send(embed=embed)
+                        message = await channel.send(embed=embed)
+                        sent += 1
                     except discord.Forbidden:
-                        new_message = await channel.send(
-                            "Need permission to "
-                            "embed links in order "
-                            "to send daily "
-                            "notifs!")
-                    sent += 1
+                        forbidden += 1
+                        message = await channel.send("Need permission to "
+                                                     "embed links in order "
+                                                     "to send daily "
+                                                     "notifs!")
                     await self.bot.database.set_guild(
-                        channel.guild, {"daily.message": new_message.id}, self)
-                    old_message = destination.get("old_message")
-                    if old_message:
-                        to_delete = await channel.get_message(old_message)
-                        await to_delete.delete()
-                        deleted += 1
+                        channel.guild, {"daily.message": message.id}, self)
+                    autodelete = guild.get("autodelete", False)
+                    if autodelete:
+                        try:
+                            old_message = guild.get("message")
+                            if old_message:
+                                to_delete = await channel.get_message(
+                                    old_message)
+                                await to_delete.delete()
+                                deleted += 1
+                        except:
+                            pass
+                    autopin = guild.get("autopin", False)
+                    if autopin:
+                        try:
+                            await message.pin()
+                            pinned += 1
+                            try:
+                                async for m in channel.history(
+                                    after=message, limit=3):
+                                    if (m.type == discord.MessageType.pins_add
+                                            and m.author == self.bot.user):
+                                        await m.delete()
+                                        break
+                            except:
+                                pass
+                            old_message = guild.get("message")
+                            if old_message:
+                                to_unpin = await channel.get_message(
+                                    old_message)
+                                await to_unpin.unpin()
+                        except:
+                            pass
+
                 except:
                     pass
             self.log.info(
-                "Daily notifs: sent {}, deleted {}".format(sent, deleted))
+                "Daily notifs: sent {}, deleted {}, forbidden {}, pinned {}".
+                format(sent, deleted, forbidden, pinned))
         except Exception as e:
             self.log.exception(e)
             return
 
     async def send_news(self, embeds):
         try:
-            channels = []
             name = self.__class__.__name__
             cursor = self.bot.database.get_guilds_cursor({
                 "news.on": True,
@@ -344,35 +427,17 @@ class NotiifiersMixin:
             async for doc in cursor:
                 try:
                     guild = doc["cogs"][name]["news"]
-                    channels.append(guild["channel"])
-                except:
-                    pass
-            for chanid in channels:
-                try:
+                    channel = self.bot.get_channel(guild["channel"])
                     for embed in embeds:
-                        await self.bot.get_channel(chanid).send(embed=embed)
+                        await channel.send(embed=embed)
                 except:
                     pass
         except Exception as e:
-            self.log.exception(e)
-            return
+            self.log.exception("Exception sending daily notifs: ", exc_info=e)
 
     async def send_update_notifs(self):
         try:
-            channels = []
             name = self.__class__.__name__
-            cursor = self.bot.database.get_guilds_cursor({
-                "updates.on": True,
-                "updates.channel": {
-                    "$ne": None
-                }
-            }, self)
-            async for doc in cursor:
-                try:
-                    guild = doc["cogs"][name]["updates"]
-                    channels.append(guild["channel"])
-                except:
-                    pass
             try:
                 link = await self.get_patchnotes()
                 patchnotes = "\nUpdate notes: " + link
@@ -382,11 +447,21 @@ class NotiifiersMixin:
                 patchnotes = ""
             message = ("@here Guild Wars 2 has just updated! New build: "
                        "`{0}`{1}".format(build, patchnotes))
-            for chanid in channels:
+            cursor = self.bot.database.get_guilds_cursor({
+                "updates.on": True,
+                "updates.channel": {
+                    "$ne": None
+                }
+            }, self)
+            sent = 0
+            async for doc in cursor:
                 try:
-                    await self.bot.get_channel(chanid).send(message)
+                    guild = doc["cogs"][name]["updates"]
+                    await self.bot.get_channel(guild["channel"]).send(message)
+                    sent += 1
                 except:
                     pass
+            self.log.info("Update notifs: sent {}".format(sent))
         except Exception as e:
             self.log.exception(e)
 
@@ -395,6 +470,8 @@ class NotiifiersMixin:
             try:
                 if await self.check_day():
                     await asyncio.sleep(300)
+                    if not self.bot.available:
+                        await asyncio.sleep(360)
                     await self.cache_dailies()
                     await self.send_daily_notifs()
                 await asyncio.sleep(60)
@@ -429,3 +506,34 @@ class NotiifiersMixin:
                 self.log.exception(e)
                 await asyncio.sleep(60)
                 continue
+
+    async def gem_tracker(self):
+        while self is self.bot.get_cog("GuildWars2"):
+            try:
+                name = self.__class__.__name__
+                cost = await self.get_gem_price()
+                cost_coins = self.gold_to_coins(cost)
+                cursor = self.bot.database.get_users_cursor({
+                    "gemtrack": {
+                        "$ne": None
+                    }
+                }, self)
+                async for doc in cursor:
+                    try:
+                        user_price = doc["cogs"][name]["gemtrack"]
+                        if cost < user_price:
+                            user = await self.bot.get_user_info(doc["_id"])
+                            user_price = self.gold_to_coins(user_price)
+                            msg = ("Hey, {.mention}! You asked to be notified "
+                                   "when 400 gems were cheaper than {}. Guess "
+                                   "what? They're now only "
+                                   "{}!".format(user, user_price, cost_coins))
+                            await user.send(msg)
+                            await self.bot.database.set_user(
+                                user, {"gemtrack": None}, self)
+                    except:
+                        pass
+                await asyncio.sleep(150)
+            except Exception as e:
+                self.log.exception("Exception during gemtracker: ", exc_info=e)
+                await asyncio.sleep(150)
