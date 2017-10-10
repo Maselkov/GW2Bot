@@ -1,3 +1,5 @@
+import operator
+
 import discord
 from discord.ext import commands
 from discord.ext.commands.cooldowns import BucketType
@@ -71,15 +73,16 @@ class CommerceMixin:
             offers = listings[index][state]
             max_price = offers[0]["unit_price"]
             undercuts = 0
+            op = operator.lt if state == "buys" else operator.gt
             for offer in offers:
-                if offer["unit_price"] < price:
+                if op(offer["unit_price"], price):
                     break
                 undercuts += offer["listings"]
             undercuts = "· Undercuts: {}".format(
                 undercuts) if undercuts else ""
             data.add_field(
                 name=item_name,
-                value="{} x {} · Max. offer: {} {}".format(
+                value="{} x {}\nMax. offer: {} {}".format(
                     quantity,
                     self.gold_to_coins(price),
                     self.gold_to_coins(max_price), undercuts),
