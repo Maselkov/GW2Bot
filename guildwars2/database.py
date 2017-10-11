@@ -184,6 +184,8 @@ class DatabaseMixin:
     async def cache_dailies(self):
         try:
             results = await self.call_api("achievements/daily")
+            await self.db.achievements.drop()
+            await self.cache_endpoint("achievements")
         except:
             return
         try:
