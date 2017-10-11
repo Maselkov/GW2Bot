@@ -345,15 +345,15 @@ class CharactersMixin:
 
     @character.command(name="togglepublic")
     @commands.cooldown(1, 1, BucketType.user)
-    async def character_togglepublic(self, ctx, *, character: str):
-        """Toggle your character's status to public
+    async def character_togglepublic(self, ctx, *, character_or_all: str):
+        """Toggle your character's (or all of them) status to public
 
         Public characters can have their gear and build checked by anyone.
         The rest is still private.
 
         Required permissions: characters
         """
-        character = character.title()
+        character = character_or_all.title()
         user = ctx.author
         await ctx.trigger_typing()
         try:
@@ -361,21 +361,28 @@ class CharactersMixin:
             results = await self.call_api("characters", key=key["key"])
         except APIError as e:
             return await self.error_handler(ctx, e)
-        if character not in results:
+        if character not in results and character != "All":
             return await ctx.send("Invalid character name")
-        doc = await self.db.characters.find_one({"name": character})
-        if doc:
-            await self.db.characters.delete_one({"name": character})
-            return await ctx.send("Character now private")
-        await self.db.characters.insert_one({
-            "name": character,
-            "owner": user.id,
-            "owner_acc_name": key["account_name"]
-        })
-        await ctx.send("Character successfully set to public. Anyone can "
-                       "check the characters gear and build - the rest is "
-                       "still private. To make the character private "
+        characters = [character] if character != "All" else results
+        output = []
+        for char in characters:
+            doc = await self.db.characters.find_one({"name": char})
+            if doc:
+                await self.db.characters.delete_one({"name": char})
+                output.append(char + " is now private")
+            else:
+                await self.db.characters.insert_one({
+                    "name": char,
+                    "owner": user.id,
+                    "owner_acc_name": key["account_name"]
+                })
+                output.append(char + " is now public")
+        await ctx.send("Character status successfully changed. Anyone can "
+                       "check public characters gear and build - the rest is "
+                       "still private. To make character private "
                        "again, type the same command.")
+        if character == "All":
+            await user.send("\n".join(output))
 
     async def get_character(self, ctx, character):
         character = character.title()
