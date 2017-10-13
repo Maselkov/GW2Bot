@@ -29,7 +29,7 @@ class WvwMixin:
     @wvw.command(name="info")
     @commands.cooldown(1, 10, BucketType.user)
     async def wvw_info(self, ctx, *, world: str = None):
-        """Info about a world. If none is provided, defaults to account's world
+        """Info about a world. Defaults to account's world
         """
         user = ctx.author
         if not world:

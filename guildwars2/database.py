@@ -162,7 +162,7 @@ class DatabaseMixin:
 
     async def get_world_id(self, world):
         world = re.escape(world)
-        world = "\\b" + world + "\\b"
+        world = "^" + world + "$"
         search = re.compile(world, re.IGNORECASE)
         if world is None:
             return None
