@@ -85,7 +85,8 @@ class SyncGuild:
                 await self.clearsync(ctx)
         message = await ctx.send(
             "Please type the name of the in-game guild you want to sync "
-            "to. Please ensure you respond with it exactly as it is in-game.")
+            "to into the chat now. Please ensure you respond with it "
+            "exactly as it is in-game.")
         try:
             answer = await self.bot.wait_for(
                 "message", timeout=30, check=check)
