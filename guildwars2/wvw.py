@@ -94,7 +94,7 @@ class WvwMixin:
 
     @wvw.command(name="populationtrack")
     @commands.cooldown(1, 5, BucketType.user)
-    async def wvw_population_track(self, ctx, world_name):
+    async def wvw_population_track(self, ctx, *, world_name):
         """Receive a notification when the world is no longer full
 
         Example: $wvw populationtrack gandara
@@ -121,4 +121,4 @@ class WvwMixin:
                                   "server. Aborting.")
         await self.bot.database.set_user(
             user, {"poptrack": wid}, self, operator="$push")
-        await ctx.send("Succesfully set")
+        await ctx.send("Successfully set")
