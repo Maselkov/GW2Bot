@@ -550,9 +550,6 @@ class NotiifiersMixin:
                 continue
 
     async def send_population_notifs(self):
-        doc = await self.bot.database.get_cog_config(self)
-        if not doc:
-            return
         async for world in self.db.worlds.find({
                 "population": {
                     "$ne": "Full"
