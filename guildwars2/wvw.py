@@ -28,7 +28,7 @@ class WvwMixin:
 
     @wvw.command(name="info")
     @commands.cooldown(1, 10, BucketType.user)
-    async def wvw_info(self, ctx, *, world: str=None):
+    async def wvw_info(self, ctx, *, world: str = None):
         """Info about a world. If none is provided, defaults to account's world
         """
         user = ctx.author
@@ -91,3 +91,34 @@ class WvwMixin:
             await ctx.send(embed=data)
         except discord.Forbidden:
             await ctx.send("Need permission to embed links")
+
+    @wvw.command(name="populationtrack")
+    @commands.cooldown(1, 5, BucketType.user)
+    async def wvw_population_track(self, ctx, world_name):
+        """Receive a notification when the world is no longer full
+
+        Example: $wvw populationtrack gandara
+        """
+        user = ctx.author
+        wid = await self.get_world_id(world_name)
+        if not wid:
+            return await ctx.send("Invalid world name")
+        doc = await self.bot.database.get_user(user, self)
+        if wid in doc.get("poptrack", []):
+            return await ctx.send("You're already tracking this world")
+        try:
+            results = await self.call_api("worlds/{}".format(wid))
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+        if results["population"] != "Full":
+            return await ctx.send("This world is currently not full!")
+        try:
+            await user.send("You will be notiifed when {} is no longer full "
+                            "".format(world_name.title()))
+        except:
+            return await ctx.send("Couldn't send a DM to you. Either you have "
+                                  "me blocked, or disabled DMs in this "
+                                  "server. Aborting.")
+        await self.bot.database.set_user(
+            user, {"poptrack": wid}, self, operator="$push")
+        await ctx.send("Succesfully set")

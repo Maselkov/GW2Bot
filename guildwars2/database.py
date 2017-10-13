@@ -152,6 +152,24 @@ class DatabaseMixin:
             return ""
         return title
 
+    async def get_world_name(self, wid):
+        try:
+            doc = await self.db.worlds.find_one({"_id": wid})
+            name = doc["name"]
+        except:
+            name = None
+        return name
+
+    async def get_world_id(self, world):
+        world = re.escape(world)
+        search = re.compile(world, re.IGNORECASE)
+        if world is None:
+            return None
+        doc = await self.db.worlds.find_one({"name": search})
+        if not doc:
+            return None
+        return doc["_id"]
+
     async def fetch_statname(self, item):
         statset = await self.db.itemstats.find_one({"_id": item})
         try:
@@ -184,7 +202,6 @@ class DatabaseMixin:
     async def cache_dailies(self):
         try:
             results = await self.call_api("achievements/daily")
-            await self.db.achievements.drop()
             await self.cache_endpoint("achievements")
         except:
             return
@@ -215,6 +232,7 @@ class DatabaseMixin:
             self.log.exception("Exception caching dailies: ", exc_info=e)
 
     async def cache_endpoint(self, endpoint, all=False):
+        await self.db[endpoint].drop()
         try:
             items = await self.call_api(endpoint)
         except Exception as e:
@@ -251,12 +269,12 @@ class DatabaseMixin:
         await self.bot.change_presence(
             game=discord.Game(name="Rebuilding API cache"),
             status=discord.Status.dnd)
-        endpoints = [["items"], ["achievements"], ["itemstats", True],
-                     ["titles", True], ["recipes"], ["skins"],
-                     ["currencies", True], ["skills", True],
-                     ["specializations", True], ["traits", True]]
+        endpoints = [["items"], ["achievements"], ["itemstats", True], [
+            "titles", True
+        ], ["recipes"], ["skins"], ["currencies", True], ["skills", True],
+                     ["specializations", True], ["traits",
+                                                 True], ["worlds", True]]
         for e in endpoints:
-            await self.db[e[0]].drop()
             try:
                 await self.cache_endpoint(*e)
             except:
@@ -271,6 +289,7 @@ class DatabaseMixin:
         await self.db.skins.create_index("name")
         await self.db.currencies.create_index("name")
         await self.db.skills.create_index("name")
+        await self.db.worlds.create_index("name")
         end = time.time()
         self.bot.available = True
         print("Done")

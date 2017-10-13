@@ -178,7 +178,7 @@ class NotiifiersMixin:
                     msg = (
                         "I will now send news to {.mention}.".format(channel))
             else:
-                msg = ("Newsfeed toggled on. In order to reeceive "
+                msg = ("Newsfeed toggled on. In order to receive "
                        "news, you still need to set a channel using "
                        "`newsfeed channel <channel>`.".format(channel))
         else:
@@ -391,7 +391,7 @@ class NotiifiersMixin:
                             pinned += 1
                             try:
                                 async for m in channel.history(
-                                    after=message, limit=3):
+                                        after=message, limit=3):
                                     if (m.type == discord.MessageType.pins_add
                                             and m.author == self.bot.user):
                                         await m.delete()
@@ -537,3 +537,39 @@ class NotiifiersMixin:
             except Exception as e:
                 self.log.exception("Exception during gemtracker: ", exc_info=e)
                 await asyncio.sleep(150)
+
+    async def world_population_checker(self):
+        while self is self.bot.get_cog("GuildWars2"):
+            try:
+                await self.send_population_notifs()
+                await asyncio.sleep(300)
+                await self.cache_endpoint("worlds", True)
+            except Exception as e:
+                self.log.exception("Exception during popnotifs: ", exc_info=e)
+                await asyncio.sleep(300)
+                continue
+
+    async def send_population_notifs(self):
+        doc = await self.bot.database.get_cog_config(self)
+        if not doc:
+            return
+        async for world in self.db.worlds.find({
+                "population": {
+                    "$ne": "Full"
+                }
+        }):
+            world_name = world["name"]
+            wid = world["_id"]
+            msg = (
+                "{} is no longer full! [populationtrack]".format(world_name))
+            cursor = self.bot.database.get_users_cursor({
+                "poptrack": wid
+            }, self)
+            async for doc in cursor:
+                try:
+                    user = await self.bot.get_user_info(doc["_id"])
+                    await self.bot.database.set_user(
+                        user, {"poptrack": wid}, self, operator="$pull")
+                    await user.send(msg)
+                except:
+                    pass

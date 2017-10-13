@@ -71,11 +71,13 @@ def setup(bot):
                 "day": datetime.datetime.utcnow().weekday(),
                 "news": [],
                 "build": 0,
-                "dailies": {}
+                "dailies": {},
+                "worlds_pop_state": {}
             }
         }))
     loop.create_task(cog.game_update_checker())
     loop.create_task(cog.daily_checker())
     loop.create_task(cog.news_checker())
     loop.create_task(cog.gem_tracker())
+    loop.create_task(cog.world_population_checker())
     bot.add_cog(cog)

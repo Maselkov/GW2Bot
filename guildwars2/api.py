@@ -4,18 +4,6 @@ from .exceptions import (APIBadRequest, APIConnectionError, APIError,
 
 
 class ApiMixin:
-    async def get_world_id(self, world):
-        if world is None:
-            return None
-        try:
-            results = await self.call_api("worlds?ids=all")
-        except APIError:
-            return None
-        for w in results:
-            if w["name"].lower() == world.lower():
-                return w["id"]
-        return None
-
     async def get_guild(self, gid):
         endpoint = "guild/{0}".format(gid)
         try:
