@@ -104,7 +104,7 @@ class WvwMixin:
         if not wid:
             return await ctx.send("Invalid world name")
         doc = await self.bot.database.get_user(user, self)
-        if wid in doc.get("poptrack", []):
+        if doc and wid in doc.get("poptrack", []):
             return await ctx.send("You're already tracking this world")
         try:
             results = await self.call_api("worlds/{}".format(wid))
