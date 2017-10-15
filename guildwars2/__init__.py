@@ -12,6 +12,7 @@ from .daily import DailyMixin
 from .database import DatabaseMixin
 from .events import EventsMixin
 from .guild import GuildMixin
+from .guildmanage import GuildManageMixin
 from .key import KeyMixin
 from .misc import MiscMixin
 from .notifiers import NotiifiersMixin
@@ -23,8 +24,8 @@ from .exceptions import APIKeyError, APIError, APIInvalidKey, APIInactiveError
 
 class GuildWars2(AccountMixin, AchievementsMixin, ApiMixin, CharactersMixin,
                  CommerceMixin, DailyMixin, DatabaseMixin, EventsMixin,
-                 GuildMixin, KeyMixin, MiscMixin, NotiifiersMixin, PvpMixin,
-                 WalletMixin, WvwMixin):
+                 GuildMixin, GuildManageMixin, KeyMixin, MiscMixin,
+                 NotiifiersMixin, PvpMixin, WalletMixin, WvwMixin):
     """Guild Wars 2 commands"""
 
     def __init__(self, bot):
@@ -74,10 +75,10 @@ def setup(bot):
                 "dailies": {}
             }
         }))
-    loop.create_task(cog.game_update_checker())
-    loop.create_task(cog.daily_checker())
-    loop.create_task(cog.news_checker())
-    loop.create_task(cog.gem_tracker())
-    loop.create_task(cog.world_population_checker())
-    loop.create_task(cog.guild_synchronizer())
+    tasks = (cog.game_update_checker, cog.daily_checker, cog.news_checker,
+             cog.gem_tracker, cog.world_population_checker,
+             cog.guild_synchronizer, cog.boss_notifier,
+             cog.forced_account_names)
+    for task in tasks:
+        loop.create_task(task())
     bot.add_cog(cog)

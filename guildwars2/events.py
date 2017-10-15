@@ -48,7 +48,7 @@ class EventsMixin:
             key=
             lambda t: datetime.datetime.strptime(t["time"], "%H:%M:%S").time())
 
-    def get_upcoming_bosses(self, timezone=None):
+    def get_upcoming_bosses(self, limit=8, *, timezone=None):
         upcoming_bosses = []
         time = datetime.datetime.utcnow()
         counter = 0
@@ -56,7 +56,7 @@ class EventsMixin:
         done = False
         while not done:
             for boss in self.boss_schedule:
-                if counter == 8:
+                if counter == limit:
                     done = True
                     break
                 boss_time = datetime.datetime.strptime(boss["time"],
@@ -69,7 +69,7 @@ class EventsMixin:
                         "name": boss["name"],
                         "time": str(boss_time.time()),
                         "waypoint": boss["waypoint"],
-                        "diff": self.format_timedelta((boss_time - time))
+                        "diff": boss_time - time
                     }
                     upcoming_bosses.append(output)
                     counter += 1
@@ -77,17 +77,17 @@ class EventsMixin:
         return upcoming_bosses
 
     def schedule_embed(self, schedule):
-        data = discord.Embed()
+        data = discord.Embed(
+            title="Upcoming world bosses", color=self.embed_color)
         for boss in schedule:
             value = "Time: {}\nWaypoint: {}".format(boss["time"],
                                                     boss["waypoint"])
             data.add_field(
-                name="{} in {}".format(boss["name"], boss["diff"]),
+                name="{} in {}".format(boss["name"],
+                                       self.format_timedelta(boss["diff"])),
                 value=value,
                 inline=False)
-        data.set_author(name="Upcoming world bosses")
-        data.set_footer(
-            text="All times are for UTC. Timezone support coming soon™")
+        data.set_footer(text="All times are for UTC.")
         return data
 
     def format_timedelta(self, td):
@@ -113,8 +113,8 @@ class EventsMixin:
             for phases in hotmap[
                     "phases"]:  # loops through phases to find current phase
                 if position < phases["end"]:
-                    output = (output + "Current phase is " +
-                              phases["name"] + ".\n")
+                    output = (
+                        output + "Current phase is " + phases["name"] + ".\n")
                     nextphase = position + 1 + (phases["end"] - position)
                     if nextphase > 120:
                         overlap = 120 - position
