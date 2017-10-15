@@ -15,7 +15,7 @@ class GuildManageMixin:
     @guild_manage.command(name="forceaccountnames")
     @commands.has_permissions(manage_nicknames=True)
     async def server_force_account_names(self, ctx, on_off: bool):
-        """Automatically change members' names to their in game account names"""
+        """Automatically change nicknames to in-game names"""
 
         def check(m):
             return m.author == ctx.author and m.channel == ctx.channel
