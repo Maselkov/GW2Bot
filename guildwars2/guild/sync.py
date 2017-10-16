@@ -202,6 +202,8 @@ class SyncGuild:
         if not enabled:
             return
         guild = self.bot.get_guild(doc["_id"])
+        if guild is None:
+            return
         savedranks = guilddoc["ranks"]
         gid = guilddoc["gid"]
         endpoint = "guild/{0}/ranks".format(gid)
