@@ -187,7 +187,8 @@ class DatabaseMixin:
         if not doc or not doc["key"]:
             raise APIKeyError(
                 "No API key associated with {.mention}. "
-                "Add your key using `$key add` command.".format(user))
+                "Add your key using `$key add` command. If you don't know "
+                "how, the command includes a tutorial.".format(user))
         if scopes:
             missing = []
             for scope in scopes:
