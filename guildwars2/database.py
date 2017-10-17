@@ -184,7 +184,7 @@ class DatabaseMixin:
 
     async def fetch_key(self, user, scopes=None):
         doc = await self.bot.database.get_user(user, self)
-        if not doc or not doc["key"]:
+        if not doc or "key" not in doc or not doc["key"]:
             raise APIKeyError(
                 "No API key associated with {.mention}. "
                 "Add your key using `$key add` command. If you don't know "
