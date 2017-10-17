@@ -99,6 +99,8 @@ class AchievementsMixin:
         return progress
 
     def max_ap(self, ach, repeatable=False):
+        if ach is None:
+            return 0
         if repeatable:
             return ach["point_cap"]
         return sum([t["points"] for t in ach["tiers"]])
@@ -130,5 +132,6 @@ class AchievementsMixin:
         total = acc_res["daily_ap"] + acc_res["monthly_ap"]
         for ach in res:
             doc = await self.db.achievements.find_one({"_id": ach["id"]})
-            total += self.earned_ap(doc, ach)
+            if doc is not None:
+                total += self.earned_ap(doc, ach)
         return total
