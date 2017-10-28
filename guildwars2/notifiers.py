@@ -530,6 +530,8 @@ class NotiifiersMixin:
                     await self.cache_dailies()
                     await self.send_daily_notifs()
                 await asyncio.sleep(60)
+            except asyncio.CancelledError:
+                self.log.info("Daily checker terminated")
             except Exception as e:
                 self.log.exception(e)
                 await asyncio.sleep(60)
@@ -545,6 +547,8 @@ class NotiifiersMixin:
                         embeds.append(self.news_embed(item))
                     await self.send_news(embeds)
                 await asyncio.sleep(300)
+            except asyncio.CancelledError:
+                self.log.info("News checker terminated")
             except Exception as e:
                 self.log.exception(e)
                 await asyncio.sleep(300)
@@ -557,6 +561,8 @@ class NotiifiersMixin:
                     await self.send_update_notifs()
                     await self.rebuild_database()
                 await asyncio.sleep(60)
+            except asyncio.CancelledError:
+                self.log.info("Update checker temrinated")
             except Exception as e:
                 self.log.exception(e)
                 await asyncio.sleep(60)
@@ -601,6 +607,8 @@ class NotiifiersMixin:
                     except:
                         pass
                 await asyncio.sleep(150)
+            except asyncio.CancelledError:
+                self.log.info("Gem tracker terminated")
             except Exception as e:
                 self.log.exception("Exception during gemtracker: ", exc_info=e)
                 await asyncio.sleep(150)
@@ -643,6 +651,8 @@ class NotiifiersMixin:
                             await to_delete.delete()
                     except:
                         pass
+            except asyncio.CancelledError:
+                self.log.info("Boss notifier terminated")
             except Exception as e:
                 self.log.exception(e)
                 await asyncio.sleep(300)
@@ -654,6 +664,8 @@ class NotiifiersMixin:
                 await self.send_population_notifs()
                 await asyncio.sleep(300)
                 await self.cache_endpoint("worlds", True)
+            except asyncio.CancelledError:
+                self.log.info("Worldtracker terminated")
             except Exception as e:
                 self.log.exception("Exception during popnotifs: ", exc_info=e)
                 await asyncio.sleep(300)
@@ -686,6 +698,8 @@ class NotiifiersMixin:
             try:
                 await self.set_account_names()
                 await asyncio.sleep(300)
+            except asyncio.CancelledError:
+                self.log.info("FAC terminated")
             except Exception as e:
                 self.log.exception(
                     "Exception during forced names: ", exc_info=e)

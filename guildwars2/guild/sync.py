@@ -329,6 +329,8 @@ class SyncGuild:
                         pass
                     await asyncio.sleep(5)
                 await asyncio.sleep(60)
+            except asyncio.CancelledError:
+                self.log.info("Guildsync terminated")
             except Exception as e:
                 self.log.exception("Exception during guildsync: ", exc_info=e)
 

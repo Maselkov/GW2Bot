@@ -1,7 +1,6 @@
 import datetime
 import json
 import logging
-
 import aiohttp
 from .account import AccountMixin
 from .achievements import AchievementsMixin
@@ -39,8 +38,12 @@ class GuildWars2(AccountMixin, AchievementsMixin, ApiMixin, CharactersMixin,
         self.boss_schedule = self.generate_schedule()
         self.embed_color = 0xc12d2b
         self.log = logging.getLogger(__name__)
+        self.tasks = []
 
     def __unload(self):
+        for task in self.tasks:
+            task.cancel()
+        self.tasks = []
         self.session.close()
 
     async def error_handler(self, ctx, exc):
@@ -80,5 +83,5 @@ def setup(bot):
              cog.guild_synchronizer, cog.boss_notifier,
              cog.forced_account_names)
     for task in tasks:
-        loop.create_task(task())
+        cog.tasks.append(loop.create_task(task()))
     bot.add_cog(cog)
