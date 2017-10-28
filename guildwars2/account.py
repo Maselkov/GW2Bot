@@ -304,29 +304,17 @@ class AccountMixin:
         scopes = ["progression"]
         endpoint = "account/raids"
         try:
-            results = await self.call_api(endpoint, user, scopes)
+            doc = await self.fetch_key(user, scopes)
+            results = await self.call_api(endpoint, key=doc["key"])
         except APIError as e:
             return await self.error_handler(ctx, e)
-        else:
-            newbosslist = list(
-                set(list(self.gamedata["bosses"])) ^ set(results))
-            if not newbosslist:
-                await ctx.send(
-                    "Congratulations {.mention}, "
-                    "you've cleared everything. Here's a gold star: "
-                    ":star:".format(user))
-            else:
-                formattedlist = []
-                output = ("{.mention}, you haven't killed the "
-                          "following bosses this week: ```")
-                newbosslist.sort(
-                    key=lambda val: self.gamedata["bosses"][val]["order"])
-                for boss in newbosslist:
-                    formattedlist.append(self.gamedata["bosses"][boss]["name"])
-                for x in formattedlist:
-                    output += "\n" + x
-                output += "```"
-                await ctx.send(output.format(user))
+        raids = await self.get_raids()
+        embed = self.boss_embed(raids, results)
+        embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
+        try:
+            await ctx.send(embed=embed)
+        except discord.Forbidden:
+            await ctx.send("Need permission to embed links")
 
     @commands.command()
     @commands.cooldown(1, 7, BucketType.user)
@@ -443,3 +431,32 @@ class AccountMixin:
                     output += "\n" + x
                 output += "```"
                 await ctx.send(output.format(user))
+
+    def boss_embed(self, raids, results):
+        def is_killed(boss):
+            return "+" if boss["id"] in results else "-"
+
+        def readable_id(_id):
+            return _id.replace("_", " ").title()
+
+        embed = discord.Embed(
+            title="Bosses",
+            description="Completed this week",
+            color=self.embed_color)
+        for raid in raids:
+            if len(raid["wings"]) > 1:
+                embed.add_field(
+                    name=readable_id(raid["id"]),
+                    value=u'\u200b',  # Zero with space
+                    inline=False)
+            for wing in raid["wings"]:
+                value = ["```diff"]
+                for boss in filter(lambda x: x["type"] != "Checkpoint",
+                                   wing["events"]):
+                    value.append(is_killed(boss) + readable_id(boss["id"]))
+                value.append("```")
+                embed.add_field(
+                    name=readable_id(wing["id"]), value="\n".join(value))
+        embed.set_footer(text="Green (+) means you've killed boss this week. "
+                         "Red (-) means you haven't.")
+        return embed

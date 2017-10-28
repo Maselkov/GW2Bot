@@ -75,68 +75,6 @@
       "Weapon": "Weapon"
     }
   },
-  "bosses": {
-    "vale_guardian": {
-      "name": "Vale Guardian",
-      "order": 0
-    },
-    "spirit_woods": {
-      "name": "Spirit Woods",
-      "order": 1
-    },
-    "gorseval": {
-      "name": "Gorseval the Multifarious",
-      "order": 2
-    },
-    "sabetha": {
-      "name": "Sabetha the Saboteur",
-      "order": 3
-    },
-    "slothasor": {
-      "name": "Slothasor",
-      "order": 4
-    },
-    "bandit_trio": {
-      "name": "Bandit Trio",
-      "order": 5
-    },
-    "matthias": {
-      "name": "Matthias Gabrel",
-      "order": 6
-    },
-    "escort": {
-      "name": "Siege the Stronghold",
-      "order": 7
-    },
-    "keep_construct": {
-      "name": "Keep Construct",
-      "order": 8
-    },
-    "twisted_castle": {
-      "name": "Twisted Castle",
-      "order": 9
-    },
-    "xera": {
-      "name": "Xera",
-      "order": 10
-    },
-    "cairn": {
-      "name": "Cairn the Indomitable",
-      "order": 11
-    },
-    "mursaat_overseer": {
-      "name": "Mursaat Overseer",
-      "order": 12
-    },
-    "samarog": {
-      "name": "Samarog",
-      "order": 13
-    },
-    "deimos": {
-      "name": "Deimos",
-      "order": 14
-    }
-  },
   "pact_supply": [
     "[&BA8CAAA=][&BKYBAAA=][&BEwDAAA=][&BIcHAAA=][&BNIEAAA=][&BIMCAAA=]",
     "[&BIMBAAA=][&BBkAAAA=][&BEgAAAA=][&BH8HAAA=][&BKgCAAA=][&BGQCAAA=]",

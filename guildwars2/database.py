@@ -233,6 +233,17 @@ class DatabaseMixin:
         except Exception as e:
             self.log.exception("Exception caching dailies: ", exc_info=e)
 
+    async def cache_raids(self):
+        raids = []
+        raids_index = await self.call_api("raids")
+        for raid in raids_index:
+            raids.append(await self.call_api("raids/" + raid))
+        await self.bot.database.set_cog_config(self, {"cache.raids": raids})
+
+    async def get_raids(self):
+        config = await self.bot.database.get_cog_config(self)
+        return config["cache"].get("raids")
+
     async def cache_endpoint(self, endpoint, all=False):
         await self.db[endpoint].drop()
         try:
@@ -292,6 +303,7 @@ class DatabaseMixin:
         await self.db.currencies.create_index("name")
         await self.db.skills.create_index("name")
         await self.db.worlds.create_index("name")
+        await self.cache_raids()
         end = time.time()
         self.bot.available = True
         print("Done")
