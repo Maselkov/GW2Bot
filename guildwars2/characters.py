@@ -178,7 +178,7 @@ class CharactersMixin:
                 infusion = handle_duplicates(gear[piece]["infusions"])
                 msg = "\n".join(upgrade + infusion)
                 if not msg:
-                    msg = "---"
+                    msg = u'\u200b'
                 data.add_field(
                     name="{} {} [{}]".format(statname, itemname, piece),
                     value=msg,
