@@ -1,3 +1,4 @@
+from collections import OrderedDict
 from itertools import chain
 from operator import itemgetter
 
@@ -328,7 +329,7 @@ class AccountMixin:
                 await ctx.send(output.format(user))
 
     @commands.command()
-    @commands.cooldown(1, 15, BucketType.user)
+    @commands.cooldown(1, 7, BucketType.user)
     async def search(self, ctx, *, item):
         """Find items on your account
 
@@ -346,62 +347,55 @@ class AccountMixin:
                 "characters?page=0"
             ]
             results = await self.call_multiple(endpoints, user, scopes)
-            bank, shared, material, characters = results
+            storage_spaces = ("bank", "shared", "material storage")
+            storage_spaces = OrderedDict(list(zip(storage_spaces, results)))
+            characters = results[3]
         except APIError as e:
             return await self.error_handler(ctx, e)
-        output = ""
-        results = {"bank": 0, "shared": 0, "material": 0, "characters": {}}
-        bankresults = [
-            item["count"] for item in bank
-            if item is not None and item["id"] == choice["_id"]
-        ]
-        results["bank"] = sum(bankresults)
-        sharedresults = [
-            item["count"] for item in shared
-            if item is not None and item["id"] == choice["_id"]
-        ]
-        results["shared"] = sum(sharedresults)
-        materialresults = [
-            item["count"] for item in material
-            if item is not None and item["id"] == choice["_id"]
-        ]
-        results["material"] = sum(materialresults)
+
+        def check(item):
+            return item is not None and item["id"] == choice["_id"]
+
+        storage_counts = OrderedDict()
+        for k, v in storage_spaces.items():
+            count = 0
+            for item in filter(check, v):
+                count += item["count"]
+            storage_counts[k] = count
         for character in characters:
-            results["characters"][character["name"]] = 0
-            bags = [bag for bag in character["bags"] if bag is not None]
-            equipment = [
-                piece for piece in character["equipment"] if piece is not None
+            bags = [
+                bag["inventory"] for bag in filter(None, character["bags"])
             ]
+            bag_total = 0
             for bag in bags:
-                inv = [
-                    item["count"] for item in bag["inventory"]
-                    if item is not None and item["id"] == choice["_id"]
-                ]
-                results["characters"][character["name"]] += sum(inv)
-            try:
-                eqresults = [
-                    1 for piece in equipment if piece["id"] == choice["_id"]
-                ]
-                results["characters"][character["name"]] += sum(eqresults)
-            except:
-                pass
-        if results["bank"]:
-            output += "BANK: Found {0}\n".format(results["bank"])
-        if results["material"]:
-            output += "MATERIAL STORAGE: Found {0}\n".format(
-                results["material"])
-        if results["shared"]:
-            output += "SHARED: Found {0}\n".format(results["shared"])
-        if results["characters"]:
-            for char, value in results["characters"].items():
-                if value:
-                    output += "{0}: Found {1}\n".format(char.upper(), value)
-        if not output:
-            await ctx.send("Sorry, not found on your account. "
-                           "Make sure you've selected the "
-                           "correct item.")
-        else:
-            await ctx.send("```" + output + "```")
+                bag_total += sum(
+                    [item["count"] for item in filter(check, bag)])
+            equipment = sum(
+                [1 for piece in filter(check, character["equipment"])])
+            count = bag_total + equipment
+            storage_counts[character["name"]] = count
+        seq = [k for k, v in storage_counts.items() if v]
+        if not seq:
+            return await ctx.send("Sorry, not found on your account. "
+                                  "Make sure you've selected the "
+                                  "correct item.")
+        longest = len(max(seq, key=len))
+        output = [
+            "LOCATION{}COUNT".format(" " * (longest - 5)),
+            "--------{}|-----".format("-" * (longest - 6))
+        ]
+        total = 0
+        storage_counts = OrderedDict(
+            sorted(storage_counts.items(), key=lambda kv: kv[1], reverse=True))
+        for k, v in storage_counts.items():
+            if v:
+                total += v
+                output.append("{} {} | {}".format(k.upper(), " " * (
+                    longest - len(k)), v))
+        output.append(
+            "--------{}------".format("-" * (longest - len("location") + 2)))
+        output.append("TOTAL:{}{}".format(" " * (longest - 2), total))
+        await ctx.send("```ml\n" + "\n".join(output) + "```")
 
     @commands.command()
     @commands.cooldown(1, 10, BucketType.user)

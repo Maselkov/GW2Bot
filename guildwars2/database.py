@@ -318,14 +318,23 @@ class DatabaseMixin:
                            "more specific".format(number))
             return None
         items = []
-        msg = "Which one of these interests you? Type its number```"
         async for item in cursor:
             items.append(item)
+        items.sort(key=lambda i: i["name"])
+        longest = len(max([item["name"] for item in items], key=len))
+        msg = [
+            "Which one of these interests you? Simply type it's number "
+            "into the chat now:```ml", "INDEX    NAME {}RARITY".format(
+                " " * (longest)), "-----|------{}|-------".format(
+                    "-" * (longest))
+        ]
         if number != 1:
-            for c, m in enumerate(items):
-                msg += "\n{}: {} ({})".format(c, m["name"], m["rarity"])
-            msg += "```"
-            message = await ctx.send(msg)
+            for c, m in enumerate(items, 1):
+                msg.append("  {} {}| {} {}| {}".format(c, " " * (
+                    2 - len(str(c))), m["name"].upper(), " " * (
+                        4 + longest - len(m["name"])), m["rarity"]))
+            msg.append("```")
+            message = await ctx.send("\n".join(msg))
             try:
                 answer = await self.bot.wait_for(
                     "message", timeout=120, check=check)
@@ -333,7 +342,7 @@ class DatabaseMixin:
                 message.edit(content="No response in time")
                 return None
             try:
-                num = int(answer.content)
+                num = int(answer.content) - 1
                 choice = items[num]
             except:
                 await message.edit(content="That's not a number in the list")
