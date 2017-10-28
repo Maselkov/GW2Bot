@@ -380,6 +380,8 @@ class AccountMixin:
                                   "Make sure you've selected the "
                                   "correct item.")
         longest = len(max(seq, key=len))
+        if longest < 8:
+            longest = 8
         output = [
             "LOCATION{}COUNT".format(" " * (longest - 5)),
             "--------{}|-----".format("-" * (longest - 6))
