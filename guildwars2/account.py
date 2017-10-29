@@ -312,7 +312,9 @@ class AccountMixin:
         embed = self.boss_embed(raids, results)
         embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
         try:
-            await ctx.send(embed=embed)
+            await ctx.send(
+                "{.mention}, here are your raid bosses:".format(user),
+                embed=embed)
         except discord.Forbidden:
             await ctx.send("Need permission to embed links")
 
@@ -439,24 +441,43 @@ class AccountMixin:
         def readable_id(_id):
             return _id.replace("_", " ").title()
 
-        embed = discord.Embed(
-            title="Bosses",
-            description="Completed this week",
-            color=self.embed_color)
+        not_completed = []
+        embed = discord.Embed(title="Bosses", color=self.embed_color)
         for raid in raids:
-            if len(raid["wings"]) > 1:
-                embed.add_field(
-                    name=readable_id(raid["id"]),
-                    value=u'\u200b',  # Zero with space
-                    inline=False)
             for wing in raid["wings"]:
+                wing_done = True
                 value = ["```diff"]
-                for boss in filter(lambda x: x["type"] != "Checkpoint",
-                                   wing["events"]):
+                for boss in wing["events"]:
+                    if boss["id"] not in results:
+                        wing_done = False
+                        not_completed.append(boss)
                     value.append(is_killed(boss) + readable_id(boss["id"]))
                 value.append("```")
-                embed.add_field(
-                    name=readable_id(wing["id"]), value="\n".join(value))
-        embed.set_footer(text="Green (+) means you've killed boss this week. "
-                         "Red (-) means you haven't.")
+                name = readable_id(wing["id"])
+                if wing_done:
+                    name += " :white_check_mark:"
+                else:
+                    name += " :x:"
+                embed.add_field(name=name, value="\n".join(value))
+        if len(not_completed) == 0:
+            description = "Everything completed this week :star:"
+        else:
+            bosses = list(filter(lambda b: b["type"] == "Boss", not_completed))
+            events = list(
+                filter(lambda b: b["type"] == "Checkpoint", not_completed))
+            if bosses:
+                suffix = ""
+                if len(bosses) > 1:
+                    suffix = "es"
+                bosses = "{} boss{}".format(len(bosses), suffix)
+            if events:
+                suffix = ""
+                if len(events) > 1:
+                    suffix = "s"
+                events = "{} event{}".format(len(events), suffix)
+            description = (", ".join(filter(None, [bosses, events])) +
+                           " not completed this week")
+        embed.description = description
+        embed.set_footer(text="Green (+) means completed this week. Red (-) "
+                         "means not")
         return embed
