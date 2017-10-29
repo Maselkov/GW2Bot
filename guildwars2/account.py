@@ -439,7 +439,11 @@ class AccountMixin:
             return "+" if boss["id"] in results else "-"
 
         def readable_id(_id):
-            return _id.replace("_", " ").title()
+            _id = _id.split("_")
+            dont_capitalize = ("of", "the")
+            return " ".join([
+                x.capitalize() if x not in dont_capitalize else x for x in _id
+            ])
 
         not_completed = []
         embed = discord.Embed(title="Bosses", color=self.embed_color)
