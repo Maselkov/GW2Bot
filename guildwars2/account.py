@@ -296,7 +296,7 @@ class AccountMixin:
     @commands.command()
     @commands.cooldown(1, 10, BucketType.user)
     async def bosses(self, ctx):
-        """Lists all the bosses you haven't killed this week
+        """Shows your raid progression for the week
 
         Required permissions: progression
         """
