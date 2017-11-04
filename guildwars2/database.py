@@ -197,7 +197,7 @@ class DatabaseMixin:
             if missing:
                 missing = ", ".join(missing)
                 raise APIKeyError(
-                    "{.mention}, your API key is missing following "
+                    "{.mention}, your API key is missing the following "
                     "permissions to use this command: `{}`\nConsider adding "
                     "a new key with those permissions "
                     "checked".format(user, missing))
