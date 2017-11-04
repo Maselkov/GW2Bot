@@ -182,7 +182,6 @@ class MiscMixin:
                 "message", timeout=timeout, check=check)
             return answer
         except asyncio.TimeoutError:
-            await message.edit(content="No response in time")
             return None
 
     def generate_chat_code(self, item_id, count, skin_id, first_upgrade_id,

@@ -114,6 +114,7 @@ class CharactersMixin:
                 else:
                     formatted_list.append(x)
             return formatted_list
+
         character = character.title()
         await ctx.trigger_typing()
         try:
@@ -372,9 +373,12 @@ class CharactersMixin:
                 output.append(char + " is now private")
             else:
                 await self.db.characters.insert_one({
-                    "name": char,
-                    "owner": user.id,
-                    "owner_acc_name": key["account_name"]
+                    "name":
+                    char,
+                    "owner":
+                    user.id,
+                    "owner_acc_name":
+                    key["account_name"]
                 })
                 output.append(char + " is now public")
         await ctx.send("Character status successfully changed. Anyone can "
@@ -388,7 +392,8 @@ class CharactersMixin:
         character = character.title()
         endpoint = "characters/" + character.replace(" ", "%20")
         try:
-            results = await self.call_api(endpoint, ctx.author, ["characters"])
+            results = await self.call_api(endpoint, ctx.author,
+                                          ["characters", "builds"])
         except APINotFound:
             results = await self.get_public_character(character)
             if not results:

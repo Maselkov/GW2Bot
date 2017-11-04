@@ -197,8 +197,10 @@ class DatabaseMixin:
             if missing:
                 missing = ", ".join(missing)
                 raise APIKeyError(
-                    "{.mention}, missing the following scopes to use this "
-                    "command: `{}`".format(user, missing))
+                    "{.mention}, your API key is missing following "
+                    "permissions to use this command: `{}`\nConsider adding "
+                    "a new key with those permissions "
+                    "checked".format(user, missing))
         return doc["key"]
 
     async def cache_dailies(self):

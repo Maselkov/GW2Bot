@@ -33,7 +33,7 @@ class KeyMixin:
                 guild.me).manage_messages
         if has_permissions:
             await ctx.message.delete()
-            output = "Your message was removed for privacy"
+            output = "Your message was removed for privacy."
         elif guild is None:
             output = ""
         else:
@@ -43,8 +43,8 @@ class KeyMixin:
             await self.fetch_key(user)
             return await ctx.send(
                 "{.mention}, you already have a key associated with your "
-                "account. Remove your key first if you wish to "
-                "change it. {}".format(user, output))
+                "account. Remove your key using `{}key remove` first if you "
+                "wish to change it. {}".format(user, ctx.prefix, output))
         except:
             pass
         try:
@@ -64,9 +64,22 @@ class KeyMixin:
             "name": name,
             "permissions": token["permissions"]
         }
+        all_permissions = ("account", "builds", "characters", "guilds",
+                           "inventories", "progression", "pvp", "tradingpost",
+                           "unlocks", "wallet")
+        missing = [x for x in all_permissions if x not in token["permissions"]]
         await self.bot.database.set_user(user, {"key": doc}, self)
         await ctx.send("{.mention}, your key was verified and "
                        "associated with your account. {}".format(user, output))
+        if missing:
+            msg = ("Please note that your API key doesn't have the "
+                   "following permissions checked: ```{}```\nSome commands "
+                   "will not work. Consider adding a new key with "
+                   "those permissions checked.".format(", ".join(missing)))
+            try:
+                await user.send(msg)
+            except:
+                pass
 
     @key.command(name="remove")
     @commands.cooldown(1, 1, BucketType.user)
