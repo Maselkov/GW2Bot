@@ -319,7 +319,7 @@ class AccountMixin:
             await ctx.send("Need permission to embed links")
 
     @commands.command()
-    @commands.cooldown(1, 7, BucketType.user)
+    @commands.cooldown(1, 5, BucketType.user)
     async def search(self, ctx, *, item):
         """Find items on your account
 
@@ -329,6 +329,7 @@ class AccountMixin:
         scopes = ["inventories", "characters"]
         choice = await self.itemname_to_id(ctx, item, user)
         if not choice:
+            ctx.command.reset_cooldown(ctx)
             return
         await ctx.trigger_typing()
         try:
