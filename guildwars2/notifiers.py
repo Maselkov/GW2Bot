@@ -302,6 +302,13 @@ class NotiifiersMixin:
         await ctx.send(msg)
 
     async def get_patchnotes(self):
+        def get_short_patchnotes(soup):
+            message = soup.find_all(class_="Message")[-1].get_text()
+            message = "```{}```".format(message)
+            if len(message) > 1000:
+                return ""
+            return message
+
         base_url = "https://en-forum.guildwars2.com"
         url_updates = base_url + "/categories/game-release-notes"
         async with self.session.get(url_updates) as r:
@@ -309,16 +316,18 @@ class NotiifiersMixin:
         soup = BeautifulSoup(results, 'html.parser')
         post = soup.find(class_="Title")
         link = post["href"]
+        patch_notes = ""
         try:
             async with self.session.get(link) as r:
                 results = await r.text()
             soup = BeautifulSoup(results, 'html.parser')
+            patch_notes = get_short_patchnotes(soup)
             new_link = soup.find_all(class_="Permalink")[-1].get('href')
             if new_link != link:
                 link = base_url + new_link
         except:
             pass
-        return "<{}>".format(link)
+        return "\nUpdate notes: <{}>{}".format(link, patch_notes)
 
     async def check_news(self):
         doc = await self.bot.database.get_cog_config(self)
@@ -494,14 +503,13 @@ class NotiifiersMixin:
         try:
             name = self.__class__.__name__
             try:
-                link = await self.get_patchnotes()
-                patchnotes = "\nUpdate notes: " + link
-                doc = await self.bot.database.get_cog_config(self)
-                build = doc["cache"]["build"]
+                patchnotes = await self.get_patchnotes()
             except:
                 patchnotes = ""
+            doc = await self.bot.database.get_cog_config(self)
+            build = doc["cache"]["build"]
             message = ("@here Guild Wars 2 has just updated! New build: "
-                       "`{0}`{1}".format(build, patchnotes))
+                       "`{}`{}".format(build, patchnotes))
             cursor = self.bot.database.get_guilds_cursor({
                 "updates.on": True,
                 "updates.channel": {
