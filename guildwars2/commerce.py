@@ -197,7 +197,7 @@ class CommerceMixin:
                 # Get quantity of items
                 quantity = item_quantity[counter]
                 counter += 1
-                data.add_field(name=item_name, value=str.format(quantity) + 'x', inline=False)
+                data.add_field(name=item_name, value="x {0}".format(quantity), inline=False)
         else:
             data.add_field(name="No current deliveries.", value="Have fun!", inline=False)
 
