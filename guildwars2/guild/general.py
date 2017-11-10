@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord.ext.commands.cooldowns import BucketType
 
 from ..exceptions import APIError, APIForbidden, APINotFound
+import datetime
 
 
 class GeneralGuild:
@@ -155,6 +156,55 @@ class GeneralGuild:
         else:
             await ctx.send("Treasury is empty!")
             return
+        try:
+            await ctx.send(embed=data)
+        except discord.Forbidden:
+            await ctx.send("Need permission to embed links")
+
+    @guild.command(name="log")
+    @commands.cooldown(1, 10, BucketType.user)
+    async def guild_log(self, ctx, *, guild_name: str):
+        """Get log of last 20 entries of stash
+        
+        Required permissions: guilds and in game permissions"""
+        endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
+        try:
+            guild_id = await self.call_api(endpoint_id)
+            guild_id = guild_id[0]
+            endpoint = "guild/{0}/log/".format(guild_id)
+            log = await self.call_api(endpoint, ctx.author, ["guilds"])
+        except (IndexError, APINotFound):
+            return await ctx.send("Invalid guild name")
+        except APIForbidden:
+            return await ctx.send(
+                "You don't have enough permissions in game to "
+                "use this command")
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+
+        data = discord.Embed(description="Stash Log", colour=self.embed_color)
+        data.set_author(name=guild_name.title())
+
+        counter = 0
+
+        for entry in log:
+            if entry["type"] == "stash":
+                if counter < 20:
+                    itemdoc = await self.fetch_item(entry["item_id"])
+                    item_name = itemdoc["name"]
+                    quantity = entry["count"]
+                    time = entry["time"]
+                    timedate = datetime.datetime.strptime(time, "%Y-%m-%dT%H:%M:%S.%fZ").strftime(
+                        '%d.%m.%Y %H:%M')
+                    user = entry["user"]
+                    if entry["operation"] is "withdraw":
+                        operator = " withdrew "
+                    else:
+                        operator = " deposited "
+                    data.add_field(name=timedate, value=user + operator + str(quantity) + "x " + item_name,
+                                   inline=False)
+                    counter += 1
+
         try:
             await ctx.send(embed=data)
         except discord.Forbidden:
