@@ -174,6 +174,7 @@ class CommerceMixin:
         items = results["items"]
         items = items[:20]  # Get only first 20 entries
         item_quantity = []
+        itemlist = []
 
         # Get coins
         if coins is 0:
@@ -188,16 +189,19 @@ class CommerceMixin:
                 item_id += str(item["id"]) + ","
                 # Store quantity in dict analog to item because else we'd call the api again later
                 item_quantity.append(str(item["count"]))
-            endpoint_items = "items?ids={0}".format(str(item_id))
+                itemdoc = await self.fetch_item(item["item_id"])
+                itemlist.append(itemdoc)
+            #endpoint_items = "items?ids={0}".format(str(item_id))
+
 
             # Call API Once for all items
-            try:
-                if item_id is not "":
-                    itemlist = await self.call_api(endpoint_items)
-                else:
-                    data.add_field(name="No current deliveries.", value="Have fun!", inline=False)
-            except APIError as e:
-                return await self.error_handler(ctx, e)
+            # try:
+            #     if item_id is not "":
+            #         itemlist = await self.call_api(endpoint_items)
+            #     else:
+            #         data.add_field(name="No current deliveries.", value="Have fun!", inline=False)
+            # except APIError as e:
+            #     return await self.error_handler(ctx, e)
 
             for item in itemlist:
                 item_name = item["name"]
