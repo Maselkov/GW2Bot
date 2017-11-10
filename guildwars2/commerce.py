@@ -142,6 +142,78 @@ class CommerceMixin:
         except discord.Forbidden:
             await ctx.send("Issue embedding data into discord")
 
+    @tp.command(name="delivery")
+    @commands.cooldown(1, 10, BucketType.user)
+    async def tp_delivery(self, ctx):
+        """Show items and coins delivered to 
+            tradingpost for you
+            
+        Required permissions: tradingpost
+        """
+        user = ctx.author
+        #language = self.getlanguage(ctx)
+        item_id = ""
+        counter = 0
+        endpoint = "commerce/delivery/"
+
+        # Call API
+        try:
+            doc = await self.fetch_key(user, ["tradingpost"])
+            results = await self.call_api(endpoint, key=doc["key"])
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+
+        # General output info
+        data = discord.Embed(description='Current deliveries', colour=self.embed_colorr)
+        data.set_author(name='Delivery overview of {0}'.format(doc["account_name"]))
+        data.set_thumbnail(
+            url="https://wiki.guildwars2.com/images/thumb/d/df/Black-Lion-Logo.png/300px-Black-Lion-Logo.png")
+        data.set_footer(text="Black Lion Trading Company")
+
+        coins = results["coins"]
+        items = results["items"]
+        items = items[:20]  # Get only first 20 entries
+        item_quantity = []
+
+        # Get coins
+        if coins is 0:
+            gold = "No monnies for you"
+        else:
+            gold = self.gold_to_coins(coins)
+        data.add_field(name="Coins", value=gold, inline=False)
+
+        # Get items
+        if len(items) != 0:
+            for item in items:
+                item_id += str(item["id"]) + ","
+                # Store quantity in dict analog to item because else we'd call the api again later
+                item_quantity.append(str(item["count"]))
+            endpoint_items = "items?ids={0}".format(str(item_id))
+
+            # Call API Once for all items
+            try:
+                if item_id is not "":
+                    itemlist = await self.call_api(endpoint_items)
+                else:
+                    data.add_field(name="No current deliveries.", value="Have fun!", inline=False)
+            except APIError as e:
+                return await self.error_handler(ctx, e)
+
+            for item in itemlist:
+                item_name = item["name"]
+                # Get quantity of items
+                quantity = item_quantity[counter]
+                counter += 1
+                data.add_field(name=item_name, value=str(quantity) + 'x', inline=False)
+        else:
+            data.add_field(name="No current deliveries.", value="Have fun!", inline=False)
+
+        try:
+            await ctx.send(embed=data)
+        except discord.HTTPException as e:
+            await ctx.send("Need permission to embed links " + str(e))
+
+
     def gold_to_coins(self, money):
         gold, remainder = divmod(money, 10000)
         silver, copper = divmod(remainder, 100)
