@@ -151,7 +151,6 @@ class CommerceMixin:
         Required permissions: tradingpost
         """
         user = ctx.author
-        #language = self.getlanguage(ctx)
         item_id = ""
         counter = 0
         endpoint = "commerce/delivery/"
@@ -178,7 +177,7 @@ class CommerceMixin:
 
         # Get coins
         if coins is 0:
-            gold = "No monnies for you"
+            gold = "Currently no coins for pickup."
         else:
             gold = self.gold_to_coins(coins)
         data.add_field(name="Coins", value=gold, inline=False)
@@ -198,14 +197,14 @@ class CommerceMixin:
                 # Get quantity of items
                 quantity = item_quantity[counter]
                 counter += 1
-                data.add_field(name=item_name, value=str(quantity) + 'x', inline=False)
+                data.add_field(name=item_name, value=str.format(quantity) + 'x', inline=False)
         else:
             data.add_field(name="No current deliveries.", value="Have fun!", inline=False)
 
         try:
             await ctx.send(embed=data)
-        except discord.HTTPException as e:
-            await ctx.send("Need permission to embed links " + str(e))
+        except discord.HTTPException:
+            await ctx.send("Need permission to embed links")
 
 
     def gold_to_coins(self, money):
