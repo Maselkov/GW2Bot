@@ -190,18 +190,24 @@ class GeneralGuild:
         for entry in log:
             if entry["type"] == "stash":
                 if counter < 20:
-                    itemdoc = await self.fetch_item(entry["item_id"])
-                    item_name = itemdoc["name"]
                     quantity = entry["count"]
                     time = entry["time"]
                     timedate = datetime.datetime.strptime(time, "%Y-%m-%dT%H:%M:%S.%fZ").strftime(
                         '%d.%m.%Y %H:%M')
                     user = entry["user"]
+                    if entry["item_id"] is 0:
+                        item_name = self.gold_to_coins(entry["coins"])
+                        quantity = ""
+                        multiplier = ""
+                    else:
+                        itemdoc = await self.fetch_item(entry["item_id"])
+                        item_name = itemdoc["name"]
+                        multiplier = "x "
                     if entry["operation"] is "withdraw":
                         operator = " withdrew "
                     else:
                         operator = " deposited "
-                    data.add_field(name=timedate, value=user + operator + str(quantity) + "x " + item_name,
+                    data.add_field(name=timedate, value=user + operator + str(quantity) + multiplier + item_name,
                                    inline=False)
                     counter += 1
 
