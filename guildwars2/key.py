@@ -88,7 +88,7 @@ class KeyMixin:
                 keys.append(newkeydoc)
             except:
                 #user doesn't have an active key either so this is their first key
-                keys = {}
+                keys = []
                 keys.append(newkeydoc)
         finally:
             await self.bot.database.set_user(user, {"key": newkeydoc, "keys": keys}, self)
