@@ -164,7 +164,7 @@ class CommerceMixin:
             return await self.error_handler(ctx, e)
 
         # General output info
-        data = discord.Embed(description='Current deliveries', colour=self.embed_colorr)
+        data = discord.Embed(description='Current deliveries', colour=self.embed_color)
         data.set_author(name='Delivery overview of {0}'.format(doc["account_name"]))
         data.set_thumbnail(
             url="https://wiki.guildwars2.com/images/thumb/d/df/Black-Lion-Logo.png/300px-Black-Lion-Logo.png")
