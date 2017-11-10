@@ -202,7 +202,7 @@ class GeneralGuild:
                     else:
                         itemdoc = await self.fetch_item(entry["item_id"])
                         item_name = itemdoc["name"]
-                        multiplier = "x "
+                        multiplier = "x"
                     if entry["operation"] is "withdraw":
                         operator = " withdrew"
                     else:
