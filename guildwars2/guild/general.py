@@ -204,9 +204,9 @@ class GeneralGuild:
                         item_name = itemdoc["name"]
                         multiplier = "x "
                     if entry["operation"] is "withdraw":
-                        operator = " withdrew "
+                        operator = " withdrew"
                     else:
-                        operator = " deposited "
+                        operator = " deposited"
                     data.add_field(name=timedate, value=user + "{0} {1}{2} {3}".format(operator, quantity, multiplier, item_name),
                                    inline=False)
                     counter += 1
