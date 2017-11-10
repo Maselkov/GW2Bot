@@ -207,7 +207,7 @@ class GeneralGuild:
                         operator = " withdrew "
                     else:
                         operator = " deposited "
-                    data.add_field(name=timedate, value=user + operator + str(quantity) + multiplier + item_name,
+                    data.add_field(name=timedate, value=user + "{0} {1}{2} {3}".format(operator, quantity, multiplier, item_name),
                                    inline=False)
                     counter += 1
 
