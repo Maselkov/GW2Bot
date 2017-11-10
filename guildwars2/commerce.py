@@ -189,7 +189,7 @@ class CommerceMixin:
                 item_id += str(item["id"]) + ","
                 # Store quantity in dict analog to item because else we'd call the api again later
                 item_quantity.append(str(item["count"]))
-                itemdoc = await self.fetch_item(item["item_id"])
+                itemdoc = await self.fetch_item(item["id"])
                 itemlist.append(itemdoc)
             #endpoint_items = "items?ids={0}".format(str(item_id))
 
