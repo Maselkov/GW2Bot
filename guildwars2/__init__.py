@@ -39,6 +39,7 @@ class GuildWars2(AccountMixin, AchievementsMixin, ApiMixin, CharactersMixin,
         self.embed_color = 0xc12d2b
         self.log = logging.getLogger(__name__)
         self.tasks = []
+        self.waiting_for = []
 
     def __unload(self):
         for task in self.tasks:
