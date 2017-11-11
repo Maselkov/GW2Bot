@@ -9,8 +9,6 @@ from .exceptions import APIError, APIInactiveError
 
 class KeyMixin:
 
-    waitingfor = []
-
     @commands.group()
     async def key(self, ctx):
         """Commands related to API keys"""
@@ -45,6 +43,8 @@ class KeyMixin:
             output = ("I would've removed your message as well, but I don't "
                       "have the neccesary permissions.")
         doc = await self.bot.database.get_user(user, self)
+        if not doc:
+            doc = {}
         try:
             endpoints = ["tokeninfo", "account"]
             token, acc = await self.call_multiple(endpoints, key=key)
@@ -63,35 +63,20 @@ class KeyMixin:
             "permissions": token["permissions"]
         }
         #at this point we know the key is valid
-        try:
-            keys = doc["keys"]
-            #check if key is already in keys list
-            if newkeydoc not in keys:
-                if len(keys) < 8:
-                    keys.append(newkeydoc)
-                else:
-                    await ctx.send("You've reached the maximum limit of 8 API keys," 
-                        "please remove one before adding another. {0}".format(output))
-                    return
+        keys = doc.get("keys", [])
+        key = doc.get("key", {})
+        if keys == [] and key != {}:
+            #user already had a key but it isn't in keys (existing user) so add it
+            keys.append(key)
+        if newkeydoc not in keys:
+            if len(keys) < 8:
+                keys.append(newkeydoc)
             else:
-                await ctx.send("You have already added this key before. {0}".format(output))
-                return
-        except:
-            #keys list doesn't exist - this is either the first key the user has added or 
-            #they existed before this functionality
-            try:
-                currentkey = await self.fetch_key(user)
-                #will raise an exception if the user has no key
-                #if not we should append both keys to the keys list
-                keys = []
-                keys.append(currentkey)
-                keys.append(newkeydoc)
-            except:
-                #user doesn't have an active key either so this is their first key
-                keys = []
-                keys.append(newkeydoc)
-        finally:
-            await self.bot.database.set_user(user, {"key": newkeydoc, "keys": keys}, self)
+                return await ctx.send("You've reached the maximum limit of 8 API keys," 
+                    "please remove one before adding another. {0}".format(output))
+        else:
+            return await ctx.send("You have already added this key before. {0}".format(output))
+        await self.bot.database.set_user(user, {"key": newkeydoc, "keys": keys}, self)
         await ctx.send("{.mention}, your key was verified and "
                        "associated with your account. {}".format(user, output))
         all_permissions = ("account", "builds", "characters", "guilds",
@@ -115,51 +100,44 @@ class KeyMixin:
 
         Requires a key
         """
-        if ctx.author.id in KeyMixin.waitingfor:
-            await ctx.send("I'm already waiting for a response from you for another key command.")
-            return
+        if ctx.author.id in self.waiting_for:
+            return await ctx.send("I'm already waiting for a response from you for another key command.")
         doc = await self.bot.database.get_user(ctx.author, self)
-        try:
-            keys = doc["keys"]
-        except KeyError:
-            #no keys
-            keys = []
-            try:
-                key = doc["key"]
-                key = {}
-            except KeyError:
-                return await ctx.send("You have no keys added, you can add one with {0}key add.".format(ctx.prefix))
-        else:
-            key = doc["key"]
-        if doc["keys"] == [] and doc["key"] == {}:
+        if not doc:
+            doc = {}
+        keys = doc.get("keys", [])
+        key = doc.get("key", {})
+        if keys == [] and key == {}:
             return await ctx.send("You have no keys added, you can add one with {0}key add.".format(ctx.prefix))
+        if keys is [] and key is not {}:
+            key = {}
         if len(keys) > 0:
             if ctx.guild is not None:
                 await ctx.send("Check your PMs.")        
-            output = "Type the number of the key you wish to delete, or respond with all to remove all keys.\n```"
-            for count, key in enumerate(keys, 1):
-                output += str(count) + ": " + key["name"] + " Account: " + key["account_name"] + " Key: " + key["key"] +"\n"
-            output += "```"
-            message = await ctx.author.send(output)
+            output = [ "Type the number of the key you wish to delete, or respond with all to remove all keys.\n```" ]
+            for count, k in enumerate(keys, 1):
+                name = k.get("name", "Unnamed Key")
+                output.append("{0}: {1} Account: {2} Key: {3}".format(count, name, k["account_name"], k["key"]))
+            output.append("```")
+            message = await ctx.author.send("\n".join(output))
             def check(m):
                 return m.author == ctx.author and m.channel == message.channel
             try:
-                KeyMixin.waitingfor.append(ctx.author.id)
+                self.waiting_for.append(ctx.author.id)
                 answer = await self.bot.wait_for("message", timeout=120, check=check)
             except asyncio.TimeoutError:
                 await message.edit(content="No response in time.")
                 return
             finally:
-                KeyMixin.waitingfor.remove(ctx.author.id)
-
+                self.waiting_for.remove(ctx.author.id)
             try:
                 num = int(answer.content) - 1
-                if keys[num]["key"] == doc["key"]["key"]:
+                if keys[num] == key:
                     key = {}
                     await ctx.author.send("This was your active key, you won't be able to use "
                         "commands that require a key unless you set a new key with +key active.")
                 del keys[num]
-            except:
+            except ValueError:
                 if 'all' in answer.content.lower():
                     keys = []
                     key = {}
@@ -176,6 +154,8 @@ class KeyMixin:
         """Information about your active api key
         """
         doc = await self.bot.database.get_user(ctx.author, self)
+        if not doc:
+            doc = {}
         try:
             key = await self.fetch_key(ctx.author)
         except APIError as e:
@@ -187,16 +167,15 @@ class KeyMixin:
         data.set_author(name=key["account_name"])
         msg = "Your active key is:```fix\n{}```".format(key["key"])
         if isinstance(ctx.channel, discord.DMChannel):
-            msg += "\nthis information will only ever be DMed to you"
-        try:
-            keys = doc["keys"]
-            output = "List of all your keys.\n```"
+            msg += "\nThis information will only ever be DMed to you."
+        keys = doc.get("keys", [])
+        if len(keys) > 1:
+            output = ["List of all your keys.\n```"]
             for key in keys:
-                output += key["name"] + " - Account: " + key["account_name"] + " Key: " + key["key"] +"\n"
-            output += "```"
-            await ctx.author.send(output)
-        except:
-            pass
+                name = key.get("name", "Unnamed Key")
+                output.append("{0} - Account: {1} Key: {2}".format(name, key["account_name"], key["key"]))
+            output.append("```")
+            await ctx.author.send("\n".join(output))
         try:
             await ctx.author.send(msg)
         except:
@@ -207,52 +186,46 @@ class KeyMixin:
             await ctx.send("Need permission to embed links")
 
 
-    @key.command(name="active", usage="<choice>")
+    @key.command(name="switch", usage="<choice>")
     @commands.cooldown(1, 5, BucketType.user)
-    async def key_active(self, ctx, choice: int = 0):
+    async def key_switch(self, ctx, choice: int = 0):
         """Swaps between multiple stored API keys.
 
         Can be used with no parameter to display a list of all your keys to select from,
-        or with a number to immediately swap to a selected key e.g $key active 3"""
-        if ctx.author.id in KeyMixin.waitingfor:
-            await ctx.send("I'm already waiting for a response from you for another key command.")
-            return
+        or with a number to immediately swap to a selected key e.g $key switch 3"""
+        if ctx.author.id in self.waiting_for:
+            return await ctx.send("I'm already waiting for a response from you for another key command.")
         doc = await self.bot.database.get_user(ctx.author, self)
-        try:
-            keys = doc["keys"]
-        except KeyError:
-            try:
-                key = doc["key"]
-                if key != {}:
-                    await ctx.send("You only have one key added at the moment, add extras with {0}key add first.".format(ctx.prefix))
-                    return
-            except KeyError:
-                await ctx.send("You need to add an API keys first using {0}key add first.".format(ctx.prefix))
-                return
+        if not doc:
+            doc = {}
+        keys = doc.get("keys", [])
+        key = doc.get("key", {})
+        if key == {} or keys == []:
+            return await ctx.send("You need to add additional API keys first using {0}key add first.".format(ctx.prefix))
         if len(keys) < 2 and keys != []:
             return await ctx.send("You only have one key added at the moment, add extras with {0}key add first.".format(ctx.prefix))
-        if doc["keys"] == [] and doc["key"] == {}:
-            return await ctx.send("You have no keys added, you can add one with {0}key add.".format(ctx.prefix))
         destination = ctx.channel
         if choice == 0:
             if ctx.guild is not None:
                 await ctx.send("Check your PMs.")
             destination = ctx.author
-            output = "Type the number of the key you wish to activate.\n```"
+            output = ["Type the number of the key you wish to activate.\n```"]
             for count, key in enumerate(keys, 1):
-                output += str(count) + ": " + key["name"] + " Account: " + key["account_name"] + " Key: " + key["key"] +"\n"
-            output += "```"
-            message = await ctx.author.send(output)
+                name = key.get("name", "Unnamed Key")
+                output.append("{0}: {1} Account: {2}".format(count, name, key["account_name"]))
+            output.append("```")
+            message = await ctx.author.send("\n".join(output))
             def check(m):
                 return m.author == ctx.author and m.channel == message.channel
             try:
-                KeyMixin.waitingfor.append(ctx.author.id)
+                self.waiting_for.append(ctx.author.id)
                 answer = await self.bot.wait_for("message", timeout=120, check=check)
             except asyncio.TimeoutError:
-                await message.edit(content="No response in time.")
+                await ctx.author.send(content="No response in time.")
                 return
             finally:
-                KeyMixin.waitingfor.remove(ctx.author.id)
+                self.waiting_for.remove(ctx.author.id)
+                await message.delete()
             choice = answer.content
         try:
             num = int(choice) - 1
