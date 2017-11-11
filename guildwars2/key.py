@@ -77,7 +77,12 @@ class KeyMixin:
         else:
             return await ctx.send("You have already added this key before. {0}".format(output))
         await self.bot.database.set_user(user, {"key": newkeydoc, "keys": keys}, self)
-        await ctx.send("{.mention}, your key was verified and "
+        if len(keys) > 1:
+        	await ctx.send("{0.mention}, your key was verified and "
+        		"added to your list of keys, you can swap between "
+        		"them at any time using {1}key switch. {2}".format(user, ctx.prefix, output))
+        else:
+        	await ctx.send("{.mention}, your key was verified and "
                        "associated with your account. {}".format(user, output))
         all_permissions = ("account", "builds", "characters", "guilds",
                            "inventories", "progression", "pvp", "tradingpost",
@@ -141,13 +146,12 @@ class KeyMixin:
                     await ctx.author.send("This was your active key, you won't be able to use "
                         "commands that require a key unless you set a new key with +key active.")
                 del keys[num]
-            except ValueError:
+            except (ValueError, IndexError):
                 if 'all' in answer.content.lower():
                     keys = []
                     key = {}
                 else:
-                    await message.edit(content="That's not a number in the list.")
-                    return
+                    return await message.edit(content="That's not a number in the list.")
             await ctx.author.send("{.mention}, successfuly removed your key/keys. "
                 "You may input a new one.".format(ctx.author))
         else:
