@@ -65,7 +65,7 @@ class KeyMixin:
         #at this point we know the key is valid
         keys = doc.get("keys", [])
         key = doc.get("key", {})
-        if keys == [] and key != {}:
+        if not keys and key:
             #user already had a key but it isn't in keys (existing user) so add it
             keys.append(key)
         if newkeydoc not in keys:
@@ -107,9 +107,9 @@ class KeyMixin:
             doc = {}
         keys = doc.get("keys", [])
         key = doc.get("key", {})
-        if keys == [] and key == {}:
+        if not keys and not key:
             return await ctx.send("You have no keys added, you can add one with {0}key add.".format(ctx.prefix))
-        if keys is [] and key is not {}:
+        if not keys and key:
             key = {}
         if len(keys) > 0:
             if ctx.guild is not None:
@@ -200,7 +200,7 @@ class KeyMixin:
             doc = {}
         keys = doc.get("keys", [])
         key = doc.get("key", {})
-        if key == {} or keys == []:
+        if not key or not keys:
             return await ctx.send("You need to add additional API keys first using {0}key add first.".format(ctx.prefix))
         if len(keys) < 2 and keys != []:
             return await ctx.send("You only have one key added at the moment, add extras with {0}key add first.".format(ctx.prefix))
