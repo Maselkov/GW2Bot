@@ -111,15 +111,19 @@ class KeyMixin:
             return await ctx.send("You have no keys added, you can add one with {0}key add.".format(ctx.prefix))
         if not keys and key:
             key = {}
-        if len(keys) > 0:
-            if ctx.guild is not None:
-                await ctx.send("Check your PMs.")        
+        if len(keys) > 1:       
             output = [ "Type the number of the key you wish to delete, or respond with all to remove all keys.\n```" ]
             for count, k in enumerate(keys, 1):
                 name = k.get("name", "Unnamed Key")
                 output.append("{0}: {1} Account: {2} Key: {3}".format(count, name, k["account_name"], k["key"]))
             output.append("```")
-            message = await ctx.author.send("\n".join(output))
+            try:
+            	message = await ctx.author.send("\n".join(output))
+            except discord.Forbidden:
+            	await ctx.send("You're blocking my DMs.")
+            	return
+            if ctx.guild is not None:
+                await ctx.send("Check your PMs.") 
             def check(m):
                 return m.author == ctx.author and m.channel == message.channel
             try:
@@ -144,9 +148,15 @@ class KeyMixin:
                 else:
                     await message.edit(content="That's not a number in the list.")
                     return
+            await ctx.author.send("{.mention}, successfuly removed your key/keys. "
+                "You may input a new one.".format(ctx.author))
+        else:
+        	keys = []
+        	key = {}
+        	await ctx.send("{.mention}, successfuly removed your key. "
+                "You may input a new one.".format(ctx.author))
         await self.bot.database.set_user(ctx.author, {"key": key, "keys": keys}, self)
-        await ctx.author.send("{.mention}, successfuly removed your key/keys. "
-                       "You may input a new one.".format(ctx.author))
+
 
     @key.command(name="info")
     @commands.cooldown(1, 5, BucketType.user)
@@ -175,9 +185,9 @@ class KeyMixin:
                 name = key.get("name", "Unnamed Key")
                 output.append("{0} - Account: {1} Key: {2}".format(name, key["account_name"], key["key"]))
             output.append("```")
-            await ctx.author.send("\n".join(output))
         try:
             await ctx.author.send(msg)
+            await ctx.author.send("\n".join(output))
         except:
             pass
         try:
@@ -206,15 +216,19 @@ class KeyMixin:
             return await ctx.send("You only have one key added at the moment, add extras with {0}key add first.".format(ctx.prefix))
         destination = ctx.channel
         if choice == 0:
-            if ctx.guild is not None:
-                await ctx.send("Check your PMs.")
             destination = ctx.author
             output = ["Type the number of the key you wish to activate.\n```"]
             for count, key in enumerate(keys, 1):
                 name = key.get("name", "Unnamed Key")
                 output.append("{0}: {1} Account: {2}".format(count, name, key["account_name"]))
             output.append("```")
-            message = await ctx.author.send("\n".join(output))
+            try:
+            	message = await ctx.author.send("\n".join(output))
+            except discord.Forbidden:
+            	await ctx.send("You're blocking my DMs.")
+            	return
+            if ctx.guild is not None:
+                await ctx.send("Check your PMs.")
             def check(m):
                 return m.author == ctx.author and m.channel == message.channel
             try:
