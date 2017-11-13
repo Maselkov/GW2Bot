@@ -172,6 +172,12 @@ class GeneralGuild:
         doc = await self.bot.database.get_user(ctx.author, self)
         if doc.get("guild"):
             guild_id = doc.get("guild")
+            endpoint_name = "guild/{0}".format(guild_id)
+            try:
+                guild_name = await self.call_api(endpoint_name)
+                guild_name = guild_name["name"]
+            except APIError as e:
+                return await self.error_handler(ctx, e)
         else:
             endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
             try:
