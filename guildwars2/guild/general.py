@@ -48,8 +48,6 @@ class GeneralGuild:
         try:
             endpoint = "guild/{0}".format(guild_id)
             results = await self.call_api(endpoint, ctx.author, ["guilds"])
-        except (IndexError, APINotFound):
-            return await ctx.send("Invalid guild name")
         except APIError as e:
             return await self.error_handler(ctx, e)
 
@@ -78,31 +76,53 @@ class GeneralGuild:
 
     @guild.command(name="members")
     @commands.cooldown(1, 20, BucketType.user)
-    async def guild_members(self, ctx, *, guild_name: str):
+    async def guild_members(self, ctx, *, guild_name=None):
         """Get list of all members and their ranks.
         Only displays the highest ranks.
 
         Required permissions: guilds and in game permissions
         """
+        # Read preferred guild from DB
         user = ctx.author
         scopes = ["guilds"]
-        endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
+        guild_id = await self.get_preferred_guild(ctx.author)
+        # Get Guild name if ID already stored
+        if guild_id:
+            try:
+                endpoint_name = "guild/{0}".format(guild_id)
+                results = await self.call_api(endpoint_name)
+                guild_name = results["name"]
+            except APIError as e:
+                return await self.error_handler(ctx, e)
+        elif guild_name is not None:
+            try:
+                endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
+                guild_id = await self.call_api(endpoint_id)
+                guild_id = guild_id[0]
+            except (IndexError, APINotFound):
+                return await ctx.send("Invalid guild name")
+            except APIForbidden:
+                return await ctx.send(
+                    "You don't have enough permissions in game to "
+                    "use this command")
+            except APIError as e:
+                return await self.error_handler(ctx, e)
+        else:
+            return await self.bot.send_cmd_help(ctx)
+
         try:
-            guild_id = await self.call_api(endpoint_id)
-            guild_id = guild_id[0]
             endpoints = [
                 "guild/{}/members".format(guild_id),
                 "guild/{}/ranks".format(guild_id)
             ]
             results, ranks = await self.call_multiple(endpoints, user, scopes)
-        except (IndexError, APINotFound):
-            return await ctx.send("Invalid guild name")
         except APIForbidden:
             return await ctx.send(
                 "You don't have enough permissions in game to "
                 "use this command")
         except APIError as e:
             return await self.error_handler(ctx, e)
+
         data = discord.Embed(description="Members", colour=self.embed_color)
         data.set_author(name=guild_name.title())
         counter = 0
@@ -165,8 +185,6 @@ class GeneralGuild:
         try:
             endpoint = "guild/{0}/treasury".format(guild_id)
             treasury = await self.call_api(endpoint, ctx.author, ["guilds"])
-        except (IndexError, APINotFound):
-            return await ctx.send("Invalid guild name")
         except APIForbidden:
             return await ctx.send(
                 "You don't have enough permissions in game to "
@@ -244,8 +262,6 @@ class GeneralGuild:
         try:
             endpoint = "guild/{0}/log/".format(guild_id)
             log = await self.call_api(endpoint, ctx.author, ["guilds"])
-        except (IndexError, APINotFound):
-            return await ctx.send("Invalid guild name")
         except APIForbidden:
             return await ctx.send(
                 "You don't have enough permissions in game to "
