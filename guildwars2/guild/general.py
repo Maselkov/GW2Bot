@@ -178,7 +178,7 @@ class GeneralGuild:
         # Get Guild name if ID already stored
         if guild_id != "":
             try:
-                guild_name = self.guildid_to_guild(guild_id)
+                self.get_guildname(guild_id)
             except APIError as e:
                 return await self.error_handler(ctx, e)
         else:
@@ -285,8 +285,7 @@ class GeneralGuild:
             guild_id = doc.get("guild")
         return guild_id
 
-    async def guildid_to_guild(self, guild_id):
+    async def get_guildname(self, guild_id):
         endpoint_name = "guild/{0}".format(guild_id)
         results = await self.call_api(endpoint_name)
-        guild_name = results["name"]
-        return guild_name
+        self.guild_name = results["name"]
