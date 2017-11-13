@@ -177,8 +177,10 @@ class GeneralGuild:
         guild_id = await self.get_preferred_guild(ctx.author)
         # Get Guild name if ID already stored
         if guild_id != "":
-            guild_name = ""
-            guild_name = self.guildid_to_guild(ctx, guild_id)
+            try:
+                guild_name = self.guildid_to_guild(ctx, guild_id)
+            except APIError as e:
+                return await self.error_handler(ctx, e)
         else:
             try:
                 endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
@@ -285,10 +287,6 @@ class GeneralGuild:
 
     async def guildid_to_guild(self, ctx, guild_id):
         endpoint_name = "guild/{0}".format(guild_id)
-        try:
-            guild_name = await self.call_api(endpoint_name)
-            guild_name = guild_name["name"]
-        except APIError as e:
-            await self.error_handler(ctx, e)
-            return None
+        guild_name = await self.call_api(endpoint_name)
+        guild_name = guild_name["name"]
         return guild_name
