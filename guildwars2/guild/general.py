@@ -300,13 +300,10 @@ class GeneralGuild:
             guild_id = guild_id[0]
             return guild_id
         except (IndexError, APINotFound):
-            return await
-            ctx.send("Invalid guild name")
+            return await ctx.send("Invalid guild name")
         except APIForbidden:
-            return await
-            ctx.send(
+            return await ctx.send(
                 "You don't have enough permissions in game to "
                 "use this command")
         except APIError as e:
-            return await
-            self.error_handler(ctx, e)
+            return await self.error_handler(ctx, e)
