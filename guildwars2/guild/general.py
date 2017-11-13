@@ -256,24 +256,24 @@ class GeneralGuild:
 
         if ctx.invoked_subcommand is None:
             await self.bot.send_cmd_help(ctx)
-            
-        # Get guildname / guild_id from API
-        endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
-        try:
-            guild_id = await self.call_api(endpoint_id)
-            guild_id = guild_id[0]
-        except (IndexError, APINotFound):
-            return await ctx.send("Invalid guild name")
-        except APIError as e:
-            return await self.error_handler(ctx, e)
+        else:
+            # Get guildname / guild_id from API
+            endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
+            try:
+                guild_id = await self.call_api(endpoint_id)
+                guild_id = guild_id[0]
+            except (IndexError, APINotFound):
+                return await ctx.send("Invalid guild name")
+            except APIError as e:
+                return await self.error_handler(ctx, e)
 
-        # Write to DB, overwrites existing guild
-        await self.bot.database.set_user(ctx.author, {
-            "guild": guild_id,
-        }, self)
+            # Write to DB, overwrites existing guild
+            await self.bot.database.set_user(ctx.author, {
+                "guild": guild_id,
+            }, self)
 
-        await ctx.send("Your preferred guild is now set to {0}"
-                       .format(guild_name))
+            await ctx.send("Your preferred guild is now set to {0}"
+                           .format(guild_name))
 
     @guild.command(name="unset")
     @commands.cooldown(1, 10, BucketType.user)
