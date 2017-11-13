@@ -185,7 +185,8 @@ class GeneralGuild:
                 return await self.error_handler(ctx, e)
         else:
             try:
-                endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
+                endpoint_id = "guild/search?name=" + guild_name.replace(
+                    ' ', '%20')
                 guild_id = await self.call_api(endpoint_id)
                 guild_id = guild_id[0]
             except (IndexError, APINotFound):
@@ -242,8 +243,8 @@ class GeneralGuild:
                         inline=False)
                     counter += 1
         if counter == 0:
-            return await ctx.send(
-                "No stash log entries yet for {}".format(guild_name.title()))
+            return await ctx.send("No stash log entries yet for {}".format(
+                guild_name.title()))
         try:
             await ctx.send(embed=data)
         except discord.Forbidden:
@@ -264,9 +265,9 @@ class GeneralGuild:
             return await self.error_handler(ctx, e)
 
         # Write to DB, overwrites existing guild
-        await self.bot.database.set_user(ctx.author,
-                                         {"guild": guild_id,
-                                          }, self)
+        await self.bot.database.set_user(ctx.author, {
+            "guild": guild_id,
+        }, self)
 
         await ctx.send("Your preferred guild is now set to {0}"
                        .format(guild_name))
@@ -275,9 +276,9 @@ class GeneralGuild:
     @commands.cooldown(1, 10, BucketType.user)
     async def guild_unset(self, ctx):
         """Removes stored preferred guild"""
-        await self.bot.database.set_user(ctx.author,
-                                         {"guild": "",
-                                          }, self)
+        await self.bot.database.set_user(ctx.author, {
+            "guild": "",
+        }, self)
         await ctx.send("Preferred guild removed.")
 
     async def get_preferred_guild(self, user):
