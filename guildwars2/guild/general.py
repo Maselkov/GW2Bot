@@ -179,7 +179,7 @@ class GeneralGuild:
                 guild_name = guild_name["name"]
             except APIError as e:
                 return await self.error_handler(ctx, e)
-        elif guild_name != None:
+        else:
             endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
             try:
                 guild_id = await self.call_api(endpoint_id)
@@ -192,8 +192,6 @@ class GeneralGuild:
                     "use this command")
             except APIError as e:
                 return await self.error_handler(ctx, e)
-        else:
-            await ctx.send("Please set either a preferred guild or set one as parameter")
 
         try:
             endpoint = "guild/{0}/log/".format(guild_id)
