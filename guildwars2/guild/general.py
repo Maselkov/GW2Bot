@@ -168,10 +168,25 @@ class GeneralGuild:
         """Get log of last 20 entries of stash
 
         Required permissions: guilds and in game permissions"""
-        endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
+        # Read preferred guild from DB
+        doc = await self.bot.database.get_user(ctx.author, self)
+        if doc["guild"]:
+            guild_id = doc["guild"]
+        else:
+            endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
+            try:
+                guild_id = await self.call_api(endpoint_id)
+                guild_id = guild_id[0]
+            except (IndexError, APINotFound):
+                return await ctx.send("Invalid guild name")
+            except APIForbidden:
+                return await ctx.send(
+                    "You don't have enough permissions in game to "
+                    "use this command")
+            except APIError as e:
+                return await self.error_handler(ctx, e)
+
         try:
-            guild_id = await self.call_api(endpoint_id)
-            guild_id = guild_id[0]
             endpoint = "guild/{0}/log/".format(guild_id)
             log = await self.call_api(endpoint, ctx.author, ["guilds"])
         except (IndexError, APINotFound):
@@ -219,3 +234,29 @@ class GeneralGuild:
             await ctx.send(embed=data)
         except discord.Forbidden:
             await ctx.send("Need permission to embed links")
+
+    @guild.command(name="set")
+    @commands.cooldown(1, 10, BucketType.user)
+    async def guild_set(self, ctx, *, guild_name: str):
+        """ Set your preferred guild for guild commands"""
+
+        user = ctx.author
+
+        # Get guildname / guild_id from API
+        endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
+        try:
+            guild_id = await self.call_api(endpoint_id)
+            guild_id = guild_id[0]
+        except (IndexError, APINotFound):
+            return await ctx.send("Invalid guild name")
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+
+
+        # Write to DB, overwrites existing guild
+        await self.bot.database.set_user(user,
+                                         {"guild": guild_id,
+                                          }, self)
+
+        await ctx.send("Your preferred guild is now set to {0}"
+                       .format(guild_name))
