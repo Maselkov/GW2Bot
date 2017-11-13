@@ -170,7 +170,7 @@ class GeneralGuild:
         Required permissions: guilds and in game permissions"""
 
         # Read preferred guild from DB
-        guild_id = await self.fetch_guild(ctx.author)
+        guild_id = await self.get_preferred_guild(ctx.author)
         # Get Guild name if ID already stored
         if guild_id != "":
             endpoint_name = "guild/{0}".format(guild_id)
@@ -192,7 +192,10 @@ class GeneralGuild:
                     "use this command")
             except APIError as e:
                 return await self.error_handler(ctx, e)
-
+            except AttributeError:
+                return await ctx.send(
+                    "Please set a preferred guild or use one as a"
+                    "parameter")
         try:
             endpoint = "guild/{0}/log/".format(guild_id)
             log = await self.call_api(endpoint, ctx.author, ["guilds"])
@@ -273,7 +276,7 @@ class GeneralGuild:
                                           }, self)
         await ctx.send("Preferred guild removed.")
 
-    async def fetch_guild(self, user):
+    async def get_preferred_guild(self, user):
         doc = await self.bot.database.get_user(user, self)
         guild_id = ""
         if doc is not None and doc.get("guild"):
