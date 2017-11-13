@@ -250,10 +250,10 @@ class GeneralGuild:
 
     @guild.command(name="set")
     @commands.cooldown(1, 10, BucketType.user)
-    async def guild_set(self, ctx, *, guild_name=None):
+    async def guild_set(self, ctx, *, guild_name: str):
         """ Set your preferred guild for guild commands"""
 
-        if ctx.invoked_subcommand is None:
+        if guild_name is None:
             await self.bot.send_cmd_help(ctx)
         else:
             # Get guildname / guild_id from API
