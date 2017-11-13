@@ -110,7 +110,7 @@ class GeneralGuild:
 
     @guild.command(name="treasury")
     @commands.cooldown(1, 20, BucketType.user)
-    async def guild_treasury(self, ctx, *, guild_name: str):
+    async def guild_treasury(self, ctx, *, guild_name=None):
         """Get list of current and needed items for upgrades
 
         Required permissions: guilds and in game permissions"""
@@ -126,7 +126,8 @@ class GeneralGuild:
                 return await self.error_handler(ctx, e)
         elif guild_name is not None:
             try:
-                endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
+                endpoint_id = "guild/search?name=" + guild_name.replace(
+                    ' ', '%20')
                 guild_id = await self.call_api(endpoint_id)
                 guild_id = guild_id[0]
             except (IndexError, APINotFound):
@@ -137,10 +138,6 @@ class GeneralGuild:
                     "use this command")
             except APIError as e:
                 return await self.error_handler(ctx, e)
-            except AttributeError:
-                return await ctx.send(
-                    "Please set a preferred guild or use one as a"
-                    " parameter.")
         else:
             return await self.bot.send_cmd_help(ctx)
 
