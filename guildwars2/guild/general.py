@@ -176,7 +176,7 @@ class GeneralGuild:
         # Read preferred guild from DB
         guild_id = await self.get_preferred_guild(ctx.author)
         # Get Guild name if ID already stored
-        if guild_id != "":
+        if guild_id:
             try:
                 endpoint_name = "guild/{0}".format(guild_id)
                 results = await self.call_api(endpoint_name)
@@ -283,7 +283,7 @@ class GeneralGuild:
 
     async def get_preferred_guild(self, user):
         doc = await self.bot.database.get_user(user, self)
-        guild_id = ""
+        guild_id = None
         if doc is not None and doc.get("guild"):
             guild_id = doc.get("guild")
         return guild_id
