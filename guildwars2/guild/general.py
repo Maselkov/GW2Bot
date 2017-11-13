@@ -170,7 +170,7 @@ class GeneralGuild:
     @commands.cooldown(1, 10, BucketType.user)
     async def guild_log(self, ctx, *, guild_name=None):
         """Get log of last 20 entries of stash
-
+        usage="<guild name>"
         Required permissions: guilds and in game permissions"""
 
         # Read preferred guild from DB
@@ -198,8 +198,7 @@ class GeneralGuild:
             except APIError as e:
                 return await self.error_handler(ctx, e)
         else:
-            await ctx.send("Please set a preferred guild or use one as a"
-                    " parameter.")
+            await self.bot.send_cmd_help(ctx)
 
         try:
             endpoint = "guild/{0}/log/".format(guild_id)
