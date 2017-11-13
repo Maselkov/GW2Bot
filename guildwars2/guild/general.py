@@ -164,7 +164,7 @@ class GeneralGuild:
 
     @guild.command(name="log")
     @commands.cooldown(1, 10, BucketType.user)
-    async def guild_log(self, ctx, *, guild_name: str):
+    async def guild_log(self, ctx, *, guild_name=None):
         """Get log of last 20 entries of stash
 
         Required permissions: guilds and in game permissions"""
