@@ -253,6 +253,10 @@ class GeneralGuild:
     @commands.cooldown(1, 10, BucketType.user)
     async def guild_set(self, ctx, *, guild_name=None):
         """ Set your preferred guild for guild commands"""
+
+        if ctx.invoked_subcommand is None:
+            await self.bot.send_cmd_help(ctx)
+            
         # Get guildname / guild_id from API
         endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
         try:
