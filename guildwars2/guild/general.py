@@ -34,7 +34,8 @@ class GeneralGuild:
                 return await self.error_handler(ctx, e)
         elif guild_name is not None:
             try:
-                endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
+                endpoint_id = "guild/search?name=" + guild_name.replace(
+                    ' ', '%20')
                 guild_id = await self.call_api(endpoint_id)
                 guild_id = guild_id[0]
 
@@ -96,7 +97,8 @@ class GeneralGuild:
                 return await self.error_handler(ctx, e)
         elif guild_name is not None:
             try:
-                endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
+                endpoint_id = "guild/search?name=" + guild_name.replace(
+                    ' ', '%20')
                 guild_id = await self.call_api(endpoint_id)
                 guild_id = guild_id[0]
             except (IndexError, APINotFound):
