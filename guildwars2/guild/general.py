@@ -275,9 +275,7 @@ class GeneralGuild:
 
     async def get_guild(self, user):
         doc = await self.bot.database.get_user(user, self)
+        guild_id = ""
         if doc is not None and doc.get("guild"):
             guild_id = doc.get("guild")
-            return guild_id
-        else:
-            guild_id = ""
-            return guild_id
+        return guild_id
