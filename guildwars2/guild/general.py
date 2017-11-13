@@ -241,7 +241,7 @@ class GeneralGuild:
         except discord.Forbidden:
             await ctx.send("Need permission to embed links")
 
-    @guild.command(name="set")
+    @guild.command(name="default")
     @commands.cooldown(1, 10, BucketType.user)
     async def guild_default(self, ctx, *, guild_name=None):
         """ Set your preferred guild for guild commands"""
