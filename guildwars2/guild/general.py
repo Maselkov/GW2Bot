@@ -17,23 +17,44 @@ class GeneralGuild:
 
     @guild.command(name="info")
     @commands.cooldown(1, 20, BucketType.user)
-    async def guild_info(self, ctx, *, guild_name: str):
+    async def guild_info(self, ctx, *, guild_name=None):
         """General guild stats
 
         Required permissions: guilds
         """
+        # Read preferred guild from DB
+        guild_id = await self.get_preferred_guild(ctx.author)
+        # Get Guild name if ID already stored
+        if guild_id:
+            try:
+                endpoint_name = "guild/{0}".format(guild_id)
+                results = await self.call_api(endpoint_name)
+                guild_name = results["name"]
+            except APIError as e:
+                return await self.error_handler(ctx, e)
+        elif guild_name is not None:
+            try:
+                endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
+                guild_id = await self.call_api(endpoint_id)
+                guild_id = guild_id[0]
+
+            except (IndexError, APINotFound):
+                return await ctx.send("Invalid guild name")
+            except APIError as e:
+                return await self.error_handler(ctx, e)
+        else:
+            return await self.bot.send_cmd_help(ctx)
+
         try:
-            endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
-            guild_id = await self.call_api(endpoint_id)
-            guild_id = guild_id[0]
             endpoint = "guild/{0}".format(guild_id)
             results = await self.call_api(endpoint, ctx.author, ["guilds"])
         except (IndexError, APINotFound):
             return await ctx.send("Invalid guild name")
         except APIError as e:
             return await self.error_handler(ctx, e)
+
         data = discord.Embed(
-            description='General Info about your guild',
+            description='General Info about {0}'.format(guild_name),
             colour=self.embed_color)
         data.set_author(name="{} [{}]".format(results["name"], results["tag"]))
         data.add_field(name='Influence', value=results["influence"])
