@@ -168,10 +168,11 @@ class GeneralGuild:
         """Get log of last 20 entries of stash
 
         Required permissions: guilds and in game permissions"""
+
         # Read preferred guild from DB
-        doc = await self.bot.database.get_user(ctx.author, self)
-        if doc.get("guild"):
-            guild_id = doc.get("guild")
+        guild_id = await self.get_guild(ctx)
+        # Get Guild name if ID already stored
+        if guild_id:
             endpoint_name = "guild/{0}".format(guild_id)
             try:
                 guild_name = await self.call_api(endpoint_name)
@@ -245,7 +246,6 @@ class GeneralGuild:
     @commands.cooldown(1, 10, BucketType.user)
     async def guild_set(self, ctx, *, guild_name=None):
         """ Set your preferred guild for guild commands"""
-        user = ctx.author
         # Get guildname / guild_id from API
         endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
         try:
@@ -257,9 +257,26 @@ class GeneralGuild:
             return await self.error_handler(ctx, e)
 
         # Write to DB, overwrites existing guild
-        await self.bot.database.set_user(user,
+        await self.bot.database.set_user(ctx.author,
                                          {"guild": guild_id,
                                           }, self)
 
         await ctx.send("Your preferred guild is now set to {0}"
                        .format(guild_name))
+
+    @guild.command(name="unset")
+    @commands.cooldown(1, 10, BucketType.user)
+    async def guild_unset(self, ctx):
+        """Removes stored preferred guild"""
+        await self.bot.database.set_user(ctx.author,
+                                         {"guild": "",
+                                          }, self)
+        await ctx.send("Preferred guild removed.")
+
+    async def get_guild(self, ctx):
+        doc = await self.bot.database.get_user(ctx.author, self)
+        if doc is not None and doc.get("guild"):
+            guild_id = doc.get("guild")
+        else:
+            guild_id = ""
+        return guild_id
