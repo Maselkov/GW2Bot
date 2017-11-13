@@ -170,8 +170,8 @@ class GeneralGuild:
         Required permissions: guilds and in game permissions"""
         # Read preferred guild from DB
         doc = await self.bot.database.get_user(ctx.author, self)
-        if doc["guild"]:
-            guild_id = doc["guild"]
+        if doc.get("guild"):
+            guild_id = doc.get("guild")
         else:
             endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
             try:
@@ -237,11 +237,9 @@ class GeneralGuild:
 
     @guild.command(name="set")
     @commands.cooldown(1, 10, BucketType.user)
-    async def guild_set(self, ctx, *, guild_name: str):
+    async def guild_set(self, ctx, *, guild_name=None):
         """ Set your preferred guild for guild commands"""
-
         user = ctx.author
-
         # Get guildname / guild_id from API
         endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
         try:
@@ -251,7 +249,6 @@ class GeneralGuild:
             return await ctx.send("Invalid guild name")
         except APIError as e:
             return await self.error_handler(ctx, e)
-
 
         # Write to DB, overwrites existing guild
         await self.bot.database.set_user(user,
