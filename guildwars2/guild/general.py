@@ -271,11 +271,8 @@ class GeneralGuild:
                            .format(guild_name))
 
     async def get_preferred_guild(self, user):
-        doc = await self.bot.database.get_user(user, self)
-        guild_id = None
-        if doc is not None and doc.get("guild"):
-            guild_id = doc.get("guild")
-        return guild_id
+        doc = await self.bot.database.get_user(user, self) or {}
+        return doc.get("guild")
 
     async def guildid_to_guildname(self, guild_id):
         try:
