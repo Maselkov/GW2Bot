@@ -129,8 +129,6 @@ class GeneralGuild:
                 endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
                 guild_id = await self.call_api(endpoint_id)
                 guild_id = guild_id[0]
-                endpoint = "guild/{0}/treasury".format(guild_id)
-                treasury = await self.call_api(endpoint, ctx.author, ["guilds"])
             except (IndexError, APINotFound):
                 return await ctx.send("Invalid guild name")
             except APIForbidden:
@@ -145,6 +143,18 @@ class GeneralGuild:
                     " parameter.")
         else:
             return await self.bot.send_cmd_help(ctx)
+
+        try:
+            endpoint = "guild/{0}/treasury".format(guild_id)
+            treasury = await self.call_api(endpoint, ctx.author, ["guilds"])
+        except (IndexError, APINotFound):
+            return await ctx.send("Invalid guild name")
+        except APIForbidden:
+            return await ctx.send(
+                "You don't have enough permissions in game to "
+                "use this command")
+        except APIError as e:
+            return await self.error_handler(ctx, e)
 
         data = discord.Embed(description="Treasury", colour=self.embed_color)
         data.set_author(name=guild_name.title())
