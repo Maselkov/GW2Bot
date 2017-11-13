@@ -170,7 +170,7 @@ class GeneralGuild:
         Required permissions: guilds and in game permissions"""
 
         # Read preferred guild from DB
-        guild_id = await self.get_guild(ctx.author)
+        guild_id = await self.fetch_guild(ctx.author)
         # Get Guild name if ID already stored
         if guild_id != "":
             endpoint_name = "guild/{0}".format(guild_id)
@@ -273,7 +273,7 @@ class GeneralGuild:
                                           }, self)
         await ctx.send("Preferred guild removed.")
 
-    async def get_guild(self, user):
+    async def fetch_guild(self, user):
         doc = await self.bot.database.get_user(user, self)
         guild_id = ""
         if doc is not None and doc.get("guild"):
