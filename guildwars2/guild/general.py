@@ -202,7 +202,7 @@ class GeneralGuild:
                         itemdoc = await self.fetch_item(entry["item_id"])
                         item_name = itemdoc["name"]
                         multiplier = "x"
-                    if entry["operation"] is "withdraw":
+                    if entry["operation"] == "withdraw":
                         operator = " withdrew"
                     else:
                         operator = " deposited"
