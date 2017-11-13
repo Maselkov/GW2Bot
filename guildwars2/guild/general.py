@@ -243,11 +243,14 @@ class GeneralGuild:
 
     @guild.command(name="set")
     @commands.cooldown(1, 10, BucketType.user)
-    async def guild_set(self, ctx, *, guild_name: str):
+    async def guild_default(self, ctx, *, guild_name=None):
         """ Set your preferred guild for guild commands"""
 
         if guild_name is None:
-            await self.bot.send_cmd_help(ctx)
+            await self.bot.database.set_user(ctx.author, {
+                "guild": "",
+            }, self)
+            await ctx.send("Your preferred guild is now reset")
         else:
             # Get guildname / guild_id from API
             endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
@@ -266,15 +269,6 @@ class GeneralGuild:
 
             await ctx.send("Your preferred guild is now set to {0}"
                            .format(guild_name))
-
-    @guild.command(name="unset")
-    @commands.cooldown(1, 10, BucketType.user)
-    async def guild_unset(self, ctx):
-        """Removes stored preferred guild"""
-        await self.bot.database.set_user(ctx.author, {
-            "guild": "",
-        }, self)
-        await ctx.send("Preferred guild removed.")
 
     async def get_preferred_guild(self, user):
         doc = await self.bot.database.get_user(user, self)
