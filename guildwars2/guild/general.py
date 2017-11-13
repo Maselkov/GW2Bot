@@ -114,24 +114,38 @@ class GeneralGuild:
         """Get list of current and needed items for upgrades
 
         Required permissions: guilds and in game permissions"""
-        try:
-            endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
-            guild_id = await self.call_api(endpoint_id)
-            guild_id = guild_id[0]
-            endpoint = "guild/{0}/treasury".format(guild_id)
-            treasury = await self.call_api(endpoint, ctx.author, ["guilds"])
-        except (IndexError, APINotFound):
-            return await ctx.send("Invalid guild name")
-        except APIForbidden:
-            return await ctx.send(
-                "You don't have enough permissions in game to "
-                "use this command")
-        except APIError as e:
-            return await self.error_handler(ctx, e)
-        except AttributeError:
-            return await ctx.send(
-                "Please set a preferred guild or use one as a"
-                " parameter.")
+        # Read preferred guild from DB
+        guild_id = await self.get_preferred_guild(ctx.author)
+        # Get Guild name if ID already stored
+        if guild_id:
+            try:
+                endpoint_name = "guild/{0}".format(guild_id)
+                results = await self.call_api(endpoint_name)
+                guild_name = results["name"]
+            except APIError as e:
+                return await self.error_handler(ctx, e)
+        elif guild_name is not None:
+            try:
+                endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
+                guild_id = await self.call_api(endpoint_id)
+                guild_id = guild_id[0]
+                endpoint = "guild/{0}/treasury".format(guild_id)
+                treasury = await self.call_api(endpoint, ctx.author, ["guilds"])
+            except (IndexError, APINotFound):
+                return await ctx.send("Invalid guild name")
+            except APIForbidden:
+                return await ctx.send(
+                    "You don't have enough permissions in game to "
+                    "use this command")
+            except APIError as e:
+                return await self.error_handler(ctx, e)
+            except AttributeError:
+                return await ctx.send(
+                    "Please set a preferred guild or use one as a"
+                    " parameter.")
+        else:
+            return await self.bot.send_cmd_help(ctx)
+
         data = discord.Embed(description="Treasury", colour=self.embed_color)
         data.set_author(name=guild_name.title())
         counter = 0
