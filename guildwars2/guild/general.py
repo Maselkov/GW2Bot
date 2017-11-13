@@ -114,8 +114,8 @@ class GeneralGuild:
         """Get list of current and needed items for upgrades
 
         Required permissions: guilds and in game permissions"""
-        endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
         try:
+            endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
             guild_id = await self.call_api(endpoint_id)
             guild_id = guild_id[0]
             endpoint = "guild/{0}/treasury".format(guild_id)
@@ -128,6 +128,10 @@ class GeneralGuild:
                 "use this command")
         except APIError as e:
             return await self.error_handler(ctx, e)
+        except AttributeError:
+            return await ctx.send(
+                "Please set a preferred guild or use one as a"
+                " parameter.")
         data = discord.Embed(description="Treasury", colour=self.embed_color)
         data.set_author(name=guild_name.title())
         counter = 0
@@ -173,12 +177,7 @@ class GeneralGuild:
         guild_id = await self.get_preferred_guild(ctx.author)
         # Get Guild name if ID already stored
         if guild_id != "":
-            endpoint_name = "guild/{0}".format(guild_id)
-            try:
-                guild_name = await self.call_api(endpoint_name)
-                guild_name = guild_name["name"]
-            except APIError as e:
-                return await self.error_handler(ctx, e)
+            guild_name = self.guildid_to_guild(ctx, guild_id)
         else:
             try:
                 endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
@@ -195,7 +194,7 @@ class GeneralGuild:
             except AttributeError:
                 return await ctx.send(
                     "Please set a preferred guild or use one as a"
-                    "parameter")
+                    " parameter.")
         try:
             endpoint = "guild/{0}/log/".format(guild_id)
             log = await self.call_api(endpoint, ctx.author, ["guilds"])
@@ -282,3 +281,12 @@ class GeneralGuild:
         if doc is not None and doc.get("guild"):
             guild_id = doc.get("guild")
         return guild_id
+
+    async def guildid_to_guild(self, ctx, guild_id):
+        endpoint_name = "guild/{0}".format(guild_id)
+        try:
+            guild_name = await self.call_api(endpoint_name)
+            guild_name = guild_name["name"]
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+        return guild_name
