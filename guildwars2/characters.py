@@ -66,7 +66,13 @@ class CharactersMixin:
             gtag = guild["tag"]
             data.add_field(name="Guild", value="[{}] {}".format(gtag, gname))
         data.add_field(name="Deaths", value=deaths)
-        data.add_field(name="Deaths per hour", value=str(deathsperhour))
+        data.add_field(name="Deaths per hour", value=str(deathsperhour), inline=False)
+        # TODO add to one output field
+        if "crafting" in results:
+            for crafting in results["crafting"]:
+                rating = crafting["rating"]
+                disclipline = crafting["discipline"]
+                data.add_field(name="Crafting", value="Level {0} {1}".format(rating, disclipline))
         data.set_author(name=character)
         data.set_footer(text="A {} {} {}".format(gender.lower(), race,
                                                  profession))
