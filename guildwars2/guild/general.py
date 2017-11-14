@@ -268,7 +268,8 @@ class GeneralGuild:
             doc = await self.bot.database.get_guild(guild, self) or {}
             return doc.get("guild_ingame")
         else:
-            return await ctx.send("Preferred guild is only available on server.")
+            await ctx.send("Preferred guild is only available on server.")
+            return None
 
 
     async def guildid_to_guildname(self, ctx, guild_id):
