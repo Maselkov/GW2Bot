@@ -30,6 +30,8 @@ class GeneralGuild:
         elif guild_name is not None:
             guild_id = await self.guildname_to_guildid(ctx, guild_name)
         else:
+            if not ctx.guild:
+                await ctx.send("Preferred guild is only available on server.")
             return await self.bot.send_cmd_help(ctx)
 
         try:
@@ -79,6 +81,8 @@ class GeneralGuild:
         elif guild_name is not None:
             guild_id = await self.guildname_to_guildid(ctx, guild_name)
         else:
+            if not ctx.guild:
+                await ctx.send("Preferred guild is only available on server.")
             return await self.bot.send_cmd_help(ctx)
         try:
             endpoints = [
@@ -132,6 +136,8 @@ class GeneralGuild:
         elif guild_name is not None:
             guild_id = await self.guildname_to_guildid(ctx, guild_name)
         else:
+            if not ctx.guild:
+                await ctx.send("Preferred guild is only available on server.")
             return await self.bot.send_cmd_help(ctx)
 
         try:
