@@ -246,25 +246,26 @@ class GeneralGuild:
     async def guild_default(self, ctx, *, guild_name=None):
         """ Set your preferred guild for guild commands"""
 
+        guild = ctx.guild
         if guild_name is None:
-            await self.bot.database.set_user(ctx.author, {
-                "guild": "",
+            await self.bot.database.set_guild(guild, {
+                "guild_ingame": "",
             }, self)
-            await ctx.send("Your preferred guild is now reset")
+            await ctx.send("Your preferred guild is now reset for this server.")
         else:
             guild_id = await self.guildname_to_guildid(ctx, guild_name)
             # Write to DB, overwrites existing guild
-            await self.bot.database.set_user(ctx.author, {
-                "guild": guild_id,
+            await self.bot.database.set_guild(guild, {
+                "guild_ingame": guild_id,
             }, self)
 
-            await ctx.send("Your preferred guild is now set to {0}"
+            await ctx.send("Your preferred guild is now set to {0} for this server"
                            .format(guild_name))
 
     async def get_preferred_guild(self, ctx, user):
         guild = ctx.guild
-        doc = await self.bot.database.get_user(user, self) or {}
-        return doc.get("guild")
+        doc = await self.bot.database.get_guild(guild, self) or {}
+        return doc.get("guild_ingame")
 
     async def guildid_to_guildname(self, ctx, guild_id):
         try:
