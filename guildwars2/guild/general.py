@@ -189,6 +189,8 @@ class GeneralGuild:
         # Get Guild name if ID already stored
         if guild_id:
             guild_name = await self.guildid_to_guildname(ctx, guild_id)
+            if not ctx.guild:
+                await ctx.send("Preferred guild is only available on server.")
         elif guild_name is not None:
             guild_id = await self.guildname_to_guildid(ctx, guild_name)
         else:
@@ -252,7 +254,8 @@ class GeneralGuild:
                 await self.bot.database.set_guild(guild, {
                     "guild_ingame": "",
                 }, self)
-                await ctx.send("Your preferred guild is now reset for this server.")
+                await ctx.send(
+                    "Your preferred guild is now reset for this server.")
             else:
                 guild_id = await self.guildname_to_guildid(ctx, guild_name)
                 # Write to DB, overwrites existing guild
@@ -260,19 +263,19 @@ class GeneralGuild:
                     "guild_ingame": guild_id,
                 }, self)
 
-                await ctx.send("Your preferred guild is now set to {0} for this server"
-                               .format(guild_name))
+                await ctx.send(
+                    "Your preferred guild is now set to {0} for this server"
+                    .format(guild_name))
         else:
-            return await ctx.send("Preferred guild is only available on server.")
+            return await ctx.send(
+                "Preferred guild is only available on server.")
 
     async def get_preferred_guild(self, ctx):
+        # guild in this case is the server ID
         guild = ctx.guild
         if guild:
             doc = await self.bot.database.get_guild(guild, self) or {}
             return doc.get("guild_ingame")
-        else:
-            await ctx.send("Preferred guild is only available on server.")
-            return None
 
     async def guildid_to_guildname(self, ctx, guild_id):
         try:
