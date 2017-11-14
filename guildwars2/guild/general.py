@@ -23,7 +23,7 @@ class GeneralGuild:
         Required permissions: guilds
         """
         # Read preferred guild from DB
-        guild_id = await self.get_preferred_guild(ctx, ctx.author)
+        guild_id = await self.get_preferred_guild(ctx)
         # Get Guild name if ID already stored
         if guild_id:
             guild_name = await self.guildid_to_guildname(ctx, guild_id)
@@ -72,7 +72,7 @@ class GeneralGuild:
         user = ctx.author
         scopes = ["guilds"]
         # Read preferred guild from DB
-        guild_id = await self.get_preferred_guild(ctx, ctx.author)
+        guild_id = await self.get_preferred_guild(ctx)
         # Get Guild name if ID already stored
         if guild_id:
             guild_name = await self.guildid_to_guildname(ctx, guild_id)
@@ -125,7 +125,7 @@ class GeneralGuild:
 
         Required permissions: guilds and in game permissions"""
         # Read preferred guild from DB
-        guild_id = await self.get_preferred_guild(ctx, ctx.author)
+        guild_id = await self.get_preferred_guild(ctx)
         # Get Guild name if ID already stored
         if guild_id:
             guild_name = await self.guildid_to_guildname(ctx, guild_id)
@@ -185,7 +185,7 @@ class GeneralGuild:
         Required permissions: guilds and in game permissions"""
 
         # Read preferred guild from DB
-        guild_id = await self.get_preferred_guild(ctx, ctx.author)
+        guild_id = await self.get_preferred_guild(ctx)
         # Get Guild name if ID already stored
         if guild_id:
             guild_name = await self.guildid_to_guildname(ctx, guild_id)
@@ -247,22 +247,25 @@ class GeneralGuild:
         """ Set your preferred guild for guild commands"""
 
         guild = ctx.guild
-        if guild_name is None:
-            await self.bot.database.set_guild(guild, {
-                "guild_ingame": "",
-            }, self)
-            await ctx.send("Your preferred guild is now reset for this server.")
+        if guild:
+            if guild_name is None:
+                await self.bot.database.set_guild(guild, {
+                    "guild_ingame": "",
+                }, self)
+                await ctx.send("Your preferred guild is now reset for this server.")
+            else:
+                guild_id = await self.guildname_to_guildid(ctx, guild_name)
+                # Write to DB, overwrites existing guild
+                await self.bot.database.set_guild(guild, {
+                    "guild_ingame": guild_id,
+                }, self)
+
+                await ctx.send("Your preferred guild is now set to {0} for this server"
+                               .format(guild_name))
         else:
-            guild_id = await self.guildname_to_guildid(ctx, guild_name)
-            # Write to DB, overwrites existing guild
-            await self.bot.database.set_guild(guild, {
-                "guild_ingame": guild_id,
-            }, self)
+            return await ctx.send("Preferred guild is only available on server.")
 
-            await ctx.send("Your preferred guild is now set to {0} for this server"
-                           .format(guild_name))
-
-    async def get_preferred_guild(self, ctx, user):
+    async def get_preferred_guild(self, ctx):
         guild = ctx.guild
         if guild:
             doc = await self.bot.database.get_guild(guild, self) or {}
@@ -270,7 +273,6 @@ class GeneralGuild:
         else:
             await ctx.send("Preferred guild is only available on server.")
             return None
-
 
     async def guildid_to_guildname(self, ctx, guild_id):
         try:
