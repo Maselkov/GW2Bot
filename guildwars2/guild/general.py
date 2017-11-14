@@ -189,11 +189,11 @@ class GeneralGuild:
         # Get Guild name if ID already stored
         if guild_id:
             guild_name = await self.guildid_to_guildname(ctx, guild_id)
-            if not ctx.guild:
-                await ctx.send("Preferred guild is only available on server.")
         elif guild_name is not None:
             guild_id = await self.guildname_to_guildid(ctx, guild_name)
         else:
+            if not ctx.guild:
+                await ctx.send("Preferred guild is only available on server.")
             return await self.bot.send_cmd_help(ctx)
 
         try:
