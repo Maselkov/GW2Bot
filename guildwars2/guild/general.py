@@ -23,12 +23,12 @@ class GeneralGuild:
         Required permissions: guilds
         """
         # Read preferred guild from DB
-        guild_id = await self.get_preferred_guild(ctx.author)
+        guild_id = await self.get_preferred_guild(ctx, ctx.author)
         # Get Guild name if ID already stored
         if guild_id:
-            guild_name = await self.guildid_to_guildname(guild_id)
+            guild_name = await self.guildid_to_guildname(ctx, guild_id)
         elif guild_name is not None:
-            guild_id = await self.guildname_to_guildid(guild_name)
+            guild_id = await self.guildname_to_guildid(ctx, guild_name)
         else:
             return await self.bot.send_cmd_help(ctx)
 
@@ -72,12 +72,12 @@ class GeneralGuild:
         user = ctx.author
         scopes = ["guilds"]
         # Read preferred guild from DB
-        guild_id = await self.get_preferred_guild(ctx.author)
+        guild_id = await self.get_preferred_guild(ctx, ctx.author)
         # Get Guild name if ID already stored
         if guild_id:
-            guild_name = await self.guildid_to_guildname(guild_id)
+            guild_name = await self.guildid_to_guildname(ctx, guild_id)
         elif guild_name is not None:
-            guild_id = await self.guildname_to_guildid(guild_name)
+            guild_id = await self.guildname_to_guildid(ctx, guild_name)
         else:
             return await self.bot.send_cmd_help(ctx)
         try:
@@ -125,12 +125,12 @@ class GeneralGuild:
 
         Required permissions: guilds and in game permissions"""
         # Read preferred guild from DB
-        guild_id = await self.get_preferred_guild(ctx.author)
+        guild_id = await self.get_preferred_guild(ctx, ctx.author)
         # Get Guild name if ID already stored
         if guild_id:
-            guild_name = await self.guildid_to_guildname(guild_id)
+            guild_name = await self.guildid_to_guildname(ctx, guild_id)
         elif guild_name is not None:
-            guild_id = await self.guildname_to_guildid(guild_name)
+            guild_id = await self.guildname_to_guildid(ctx, guild_name)
         else:
             return await self.bot.send_cmd_help(ctx)
 
@@ -185,12 +185,12 @@ class GeneralGuild:
         Required permissions: guilds and in game permissions"""
 
         # Read preferred guild from DB
-        guild_id = await self.get_preferred_guild(ctx.author)
+        guild_id = await self.get_preferred_guild(ctx, ctx.author)
         # Get Guild name if ID already stored
         if guild_id:
-            guild_name = await self.guildid_to_guildname(guild_id)
+            guild_name = await self.guildid_to_guildname(ctx, guild_id)
         elif guild_name is not None:
-            guild_id = await self.guildname_to_guildid(guild_name)
+            guild_id = await self.guildname_to_guildid(ctx, guild_name)
         else:
             return await self.bot.send_cmd_help(ctx)
 
@@ -252,16 +252,7 @@ class GeneralGuild:
             }, self)
             await ctx.send("Your preferred guild is now reset")
         else:
-            # Get guildname / guild_id from API
-            endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
-            try:
-                guild_id = await self.call_api(endpoint_id)
-                guild_id = guild_id[0]
-            except (IndexError, APINotFound):
-                return await ctx.send("Invalid guild name")
-            except APIError as e:
-                return await self.error_handler(ctx, e)
-
+            guild_id = await self.guildname_to_guildid(ctx, guild_name)
             # Write to DB, overwrites existing guild
             await self.bot.database.set_user(ctx.author, {
                 "guild": guild_id,
@@ -270,11 +261,12 @@ class GeneralGuild:
             await ctx.send("Your preferred guild is now set to {0}"
                            .format(guild_name))
 
-    async def get_preferred_guild(self, user):
+    async def get_preferred_guild(self, ctx, user):
+        guild = ctx.guild
         doc = await self.bot.database.get_user(user, self) or {}
         return doc.get("guild")
 
-    async def guildid_to_guildname(self, guild_id):
+    async def guildid_to_guildname(self, ctx, guild_id):
         try:
             endpoint_name = "guild/{0}".format(guild_id)
             results = await self.call_api(endpoint_name)
@@ -283,10 +275,9 @@ class GeneralGuild:
         except APIError as e:
             return await self.error_handler(ctx, e)
 
-    async def guildname_to_guildid(self, guild_name):
+    async def guildname_to_guildid(self, ctx, guild_name):
         try:
-            endpoint_id = "guild/search?name=" + guild_name.replace(
-                ' ', '%20')
+            endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
             guild_id = await self.call_api(endpoint_id)
             guild_id = guild_id[0]
             return guild_id
