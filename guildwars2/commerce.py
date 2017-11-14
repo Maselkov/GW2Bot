@@ -276,4 +276,4 @@ class CommerceMixin:
                                   "me blocked, or disabled DMs in this "
                                   "server. Aborting.")
         await self.bot.database.set_user(user, {"gemtrack": price}, self)
-        await ctx.send("Succesfully set")
+        await ctx.send("Successfully set")
