@@ -66,16 +66,19 @@ class CharactersMixin:
             gtag = guild["tag"]
             data.add_field(name="Guild", value="[{}] {}".format(gtag, gname))
         data.add_field(name="Deaths", value=deaths)
-        data.add_field(name="Deaths per hour", value=str(deathsperhour), inline=False)
-        # TODO add to one output field
-        if "crafting" in results:
+        data.add_field(
+            name="Deaths per hour", value=str(deathsperhour), inline=False)
+        craftlist = ""
+        if results["crafting"] != []:
             for crafting in results["crafting"]:
                 rating = crafting["rating"]
-                disclipline = crafting["discipline"]
-                data.add_field(name="Crafting", value="Level {0} {1}".format(rating, disclipline))
+                discipline = crafting["discipline"]
+                craftlist += "\n".join(
+                    ["Level {0} {1}\n".format(rating, discipline)])
+            data.add_field(name="Crafting", value=craftlist)
         data.set_author(name=character)
-        data.set_footer(text="A {} {} {}".format(gender.lower(), race,
-                                                 profession))
+        data.set_footer(
+            text="A {} {} {}".format(gender.lower(), race, profession))
         try:
             await ctx.send(embed=data)
         except discord.Forbidden:
