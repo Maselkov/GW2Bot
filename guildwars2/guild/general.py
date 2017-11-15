@@ -15,7 +15,7 @@ class GeneralGuild:
         if ctx.invoked_subcommand is None:
             await self.bot.send_cmd_help(ctx)
 
-    @guild.command(name="info")
+    @guild.command(name="info", usage="<guild name>")
     @commands.cooldown(1, 20, BucketType.user)
     async def guild_info(self, ctx, *, guild_name=None):
         """General guild stats
@@ -30,8 +30,6 @@ class GeneralGuild:
         elif guild_name is not None:
             guild_id = await self.guildname_to_guildid(ctx, guild_name)
         else:
-            if not ctx.guild:
-                await ctx.send("Preferred guild is only available on server.")
             return await self.bot.send_cmd_help(ctx)
 
         try:
@@ -63,7 +61,7 @@ class GeneralGuild:
         except discord.Forbidden:
             await ctx.send("Need permission to embed links")
 
-    @guild.command(name="members")
+    @guild.command(name="members", usage="<guild name>")
     @commands.cooldown(1, 20, BucketType.user)
     async def guild_members(self, ctx, *, guild_name=None):
         """Get list of all members and their ranks.
@@ -81,8 +79,6 @@ class GeneralGuild:
         elif guild_name is not None:
             guild_id = await self.guildname_to_guildid(ctx, guild_name)
         else:
-            if not ctx.guild:
-                await ctx.send("Preferred guild is only available on server.")
             return await self.bot.send_cmd_help(ctx)
         try:
             endpoints = [
@@ -122,7 +118,7 @@ class GeneralGuild:
         except discord.Forbidden:
             await ctx.send("Need permission to embed links")
 
-    @guild.command(name="treasury")
+    @guild.command(name="treasury", usage="<guild name>")
     @commands.cooldown(1, 20, BucketType.user)
     async def guild_treasury(self, ctx, *, guild_name=None):
         """Get list of current and needed items for upgrades
@@ -136,8 +132,6 @@ class GeneralGuild:
         elif guild_name is not None:
             guild_id = await self.guildname_to_guildid(ctx, guild_name)
         else:
-            if not ctx.guild:
-                await ctx.send("Preferred guild is only available on server.")
             return await self.bot.send_cmd_help(ctx)
 
         try:
@@ -184,7 +178,7 @@ class GeneralGuild:
         except discord.Forbidden:
             await ctx.send("Need permission to embed links")
 
-    @guild.command(name="log")
+    @guild.command(name="log", usage="<guild name>")
     @commands.cooldown(1, 10, BucketType.user)
     async def guild_log(self, ctx, *, guild_name=None):
         """Get log of last 20 entries of stash
@@ -198,8 +192,6 @@ class GeneralGuild:
         elif guild_name is not None:
             guild_id = await self.guildname_to_guildid(ctx, guild_name)
         else:
-            if not ctx.guild:
-                await ctx.send("Preferred guild is only available on server.")
             return await self.bot.send_cmd_help(ctx)
 
         try:
@@ -249,32 +241,29 @@ class GeneralGuild:
         except discord.Forbidden:
             await ctx.send("Need permission to embed links")
 
-    @guild.command(name="default")
+    @guild.command(name="default", usage="<guild name>")
+    @commands.guild_only()
     @commands.cooldown(1, 10, BucketType.user)
     async def guild_default(self, ctx, *, guild_name=None):
         """ Set your preferred guild for guild commands"""
 
         guild = ctx.guild
-        if guild:
-            if guild_name is None:
-                await self.bot.database.set_guild(guild, {
-                    "guild_ingame": "",
-                }, self)
-                await ctx.send(
-                    "Your preferred guild is now reset for this server.")
-            else:
-                guild_id = await self.guildname_to_guildid(ctx, guild_name)
-                # Write to DB, overwrites existing guild
-                await self.bot.database.set_guild(guild, {
-                    "guild_ingame": guild_id,
-                }, self)
-
-                await ctx.send(
-                    "Your preferred guild is now set to {0} for this server"
-                    .format(guild_name))
+        if guild_name is None:
+            await self.bot.database.set_guild(guild, {
+                "guild_ingame": None,
+            }, self)
+            await ctx.send("Your preferred guild is now reset for this server."
+                           )
         else:
-            return await ctx.send(
-                "Preferred guild is only available on server.")
+            guild_id = await self.guildname_to_guildid(ctx, guild_name)
+            # Write to DB, overwrites existing guild
+            await self.bot.database.set_guild(guild, {
+                "guild_ingame": guild_id,
+            }, self)
+
+            await ctx.send(
+                "Your preferred guild is now set to {0} for this server"
+                .format(guild_name))
 
     async def get_preferred_guild(self, ctx):
         # guild in this case is the server ID
@@ -282,6 +271,8 @@ class GeneralGuild:
         if guild:
             doc = await self.bot.database.get_guild(guild, self) or {}
             return doc.get("guild_ingame")
+        else:
+            return None
 
     async def guildid_to_guildname(self, ctx, guild_id):
         try:
