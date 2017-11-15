@@ -397,6 +397,32 @@ class CharactersMixin:
         if character == "All":
             await user.send("\n".join(output))
 
+    @character.command(name="crafting")
+    @commands.cooldown(1, 10, BucketType.user)
+    async def character_crafting(self, ctx):
+        """Displays your characters and their crafting level"""
+        endpoint = "characters"
+        try:
+            characters = await self.call_api(endpoint, ctx.author, ["characters"])
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+        data = discord.Embed(
+            description='Crafting overview', colour=self.embed_color)
+        for character in characters:
+            char_info = await self.get_character(ctx, character)
+            craftlist = ""
+            if char_info["crafting"] != []:
+                for crafting in char_info["crafting"]:
+                    rating = crafting["rating"]
+                    discipline = crafting["discipline"]
+                    craftlist += "\n".join(
+                        ["Level {0} {1}\n".format(rating, discipline)])
+                data.add_field(name=char_info["name"], value=craftlist)
+        try:
+            await ctx.send(embed=data)
+        except discord.HTTPException:
+            await ctx.send("Need permission to embed links")
+
     async def get_character(self, ctx, character):
         character = character.title()
         endpoint = "characters/" + character.replace(" ", "%20")
