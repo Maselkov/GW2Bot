@@ -401,7 +401,7 @@ class CharactersMixin:
     @commands.cooldown(1, 10, BucketType.user)
     async def character_crafting(self, ctx):
         """Displays your characters and their crafting level"""
-        endpoint = "characters"
+        endpoint = "characters?page=0"
         try:
             characters = await self.call_api(endpoint, ctx.author, ["characters"])
         except APIError as e:
@@ -409,15 +409,14 @@ class CharactersMixin:
         data = discord.Embed(
             description='Crafting overview', colour=self.embed_color)
         for character in characters:
-            char_info = await self.get_character(ctx, character)
             craftlist = ""
-            if char_info["crafting"] != []:
-                for crafting in char_info["crafting"]:
+            if character["crafting"] != []:
+                for crafting in character["crafting"]:
                     rating = crafting["rating"]
                     discipline = crafting["discipline"]
                     craftlist += "\n".join(
                         ["Level {0} {1}\n".format(rating, discipline)])
-                data.add_field(name=char_info["name"], value=craftlist)
+                data.add_field(name=character["name"], value=craftlist)
         try:
             await ctx.send(embed=data)
         except discord.HTTPException:
