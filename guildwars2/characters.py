@@ -402,8 +402,10 @@ class CharactersMixin:
     async def character_crafting(self, ctx):
         """Displays your characters and their crafting level"""
         endpoint = "characters?page=0"
+        await ctx.trigger_typing()
         try:
-            characters = await self.call_api(endpoint, ctx.author, ["characters"])
+            characters = await self.call_api(endpoint, ctx.author,
+                                             ["characters"])
         except APIError as e:
             return await self.error_handler(ctx, e)
         data = discord.Embed(
