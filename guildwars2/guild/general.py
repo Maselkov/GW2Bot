@@ -196,7 +196,7 @@ class GeneralGuild:
             return await self.bot.send_cmd_help(ctx)
 
         try:
-            endpoint = "guild/{0}/log/".format(guild["id]"])
+            endpoint = "guild/{0}/log/".format(guild["guild_id]"])
             log = await self.call_api(endpoint, ctx.author, ["guilds"])
         except APIForbidden:
             return await ctx.send(
