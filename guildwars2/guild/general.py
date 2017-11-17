@@ -197,6 +197,7 @@ class GeneralGuild:
 
         try:
             guild_id = guild["id"]
+            guild_name = guild["name"]
             endpoint = "guild/{0}/log/".format(guild_id)
             log = await self.call_api(endpoint, ctx.author, ["guilds"])
         except APIForbidden:
