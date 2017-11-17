@@ -187,7 +187,6 @@ class GeneralGuild:
         # Read preferred guild from DB
         try:
             guild = await self.get_guild(ctx, guild_name=guild_name)
-            guild_id = guild["id"]
         except (IndexError, APINotFound):
             return await ctx.send("Invalid guild name")
         except APIError as e:
@@ -197,6 +196,7 @@ class GeneralGuild:
             return await self.bot.send_cmd_help(ctx)
 
         try:
+            guild_id = guild["id"]
             endpoint = "guild/{0}/log/".format(guild_id)
             log = await self.call_api(endpoint, ctx.author, ["guilds"])
         except APIForbidden:
