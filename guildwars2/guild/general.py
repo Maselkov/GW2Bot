@@ -192,6 +192,9 @@ class GeneralGuild:
         except APIError as e:
             return await self.error_handler(ctx, e)
 
+        if not guild:
+            return await self.bot.send_cmd_help(ctx)
+
         try:
             endpoint = "guild/{0}/log/".format(guild["id]"])
             log = await self.call_api(endpoint, ctx.author, ["guilds"])
