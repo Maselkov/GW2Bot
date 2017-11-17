@@ -185,17 +185,15 @@ class GeneralGuild:
         Required permissions: guilds and in game permissions"""
 
         # Read preferred guild from DB
-        guild_id = await self.get_preferred_guild(ctx)
-        # Get Guild name if ID already stored
-        if guild_id:
-            guild_name = await self.guildid_to_guildname(ctx, guild_id)
-        elif guild_name is not None:
-            guild_id = await self.guildname_to_guildid(ctx, guild_name)
-        else:
-            return await self.bot.send_cmd_help(ctx)
+        try:
+            guild = await self.get_guild(ctx, guild_name)
+        except (IndexError, APINotFound):
+            return await ctx.send("Invalid guild name")
+        except APIError as e:
+            return await self.error_handler(ctx, e)
 
         try:
-            endpoint = "guild/{0}/log/".format(guild_id)
+            endpoint = "guild/{0}/log/".format(guild["id]"])
             log = await self.call_api(endpoint, ctx.author, ["guilds"])
         except APIForbidden:
             return await ctx.send(
