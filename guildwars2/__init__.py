@@ -2,6 +2,9 @@ import datetime
 import json
 import logging
 import aiohttp
+
+import discord
+
 from .account import AccountMixin
 from .achievements import AchievementsMixin
 from .api import ApiMixin
@@ -65,6 +68,11 @@ class GuildWars2(AccountMixin, AchievementsMixin, ApiMixin, CharactersMixin,
                 "{.mention}, API has responded with the following error: "
                 "`{}`".format(user, exc))
             return
+
+    def can_embed_links(self, ctx):
+        if not isinstance(ctx.channel, discord.abc.GuildChannel):
+            return True
+        return ctx.channel.permissions_for(ctx.me).embed_links
 
 
 def setup(bot):

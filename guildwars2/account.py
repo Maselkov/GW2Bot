@@ -72,6 +72,8 @@ class AccountMixin:
         """
         user = ctx.author
         scopes = ["inventories", "characters"]
+        if not self.can_embed_links(ctx):
+            return await ctx.send("Need permission to embed links")
         await ctx.trigger_typing()
         try:
             doc = await self.fetch_key(user, scopes)
@@ -287,8 +289,6 @@ class AccountMixin:
         # Identify the bot
         embed.set_footer(
             text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
-
-        # Edit the embed into the initial message.
         await ctx.send(
             "{.mention}, here are your Legendary Insights".format(user),
             embed=embed)
@@ -311,12 +311,11 @@ class AccountMixin:
         raids = await self.get_raids()
         embed = self.boss_embed(raids, results)
         embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
-        try:
-            await ctx.send(
-                "{.mention}, here are your raid bosses:".format(user),
-                embed=embed)
-        except discord.Forbidden:
-            await ctx.send("Need permission to embed links")
+        if not self.can_embed_links(ctx):
+            return await ctx.send("Need permission to embed links")
+        await ctx.send(
+            "{.mention}, here are your raid bosses:".format(user),
+            embed=embed)
 
     @commands.command()
     @commands.cooldown(1, 5, BucketType.user)
