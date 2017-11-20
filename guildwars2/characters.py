@@ -61,7 +61,11 @@ class CharactersMixin:
         data.add_field(name="Created at", value=created)
         data.add_field(name="Played for", value=age)
         if guild is not None:
-            guild = await self.get_guild(results["guild"])
+            endpoint = "guild/{0}".format(results["guild"])
+            try:
+                guild = await self.call_api(endpoint)
+            except APIError as e:
+                return await self.error_handler(ctx, e)
             gname = guild["name"]
             gtag = guild["tag"]
             data.add_field(name="Guild", value="[{}] {}".format(gtag, gname))
