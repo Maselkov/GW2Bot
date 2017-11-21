@@ -259,8 +259,12 @@ class GeneralGuild:
     @commands.guild_only()
     @commands.cooldown(1, 10, BucketType.user)
     async def guild_default(self, ctx, *, guild_name=None):
-        """ Set your preferred guild for guild commands"""
+        """ Set your preferred guild for guild commands on this Discord Server.
+        Commands from the guild command group invoked
+        without a guild name will default to this guild.
 
+        Invoke this command without an argument to reset the default guild.
+        """
         guild = ctx.guild
         if guild_name is None:
             await self.bot.database.set_guild(guild, {
