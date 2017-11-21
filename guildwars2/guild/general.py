@@ -294,4 +294,4 @@ class GeneralGuild:
 
             await ctx.send(
                 "Your preferred guild is now set to {0} for this server"
-                .format(guild_name))
+                .format(guild_name.title()))
