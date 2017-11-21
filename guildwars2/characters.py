@@ -413,7 +413,7 @@ class CharactersMixin:
             return await self.error_handler(ctx, e)
         data = discord.Embed(
             description='Crafting overview', colour=self.embed_color)
-        data.set_author(name=doc["account_name"], icon_url=ctx.user.avatar_url)
+        data.set_author(name=doc["account_name"], icon_url=ctx.author.avatar_url)
         for character in characters:
             craft_list = self.get_crafting(character)
             if craft_list is not None:
