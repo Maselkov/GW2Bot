@@ -72,14 +72,19 @@ class CharactersMixin:
         data.add_field(name="Deaths", value=deaths)
         data.add_field(
             name="Deaths per hour", value=str(deathsperhour), inline=False)
-        craftlist = ""
-        if results["crafting"] != []:
-            for crafting in results["crafting"]:
-                rating = crafting["rating"]
-                discipline = crafting["discipline"]
-                craftlist += "\n".join(
-                    ["Level {0} {1}\n".format(rating, discipline)])
-            data.add_field(name="Crafting", value=craftlist)
+        endpoint_chars = "characters?page=0"
+        try:
+            characters = await self.call_api(endpoint_chars, ctx.author, ["characters"])
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+        for character in characters:
+            craft_list = []
+            if character["crafting"]:
+                for crafting in character["crafting"]:
+                    rating = crafting["rating"]
+                    discipline = crafting["discipline"]
+                    craft_list.append("Level {} {}".format(rating, discipline))
+                    data.add_field(name=character["name"], value="\n".join(craft_list))
         data.set_author(name=character)
         data.set_footer(
             text="A {} {} {}".format(gender.lower(), race, profession))
