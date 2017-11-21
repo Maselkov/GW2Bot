@@ -75,7 +75,8 @@ class CharactersMixin:
             name="Deaths per hour", value=str(deathsperhour), inline=False)
 
         craft_list = self.get_crafting(results)
-        data.add_field(name="Crafting", value="\n".join(craft_list))
+        if craft_list is not None:
+            data.add_field(name="Crafting", value="\n".join(craft_list))
 
         data.set_author(name=character)
         data.set_footer(
