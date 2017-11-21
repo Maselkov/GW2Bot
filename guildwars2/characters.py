@@ -407,10 +407,12 @@ class CharactersMixin:
         try:
             characters = await self.call_api(endpoint, ctx.author,
                                              ["characters"])
+            doc = await self.fetch_key(ctx.author, ["account"])
         except APIError as e:
             return await self.error_handler(ctx, e)
         data = discord.Embed(
             description='Crafting overview', colour=self.embed_color)
+        data.set_author(name=doc["account_name"], icon_url=ctx.user.avatar_url)
         for character in characters:
             craft_list = self.get_crafting(character)
             data.add_field(name=character["name"], value="\n".join(craft_list))
