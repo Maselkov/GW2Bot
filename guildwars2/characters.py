@@ -412,14 +412,8 @@ class CharactersMixin:
         data = discord.Embed(
             description='Crafting overview', colour=self.embed_color)
         for character in characters:
-            craftlist = ""
-            if character["crafting"] != []:
-                for crafting in character["crafting"]:
-                    rating = crafting["rating"]
-                    discipline = crafting["discipline"]
-                    craftlist += "\n".join(
-                        ["Level {0} {1}\n".format(rating, discipline)])
-                data.add_field(name=character["name"], value=craftlist)
+            craft_list = self.get_crafting(character)
+            data.add_field(name=character["name"], value="\n".join(craft_list))
         try:
             await ctx.send(embed=data)
         except discord.HTTPException:
