@@ -68,7 +68,7 @@ class CharactersMixin:
                 return await self.error_handler(ctx, e)
             gname = guild["name"]
             gtag = guild["tag"]
-            data.add_field(name="Guild", value="[{}] {}".format(gtag, gname))
+        data.add_field(name="Guild", value="[{}] {}".format(gtag, gname))
         data.add_field(name="Deaths", value=deaths)
         data.add_field(
             name="Deaths per hour", value=str(deathsperhour), inline=False)
