@@ -68,7 +68,7 @@ class GeneralGuild:
     @guild.command(name="members", usage="<guild name>")
     @commands.cooldown(1, 20, BucketType.user)
     async def guild_members(self, ctx, *, guild_name=None):
-        """Get list of all members and their ranks.
+        """Get list of the first 20 members and their ranks.
         Only displays the highest ranks.
 
         Required permissions: guilds and in game permissions
