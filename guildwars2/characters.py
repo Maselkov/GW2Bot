@@ -415,9 +415,8 @@ class CharactersMixin:
         data.set_author(name=doc["account_name"], icon_url=ctx.user.avatar_url)
         for character in characters:
             craft_list = self.get_crafting(character)
-            if craft_list is None:
-                craft_list = "-"
-            data.add_field(name=character["name"], value="\n".join(craft_list))
+            if craft_list is not None:
+                data.add_field(name=character["name"], value="\n".join(craft_list))
         try:
             await ctx.send(embed=data)
         except discord.HTTPException:
