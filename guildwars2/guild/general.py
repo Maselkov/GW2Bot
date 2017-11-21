@@ -270,8 +270,11 @@ class GeneralGuild:
             await self.bot.database.set_guild(guild, {
                 "guild_ingame": None,
             }, self)
-            await ctx.send("Your preferred guild is now reset for this server."
-                           )
+            await ctx.send("Your default guild is now set to {0} for this server. "
+                           "All commands from the `guild` command group "
+                           "invoked without a specified guild will default to "
+                           "this guild. To reset, simply invoke this command "
+                           "without specifying a guild".format(guild_name.title()))
         else:
             endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
             # Guild ID to Guild Name
@@ -294,4 +297,4 @@ class GeneralGuild:
 
             await ctx.send(
                 "Your preferred guild is now set to {0} for this server"
-                .format(guild_name.title()))
+                    .format(guild_name.title()))
