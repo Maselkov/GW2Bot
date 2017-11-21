@@ -3,6 +3,7 @@ import datetime
 import discord
 from discord.ext import commands
 from discord.ext.commands.cooldowns import BucketType
+from discord.ext.commands.errors import BadArgument
 
 from ..exceptions import APIError, APIForbidden, APINotFound
 
@@ -13,7 +14,7 @@ class GeneralGuild:
         """Guild related commands.
         """
         if ctx.invoked_subcommand is None:
-            await self.bot.send_cmd_help(ctx)
+            raise BadArgument
 
     @guild.command(name="info", usage="<guild name>")
     @commands.cooldown(1, 20, BucketType.user)
@@ -31,7 +32,7 @@ class GeneralGuild:
             return await self.error_handler(ctx, e)
 
         if not guild:
-            return await self.bot.send_cmd_help(ctx)
+            raise BadArgument
 
         try:
             guild_id = guild["id"]
@@ -83,7 +84,7 @@ class GeneralGuild:
             return await self.error_handler(ctx, e)
 
         if not guild:
-            return await self.bot.send_cmd_help(ctx)
+            raise BadArgument
 
         try:
             guild_id = guild["id"]
@@ -140,7 +141,7 @@ class GeneralGuild:
             return await self.error_handler(ctx, e)
 
         if not guild:
-            return await self.bot.send_cmd_help(ctx)
+            raise BadArgument
 
         try:
             guild_id = guild["id"]
@@ -203,7 +204,7 @@ class GeneralGuild:
             return await self.error_handler(ctx, e)
 
         if not guild:
-            return await self.bot.send_cmd_help(ctx)
+            raise BadArgument
 
         try:
             guild_id = guild["id"]
