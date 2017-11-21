@@ -32,7 +32,8 @@ class CharactersMixin:
             else:
                 fmt = '{h} hours, {m} minutes, and {s} seconds'
             return fmt.format(d=days, h=hours, m=minutes, s=seconds)
-
+        
+        await ctx.trigger_typing()
         character = character.title()
         endpoint = "characters/" + character.replace(" ", "%20")
         try:
@@ -68,23 +69,18 @@ class CharactersMixin:
                 return await self.error_handler(ctx, e)
             gname = guild["name"]
             gtag = guild["tag"]
-        data.add_field(name="Guild", value="[{}] {}".format(gtag, gname))
+            data.add_field(name="Guild", value="[{}] {}".format(gtag, gname))
         data.add_field(name="Deaths", value=deaths)
         data.add_field(
             name="Deaths per hour", value=str(deathsperhour), inline=False)
-        endpoint_chars = "characters?page=0"
-        try:
-            characters = await self.call_api(endpoint_chars, ctx.author, ["characters"])
-        except APIError as e:
-            return await self.error_handler(ctx, e)
-        for character in characters:
-            craft_list = []
-            if character["crafting"]:
-                for crafting in character["crafting"]:
-                    rating = crafting["rating"]
-                    discipline = crafting["discipline"]
-                    craft_list.append("Level {} {}".format(rating, discipline))
-                    data.add_field(name=character["name"], value="\n".join(craft_list))
+        craft_list = []
+        if character["crafting"]:
+            for crafting in character["crafting"]:
+                rating = crafting["rating"]
+                discipline = crafting["discipline"]
+                craft_list.append("Level {} {}".format(rating, discipline))
+                data.add_field(name=character["name"], value="\n".join(craft_list))
+
         data.set_author(name=character)
         data.set_footer(
             text="A {} {} {}".format(gender.lower(), race, profession))
