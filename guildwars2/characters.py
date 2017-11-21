@@ -73,13 +73,9 @@ class CharactersMixin:
         data.add_field(name="Deaths", value=deaths)
         data.add_field(
             name="Deaths per hour", value=str(deathsperhour), inline=False)
-        craft_list = []
-        if results["crafting"]:
-            for crafting in results["crafting"]:
-                rating = crafting["rating"]
-                discipline = crafting["discipline"]
-                craft_list.append("Level {} {}".format(rating, discipline))
-            data.add_field(name="Crafting", value="\n".join(craft_list))
+
+        craft_list = self.get_crafting(results)
+        data.add_field(name="Crafting", value="\n".join(craft_list))
 
         data.set_author(name=character)
         data.set_footer(
@@ -452,3 +448,14 @@ class CharactersMixin:
             except:
                 return None
         return None
+
+    def get_crafting(self, character):
+        craft_list = []
+        if character["crafting"]:
+            for crafting in character["crafting"]:
+                rating = crafting["rating"]
+                discipline = crafting["discipline"]
+                craft_list.append("Level {} {}".format(rating, discipline))
+            return craft_list
+        else:
+            return None
