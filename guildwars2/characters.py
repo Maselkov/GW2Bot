@@ -75,7 +75,7 @@ class CharactersMixin:
             name="Deaths per hour", value=str(deathsperhour), inline=False)
 
         craft_list = self.get_crafting(results)
-        if craft_list is not None:
+        if craft_list:
             data.add_field(name="Crafting", value="\n".join(craft_list))
 
         data.set_author(name=character)
@@ -416,7 +416,7 @@ class CharactersMixin:
         data.set_author(name=doc["account_name"], icon_url=ctx.author.avatar_url)
         for character in characters:
             craft_list = self.get_crafting(character)
-            if craft_list is not None:
+            if craft_list:
                 data.add_field(name=character["name"], value="\n".join(craft_list))
         try:
             await ctx.send(embed=data)
@@ -449,11 +449,8 @@ class CharactersMixin:
 
     def get_crafting(self, character):
         craft_list = []
-        if character["crafting"]:
-            for crafting in character["crafting"]:
-                rating = crafting["rating"]
-                discipline = crafting["discipline"]
-                craft_list.append("Level {} {}".format(rating, discipline))
-            return craft_list
-        else:
-            return None
+        for crafting in character["crafting"]:
+            rating = crafting["rating"]
+            discipline = crafting["discipline"]
+            craft_list.append("Level {} {}".format(rating, discipline))
+        return craft_list
