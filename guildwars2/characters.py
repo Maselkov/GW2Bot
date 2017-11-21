@@ -32,7 +32,7 @@ class CharactersMixin:
             else:
                 fmt = '{h} hours, {m} minutes, and {s} seconds'
             return fmt.format(d=days, h=hours, m=minutes, s=seconds)
-        
+
         await ctx.trigger_typing()
         character = character.title()
         endpoint = "characters/" + character.replace(" ", "%20")
@@ -74,12 +74,12 @@ class CharactersMixin:
         data.add_field(
             name="Deaths per hour", value=str(deathsperhour), inline=False)
         craft_list = []
-        if character["crafting"]:
-            for crafting in character["crafting"]:
+        if results["crafting"]:
+            for crafting in results["crafting"]:
                 rating = crafting["rating"]
                 discipline = crafting["discipline"]
                 craft_list.append("Level {} {}".format(rating, discipline))
-                data.add_field(name=character["name"], value="\n".join(craft_list))
+                data.add_field(name=results["name"], value="\n".join(craft_list))
 
         data.set_author(name=character)
         data.set_footer(
