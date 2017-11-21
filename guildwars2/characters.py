@@ -79,7 +79,7 @@ class CharactersMixin:
                 rating = crafting["rating"]
                 discipline = crafting["discipline"]
                 craft_list.append("Level {} {}".format(rating, discipline))
-                data.add_field(name=results["name"], value="\n".join(craft_list))
+            data.add_field(name="Crafting", value="\n".join(craft_list))
 
         data.set_author(name=character)
         data.set_footer(
