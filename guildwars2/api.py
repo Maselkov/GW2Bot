@@ -1,6 +1,5 @@
-from .exceptions import (APIBadRequest, APIConnectionError, APIError,
-                         APIForbidden, APIInvalidKey, APINotFound,
-                         APIInactiveError)
+from .exceptions import (APIBadRequest, APIConnectionError, APIForbidden,
+                         APIInactiveError, APIInvalidKey, APINotFound)
 
 
 class ApiMixin:

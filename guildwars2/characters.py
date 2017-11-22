@@ -79,8 +79,8 @@ class CharactersMixin:
             data.add_field(name="Crafting", value="\n".join(craft_list))
 
         data.set_author(name=character)
-        data.set_footer(
-            text="A {} {} {}".format(gender.lower(), race, profession))
+        data.set_footer(text="A {} {} {}".format(gender.lower(), race,
+                                                 profession))
         try:
             await ctx.send(embed=data)
         except discord.Forbidden:
@@ -406,18 +406,23 @@ class CharactersMixin:
         endpoint = "characters?page=0"
         await ctx.trigger_typing()
         try:
-            characters = await self.call_api(endpoint, ctx.author,
-                                             ["characters"])
-            doc = await self.fetch_key(ctx.author, ["account"])
+            doc = await self.fetch_key(ctx.author, ["characters"])
+            characters = await self.call_api(endpoint, key=doc["key"])
         except APIError as e:
             return await self.error_handler(ctx, e)
         data = discord.Embed(
             description='Crafting overview', colour=self.embed_color)
-        data.set_author(name=doc["account_name"], icon_url=ctx.author.avatar_url)
+        data.set_author(
+            name=doc["account_name"], icon_url=ctx.author.avatar_url)
+        counter = 0
         for character in characters:
+            if counter == 25:
+                break
             craft_list = self.get_crafting(character)
             if craft_list:
-                data.add_field(name=character["name"], value="\n".join(craft_list))
+                data.add_field(
+                    name=character["name"], value="\n".join(craft_list))
+                counter += 1
         try:
             await ctx.send(embed=data)
         except discord.HTTPException:
