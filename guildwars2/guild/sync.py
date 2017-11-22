@@ -154,7 +154,7 @@ class SyncGuild:
             "on the website https://gw2bot.info under FAQ")
         await ctx.send(guidelines)
         doc = await self.bot.database.get_guild(ctx.guild)
-        await self.sync_guild_ranks(doc)
+        await self.sync_guild_ranks(doc, True)
 
     @guildsync.command(name="toggle")
     async def sync_toggle(self, ctx, on_off: bool):
@@ -195,7 +195,7 @@ class SyncGuild:
         except Exception as e:
             return None
 
-    async def sync_guild_ranks(self, doc):
+    async def sync_guild_ranks(self, doc, initial=False):
         name = self.__class__.__name__
         guilddoc = doc["cogs"][name]["sync"]
         enabled = guilddoc.get("on", False)
@@ -214,6 +214,9 @@ class SyncGuild:
         existingranks = []
         newranks = []
         newsaved = {}
+        if not initial:
+            if len(guild.roles) <= 1:
+                return
         try:
             ranks = await self.call_api(endpoint, leader, scopes)
         except APIError:
