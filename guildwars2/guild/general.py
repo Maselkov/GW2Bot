@@ -258,6 +258,7 @@ class GeneralGuild:
     @guild.command(name="default", usage="<guild name>")
     @commands.guild_only()
     @commands.cooldown(1, 10, BucketType.user)
+    @commands.has_permissions(manage_guild=True)
     async def guild_default(self, ctx, *, guild_name=None):
         """ Set your preferred guild for guild commands on this Discord Server.
         Commands from the guild command group invoked
