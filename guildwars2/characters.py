@@ -33,6 +33,7 @@ class CharactersMixin:
                 fmt = '{h} hours, {m} minutes, and {s} seconds'
             return fmt.format(d=days, h=hours, m=minutes, s=seconds)
 
+        await ctx.trigger_typing()
         character = character.title()
         endpoint = "characters/" + character.replace(" ", "%20")
         try:
@@ -61,15 +62,25 @@ class CharactersMixin:
         data.add_field(name="Created at", value=created)
         data.add_field(name="Played for", value=age)
         if guild is not None:
-            guild = await self.get_guild(results["guild"])
+            endpoint = "guild/{0}".format(results["guild"])
+            try:
+                guild = await self.call_api(endpoint)
+            except APIError as e:
+                return await self.error_handler(ctx, e)
             gname = guild["name"]
             gtag = guild["tag"]
             data.add_field(name="Guild", value="[{}] {}".format(gtag, gname))
         data.add_field(name="Deaths", value=deaths)
-        data.add_field(name="Deaths per hour", value=str(deathsperhour))
+        data.add_field(
+            name="Deaths per hour", value=str(deathsperhour), inline=False)
+
+        craft_list = self.get_crafting(results)
+        if craft_list:
+            data.add_field(name="Crafting", value="\n".join(craft_list))
+
         data.set_author(name=character)
-        data.set_footer(text="A {} {} {}".format(gender.lower(), race,
-                                                 profession))
+        data.set_footer(
+            text="A {} {} {}".format(gender.lower(), race, profession))
         try:
             await ctx.send(embed=data)
         except discord.Forbidden:
@@ -388,6 +399,30 @@ class CharactersMixin:
         if character == "All":
             await user.send("\n".join(output))
 
+    @character.command(name="crafting")
+    @commands.cooldown(1, 10, BucketType.user)
+    async def character_crafting(self, ctx):
+        """Displays your characters and their crafting level"""
+        endpoint = "characters?page=0"
+        await ctx.trigger_typing()
+        try:
+            characters = await self.call_api(endpoint, ctx.author,
+                                             ["characters"])
+            doc = await self.fetch_key(ctx.author, ["account"])
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+        data = discord.Embed(
+            description='Crafting overview', colour=self.embed_color)
+        data.set_author(name=doc["account_name"], icon_url=ctx.author.avatar_url)
+        for character in characters:
+            craft_list = self.get_crafting(character)
+            if craft_list:
+                data.add_field(name=character["name"], value="\n".join(craft_list))
+        try:
+            await ctx.send(embed=data)
+        except discord.HTTPException:
+            await ctx.send("Need permission to embed links")
+
     async def get_character(self, ctx, character):
         character = character.title()
         endpoint = "characters/" + character.replace(" ", "%20")
@@ -411,3 +446,11 @@ class CharactersMixin:
             except:
                 return None
         return None
+
+    def get_crafting(self, character):
+        craft_list = []
+        for crafting in character["crafting"]:
+            rating = crafting["rating"]
+            discipline = crafting["discipline"]
+            craft_list.append("Level {} {}".format(rating, discipline))
+        return craft_list

@@ -4,13 +4,20 @@ from .exceptions import (APIBadRequest, APIConnectionError, APIError,
 
 
 class ApiMixin:
-    async def get_guild(self, gid):
-        endpoint = "guild/{0}".format(gid)
-        try:
-            results = await self.call_api(endpoint)
-        except APIError:
+    async def get_guild(self, ctx, guild_id=None, guild_name=None):
+        if guild_name:
+            endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
+            guild_id = await self.call_api(endpoint_id)
+            guild_id = guild_id[0]
+        elif not guild_id:
+            if not ctx.guild:
+                return None
+            doc = await self.bot.database.get_guild(ctx.guild, self) or {}
+            guild_id = doc.get("guild_ingame")
+        if not guild_id:
             return None
-        return results
+        endpoint = "guild/{0}".format(guild_id)
+        return await self.call_api(endpoint, ctx.author, ["guilds"])
 
     async def call_multiple(self, endpoints, user=None, scopes=None, key=None):
         if key is None and user:
