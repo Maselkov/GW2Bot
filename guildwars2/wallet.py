@@ -175,10 +175,6 @@ class WalletMixin:
             "name": "Zephyrite Lockpick"
         }, {
             "count": 0,
-            "id": 43,
-            "name": "Zephyrite Lockpick"
-        }, {
-            "count": 0,
             "id": 44,
             "name": "Trader's Key"
         }]
@@ -252,6 +248,10 @@ class WalletMixin:
             "count": 0,
             "id": 28,
             "name": "Magnetite Shards"
+        }, {
+            "count": 0,
+            "id": 39,
+            "name": "Gaeting Crystal"
         }]
         for x in wallet:
             for curr in results:
