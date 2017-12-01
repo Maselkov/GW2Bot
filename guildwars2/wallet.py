@@ -102,12 +102,20 @@ class WalletMixin:
             "name": "Unbound Magic"
         }, {
             "count": 0,
+            "id": 45,
+            "name": "Volatile Magic"
+        }, {
+            "count": 0,
             "id": 15,
             "name": "Badges of Honor"
         }, {
             "count": 0,
             "id": 16,
             "name": "Guild Commendations"
+        }, {
+            "count": 0,
+            "id": 15,
+            "name": "Badges of Honor"
         }]
         for x in wallet:
             for curr in results:
@@ -123,6 +131,61 @@ class WalletMixin:
                 data.add_field(name=x["name"], value=x["count"], inline=False)
             else:
                 data.add_field(name=x["name"], value=x["count"])
+        data.set_author(name=accountname)
+        try:
+            await ctx.send(embed=data)
+        except discord.Forbidden:
+            await ctx.send("Need permission to embed links")
+
+    @wallet.command(name="keys")
+    @commands.cooldown(1, 5, BucketType.user)
+    async def wallet_keys(self, ctx):
+        """Shows key-specific currencies
+
+        Required permissions: wallet
+        """
+        try:
+            doc = await self.fetch_key(ctx.author, ["wallet"])
+            results = await self.call_api("account/wallet", key=doc["key"])
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+        wallet = [{
+            "count": 0,
+            "id": 37,
+            "name": "Exalted Key"
+        }, {
+            "count": 0,
+            "id": 38,
+            "name": "Machete"
+        }, {
+            "count": 0,
+            "id": 40,
+            "name": "Bandit Skeleton Key"
+        }, {
+            "count": 0,
+            "id": 41,
+            "name": "Pact Crowbar"
+        }, {
+            "count": 0,
+            "id": 42,
+            "name": "Vial of Chak Acid"
+        }, {
+            "count": 0,
+            "id": 43,
+            "name": "Zephyrite Lockpick"
+        }, {
+            "count": 0,
+            "id": 44,
+            "name": "Trader's Key"
+        }]
+        for x in wallet:
+            for curr in results:
+                if curr["id"] == x["id"]:
+                    x["count"] = curr["value"]
+        accountname = doc["account_name"]
+        data = discord.Embed(description="Keys", colour=self.embed_color)
+        for x in wallet:
+            data.add_field(name=x["name"], value=x["count"])
         data.set_author(name=accountname)
         try:
             await ctx.send(embed=data)
@@ -185,13 +248,17 @@ class WalletMixin:
             "count": 0,
             "id": 28,
             "name": "Magnetite Shards"
+        }, {
+            "count": 0,
+            "id": 39,
+            "name": "Gaeting Crystal"
         }]
         for x in wallet:
             for curr in results:
                 if curr["id"] == x["id"]:
                     x["count"] = curr["value"]
         accountname = doc["account_name"]
-        data = discord.Embed(description="Tokens", colour=self.embed_color)
+        data = discord.Embed(description="Map currencies", colour=self.embed_color)
         for x in wallet:
             if x["name"] == "Magnetite Shards":
                 data.add_field(name=x["name"], value=x["count"], inline=False)
@@ -239,6 +306,14 @@ class WalletMixin:
             "count": 0,
             "id": 32,
             "name": "Unbound Magic"
+        }, {
+            "count": 0,
+            "id": 45,
+            "name": "Volatile Magic"
+        }, {
+            "count": 0,
+            "id": 34,
+            "name": "Trade Contract"
         }]
         for x in wallet:
             for curr in results:
