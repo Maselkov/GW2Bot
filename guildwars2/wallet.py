@@ -102,6 +102,10 @@ class WalletMixin:
             "name": "Unbound Magic"
         }, {
             "count": 0,
+            "id": 45,
+            "name": "Volatile Magic"
+        }, {
+            "count": 0,
             "id": 15,
             "name": "Badges of Honor"
         }, {
@@ -112,14 +116,6 @@ class WalletMixin:
             "count": 0,
             "id": 15,
             "name": "Badges of Honor"
-        }, {
-            "count": 0,
-            "id": 45,
-            "name": "Volatile Magic"
-        }, {
-            "count": 0,
-            "id": 34,
-            "name": "Trade Contract"
         }]
         for x in wallet:
             for curr in results:
@@ -191,7 +187,7 @@ class WalletMixin:
                 if curr["id"] == x["id"]:
                     x["count"] = curr["value"]
         accountname = doc["account_name"]
-        data = discord.Embed(description="Wallet", colour=self.embed_color)
+        data = discord.Embed(description="Keys", colour=self.embed_color)
         for x in wallet:
             data.add_field(name=x["name"], value=x["count"])
         data.set_author(name=accountname)
@@ -310,6 +306,14 @@ class WalletMixin:
             "count": 0,
             "id": 32,
             "name": "Unbound Magic"
+        }, {
+            "count": 0,
+            "id": 45,
+            "name": "Volatile Magic"
+        }, {
+            "count": 0,
+            "id": 34,
+            "name": "Trade Contract"
         }]
         for x in wallet:
             for curr in results:
