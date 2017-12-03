@@ -220,6 +220,8 @@ class DatabaseMixin:
                         "_id":
                         daily["id"]
                     })
+                    if not daily_doc:
+                        continue
                     name = daily_doc["name"]
                     if category == "fractals":
                         if name.startswith(
