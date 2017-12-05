@@ -397,7 +397,7 @@ class CharactersMixin:
         attr_dict["defense"] += attr_dict["Toughness"]
         # boonduration += 1% per 15 points in concentration
         # crit chance = 1% per 24 points
-        attr_dict["Critical Chance"] += attr_dict["Precision"]/24
+        attr_dict["Critical Chance"] += round(attr_dict["Precision"]/24)
 
         # Mapping for old attribute names
         attr_dict["Concentration"] += attr_dict["BoonDuration"]
