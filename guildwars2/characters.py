@@ -387,7 +387,7 @@ class CharactersMixin:
 
         # Default
         attr_dict["Critical Chance"] = 4
-        attr_dict["Critical Chance"] += round(attr_dict["Precision"]/21)
+        attr_dict["Critical Chance"] += round(attr_dict["Precision"]/21, 2)
         # Calculate base value
         basevalue = self.calcBaselvl(level, 0, lvl_dict)
         attr_dict["Power"] += basevalue
@@ -403,6 +403,9 @@ class CharactersMixin:
         attr_dict["Concentration"] += attr_dict["BoonDuration"]
         attr_dict["Ferocity"] += attr_dict["CritDamage"]
         attr_dict["Expertise"] += attr_dict["ConditionDuration"]
+
+        # Reset to default after mapped to new attribute name
+        attr_dict["CritDamage"] = 150 + round(attr_dict["Ferocity"]/15, 2)
 
         for k, v in attr_dict.items():
             embed.add_field(name=k, value=v)
