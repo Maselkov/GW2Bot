@@ -266,6 +266,24 @@ class CharactersMixin:
             'BoonDuration', 'ConditionDamage', 'Ferocity', 'CritDamage',
             'Healing', 'ConditionDuration', 'AgonyResistance'
         ]
+        lvl_dict = {
+            7: [2, 10],
+            10: [11, 20],
+            14: [21, 24],
+            15: [25, 26],
+            16: [27, 30],
+            20: [31, 40],
+            24: [41, 44],
+            25: [45, 46],
+            26: [47, 50],
+            30: [51, 60],
+            34: [61, 64],
+            35: [65, 66],
+            36: [67, 70],
+            44: [71, 74],
+            45: [75, 76],
+            46: [77, 80]
+        }
         ignore_list = ['HelmAquatic', 'WeaponAquaticA', 'WeaponAquaticB', 'WeaponB1', 'WeaponB2']
         attr_dict = {key: 0 for (key) in attr_list}
         runes = {}
@@ -297,9 +315,9 @@ class CharactersMixin:
                     attributes = piece["stats"]["attributes"]
                     for attribute in attributes:
                         attr_dict[attribute] += attributes[attribute]
-                        await ctx.send("DEBUG: " + str(attributes[attribute]) + " "
-                                       + str(attribute) + " added from " + str(
-                                           piece["id"]))
+                        # await ctx.send("DEBUG: " + str(attributes[attribute]) + " "
+                        #                + str(attribute) + " added from " + str(
+                        #                    piece["id"]))
 
             # Gear with static values, except harvesting tools
             elif "charges" not in piece:
@@ -309,9 +327,9 @@ class CharactersMixin:
                         for attribute in attributes:
                             attr_dict[attribute["attribute"]] += attribute[
                                 "modifier"]
-                            await ctx.send("DEBUG: " + str(
-                                attribute["modifier"]) + " " + str(attribute) +
-                                           " added from " + str(piece["id"]))
+                            # await ctx.send("DEBUG: " + str(
+                            #     attribute["modifier"]) + " " + str(attribute) +
+                            #                " added from " + str(piece["id"]))
             # Get armor rating
             if "defense" in item["details"]:
                 if piece["slot"] not in ignore_list:
@@ -367,6 +385,10 @@ class CharactersMixin:
                         if attribute_name in attr_dict:
                             attr_dict[attribute_name] += int(modifier)
                     count += 1
+
+        # Calculate base value
+        basevalue = self.calcBaselvl(level, 0, lvl_dict)
+        await ctx.send(basevalue)
 
         # Mapping for old attribute names
         attr_dict["Concentration"] += attr_dict["BoonDuration"]
@@ -583,3 +605,24 @@ class CharactersMixin:
             discipline = crafting["discipline"]
             craft_list.append("Level {} {}".format(rating, discipline))
         return craft_list
+
+    def search_lvl_to_increase(self, level: int, lvl_dict):
+        for increase, lvl in lvl_dict.items():
+            if lvl[0] <= level <= lvl[1]:
+                if level < 11:
+                    return increase
+                elif level % 2 == 0:
+                    return increase
+                else:
+                    return 0
+
+    def calcBaselvl(self, level: int, acc_baselvl: int, lvl_dict):
+        # Recursive call of search_lvl_to_increase
+        # Calculating the base primary attributes depending on char lvl
+        if level == 1:
+            acc_baselvl += 37
+            return acc_baselvl
+        else:
+            new_acc = acc_baselvl + self.search_lvl_to_increase(level, lvl_dict)
+            new_lvl = level - 1
+            return self.calcBaselvl(new_lvl, new_acc)
