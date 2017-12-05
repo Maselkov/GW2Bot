@@ -1,4 +1,5 @@
 import datetime
+import re
 
 import discord
 from discord.ext import commands
@@ -79,8 +80,8 @@ class CharactersMixin:
             data.add_field(name="Crafting", value="\n".join(craft_list))
 
         data.set_author(name=character)
-        data.set_footer(text="A {} {} {}".format(gender.lower(), race,
-                                                 profession))
+        data.set_footer(
+            text="A {} {} {}".format(gender.lower(), race, profession))
         try:
             await ctx.send(embed=data)
         except discord.Forbidden:
@@ -255,6 +256,124 @@ class CharactersMixin:
             second = "```" + second
             await ctx.send(first.format(user))
             await ctx.send(second)
+
+    @character.command(name="attributes")
+    async def character_attributes(self, ctx, *, character: str):
+        character = character.title()
+        attr_list = [
+            'defense', 'Power', 'Vitality', 'Precision', 'Toughness',
+            'Critical Chance', 'Health', 'Concentration', 'Expertise',
+            'BoonDuration', 'ConditionDamage', 'Ferocity', 'CritDamage',
+            'Healing', 'ConditionDuration', 'AgonyResistance'
+        ]
+        attr_dict = {key: 0 for (key) in attr_list}
+        runes = {}
+        await ctx.trigger_typing()
+        try:
+            results = await self.get_character(ctx, character)
+        except APINotFound:
+            return await ctx.send("Invalid character name")
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+        profession = results["profession"].lower()
+        color = self.gamedata["professions"][profession]["color"]
+        icon = self.gamedata["professions"][profession]["icon"]
+        level = results["level"]
+        color = int(color, 0)
+        embed = discord.Embed(description="Attributes", colour=color)
+        embed.set_thumbnail(url=icon)
+        embed.set_footer(
+            text="A level {} {} ".format(level, profession), icon_url=icon)
+        eq = results["equipment"]
+        # TODO Calculate base attribute value depending on char level
+        # TODO old named attributes must be added to new ones (CritDamage and Precision i.e.)
+        # TODO remove secondary weapon set
+        # TODO remove aquatic gear
+        for piece in eq:
+            item = await self.fetch_item(piece["id"])
+            # Gear with selectable values
+            if "stats" in piece:
+                attributes = piece["stats"]["attributes"]
+                for attribute in attributes:
+                    attr_dict[attribute] += attributes[attribute]
+                    await ctx.send("DEBUG: " + str(attributes[attribute]) + " "
+                                   + str(attribute) + " added from " + str(
+                                       piece["id"]))
+
+            # Gear with static values, except harvesting tools
+            elif "charges" not in piece:
+                if "infix_upgrade" in item["details"]:
+                    attributes = item["details"]["infix_upgrade"]["attributes"]
+                    for attribute in attributes:
+                        attr_dict[attribute["attribute"]] += attribute[
+                            "modifier"]
+                        await ctx.send("DEBUG: " + str(
+                            attribute["modifier"]) + " " + str(attribute) +
+                                       " added from " + str(piece["id"]))
+            # Get armor rating
+            if "defense" in item["details"]:
+                attr_dict['defense'] += item["details"]["defense"]
+
+            # Get stats from item upgrades (runes ...)
+            if "upgrades" in piece:
+                upgrades = piece["upgrades"]
+                for upgrade in upgrades:
+                    item_upgrade = await self.fetch_item(upgrade)
+                    # Jewels and stuff
+                    if "infix_upgrade" in item_upgrade["details"]:
+                        attributes = item_upgrade["details"]["infix_upgrade"][
+                            "attributes"]
+                        for attribute in attributes:
+                            attr_dict[attribute["attribute"]] += attribute[
+                                "modifier"]
+                    # Runes
+                    if item_upgrade["details"]["type"] == "Rune":
+                        # Rune counter
+                        if upgrade in runes:
+                            runes[upgrade] += 1
+                        else:
+                            runes[upgrade] = 1
+            # Infusions
+            if "infusions" in piece:
+                infusions = piece["infusions"]
+                for infusion in infusions:
+                    item_infusion = await self.fetch_item(infusion)
+                    if "infix_upgrade" in item_infusion["details"]:
+                        attributes = item_infusion["details"]["infix_upgrade"][
+                            "attributes"]
+                        for attribute in attributes:
+                            attr_dict[attribute["attribute"]] += attribute[
+                                "modifier"]
+
+        for rune, runecount in runes.items():
+            rune_item = await self.fetch_item(rune)
+            bonuses = rune_item["details"]["bonuses"]
+            count = 0
+            for bonus in bonuses:
+                if count < runecount:
+                    # TODO regex for percentage (Crit Chance)
+                    pattern = re.compile("^\+\d{1,} ")
+                    # Regex deciding if it's a stat
+                    if pattern.match(bonus):
+                        # Regex deciding the attribute name + modifier
+                        modifier = re.sub(' .*$', '', bonus)
+                        modifier = re.sub('\+', '', modifier)
+                        attribute_name = re.sub('^.* ', '', bonus)
+                        if attribute_name in attr_dict:
+                            attr_dict[attribute_name] += int(modifier)
+                    count += 1
+
+        # Mapping for old attribute names
+        attr_dict["Concentration"] += attr_dict["BoonDuration"]
+        attr_dict["Ferocity"] += attr_dict["CritDamage"]
+        attr_dict["Expertise"] += attr_dict["ConditionDuration"]
+
+        for k, v in attr_dict.items():
+            embed.add_field(name=k, value=v)
+        try:
+            await ctx.send(embed=embed)
+        except discord.Forbidden:
+            await ctx.send("Need permission to embed links")
 
     @character.command(name="build", aliases=["pvebuild"])
     @commands.cooldown(1, 10, BucketType.user)
