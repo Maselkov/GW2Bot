@@ -306,6 +306,7 @@ class CharactersMixin:
         eq = results["equipment"]
         # TODO old named attributes must be added to new ones (CritDamage and Precision i.e.)
         # TODO "+X to all stats" Runes
+        # TODO Percentage runes
         for piece in eq:
             item = await self.fetch_item(piece["id"])
             # Gear with selectable values
@@ -373,7 +374,7 @@ class CharactersMixin:
             count = 0
             for bonus in bonuses:
                 if count < runecount:
-                    # TODO regex for percentage (Crit Chance)
+                    # TODO regex for percentage (Crit Chance, boon duration ...)
                     pattern = re.compile("^\+\d{1,} ")
                     # Regex deciding if it's a stat
                     if pattern.match(bonus):
@@ -395,17 +396,18 @@ class CharactersMixin:
         attr_dict["Toughness"] += basevalue
         attr_dict["Precision"] += basevalue
 
-        # Calculate derivative attributes
-        attr_dict["defense"] += attr_dict["Toughness"]
-        # boonduration += 1% per 15 points in concentration
-
         # Mapping for old attribute names
         attr_dict["Concentration"] += attr_dict["BoonDuration"]
         attr_dict["Ferocity"] += attr_dict["CritDamage"]
         attr_dict["Expertise"] += attr_dict["ConditionDuration"]
 
+        # Calculate derivative attributes
         # Reset to default after mapped to new attribute name
         attr_dict["CritDamage"] = 150 + round(attr_dict["Ferocity"]/15, 2)
+        # needs testing, items with +Concentration add up to boonDuration but shouldnt, runes should add up tho'
+        attr_dict["BoonDuration"] = round(attr_dict["Concentration"]/15, 2)
+        attr_dict["ConditionDuration"] = round(attr_dict["Expertise"]/15, 2)
+        attr_dict["defense"] += attr_dict["Toughness"]
 
         for k, v in attr_dict.items():
             embed.add_field(name=k, value=v)
