@@ -304,7 +304,6 @@ class CharactersMixin:
         embed.set_footer(
             text="A level {} {} ".format(level, profession), icon_url=icon)
         eq = results["equipment"]
-        # TODO Calculate base attribute value depending on char level
         # TODO old named attributes must be added to new ones (CritDamage and Precision i.e.)
         # TODO "+X to all stats" Runes
         for piece in eq:
@@ -392,6 +391,13 @@ class CharactersMixin:
         attr_dict["Vitality"] += basevalue
         attr_dict["Toughness"] += basevalue
         attr_dict["Precision"] += basevalue
+        attr_dict["Critical Chance"] = 150
+
+        # Calculate derivative attributes
+        attr_dict["defense"] += attr_dict["Toughness"]
+        # boonduration += 1% per 15 points in concentration
+        # crit chance = 1% per 24 points
+        attr_dict["Critical Chance"] += attr_dict["Precision"]/24
 
         # Mapping for old attribute names
         attr_dict["Concentration"] += attr_dict["BoonDuration"]
