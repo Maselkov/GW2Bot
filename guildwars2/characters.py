@@ -304,9 +304,10 @@ class CharactersMixin:
         embed.set_footer(
             text="A level {} {} ".format(level, profession), icon_url=icon)
         eq = results["equipment"]
-        # TODO old named attributes must be added to new ones (CritDamage and Precision i.e.)
         # TODO "+X to all stats" Runes
         # TODO Percentage runes
+        # TODO sort embed
+        # TODO Healingpower needs to be fixed
         for piece in eq:
             item = await self.fetch_item(piece["id"])
             # Gear with selectable values
@@ -386,9 +387,6 @@ class CharactersMixin:
                             attr_dict[attribute_name] += int(modifier)
                     count += 1
 
-        # Default
-        attr_dict["Critical Chance"] = 4
-        attr_dict["Critical Chance"] += round(attr_dict["Precision"]/21, 2)
         # Calculate base value
         basevalue = self.calcBaselvl(level, 0, lvl_dict)
         attr_dict["Power"] += basevalue
@@ -404,9 +402,9 @@ class CharactersMixin:
         # Calculate derivative attributes
         # Reset to default after mapped to new attribute name
         attr_dict["CritDamage"] = 150 + round(attr_dict["Ferocity"]/15, 2)
-        # needs testing, items with +Concentration add up to boonDuration but shouldnt, runes should add up tho'
         attr_dict["BoonDuration"] = round(attr_dict["Concentration"]/15, 2)
         attr_dict["ConditionDuration"] = round(attr_dict["Expertise"]/15, 2)
+        attr_dict["Critical Chance"] = 4 + round(attr_dict["Precision"]/21, 2)
         attr_dict["defense"] += attr_dict["Toughness"]
 
         for k, v in attr_dict.items():
