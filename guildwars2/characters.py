@@ -625,4 +625,4 @@ class CharactersMixin:
         else:
             new_acc = acc_baselvl + self.search_lvl_to_increase(level, lvl_dict)
             new_lvl = level - 1
-            return self.calcBaselvl(new_lvl, new_acc)
+            return self.calcBaselvl(new_lvl, new_acc, lvl_dict)
