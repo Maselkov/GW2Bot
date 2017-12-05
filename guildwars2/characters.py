@@ -266,6 +266,7 @@ class CharactersMixin:
             'BoonDuration', 'ConditionDamage', 'Ferocity', 'CritDamage',
             'Healing', 'ConditionDuration', 'AgonyResistance'
         ]
+        ignore_list = ['HelmAquatic', 'WeaponAquaticA', 'WeaponAquaticB', 'WeaponB1', 'WeaponB2']
         attr_dict = {key: 0 for (key) in attr_list}
         runes = {}
         await ctx.trigger_typing()
@@ -287,63 +288,67 @@ class CharactersMixin:
         eq = results["equipment"]
         # TODO Calculate base attribute value depending on char level
         # TODO old named attributes must be added to new ones (CritDamage and Precision i.e.)
-        # TODO remove secondary weapon set
-        # TODO remove aquatic gear
+        # TODO "+X to all stats" Runes
         for piece in eq:
             item = await self.fetch_item(piece["id"])
             # Gear with selectable values
             if "stats" in piece:
-                attributes = piece["stats"]["attributes"]
-                for attribute in attributes:
-                    attr_dict[attribute] += attributes[attribute]
-                    await ctx.send("DEBUG: " + str(attributes[attribute]) + " "
-                                   + str(attribute) + " added from " + str(
-                                       piece["id"]))
+                if piece["slot"] not in ignore_list:
+                    attributes = piece["stats"]["attributes"]
+                    for attribute in attributes:
+                        attr_dict[attribute] += attributes[attribute]
+                        await ctx.send("DEBUG: " + str(attributes[attribute]) + " "
+                                       + str(attribute) + " added from " + str(
+                                           piece["id"]))
 
             # Gear with static values, except harvesting tools
             elif "charges" not in piece:
-                if "infix_upgrade" in item["details"]:
-                    attributes = item["details"]["infix_upgrade"]["attributes"]
-                    for attribute in attributes:
-                        attr_dict[attribute["attribute"]] += attribute[
-                            "modifier"]
-                        await ctx.send("DEBUG: " + str(
-                            attribute["modifier"]) + " " + str(attribute) +
-                                       " added from " + str(piece["id"]))
+                if piece["slot"] not in ignore_list:
+                    if "infix_upgrade" in item["details"]:
+                        attributes = item["details"]["infix_upgrade"]["attributes"]
+                        for attribute in attributes:
+                            attr_dict[attribute["attribute"]] += attribute[
+                                "modifier"]
+                            await ctx.send("DEBUG: " + str(
+                                attribute["modifier"]) + " " + str(attribute) +
+                                           " added from " + str(piece["id"]))
             # Get armor rating
             if "defense" in item["details"]:
-                attr_dict['defense'] += item["details"]["defense"]
+                if piece["slot"] not in ignore_list:
+                    attr_dict['defense'] += item["details"]["defense"]
 
             # Get stats from item upgrades (runes ...)
             if "upgrades" in piece:
-                upgrades = piece["upgrades"]
-                for upgrade in upgrades:
-                    item_upgrade = await self.fetch_item(upgrade)
-                    # Jewels and stuff
-                    if "infix_upgrade" in item_upgrade["details"]:
-                        attributes = item_upgrade["details"]["infix_upgrade"][
-                            "attributes"]
-                        for attribute in attributes:
-                            attr_dict[attribute["attribute"]] += attribute[
-                                "modifier"]
-                    # Runes
-                    if item_upgrade["details"]["type"] == "Rune":
-                        # Rune counter
-                        if upgrade in runes:
-                            runes[upgrade] += 1
-                        else:
-                            runes[upgrade] = 1
+                if piece["slot"] not in ignore_list:
+                    upgrades = piece["upgrades"]
+                    for upgrade in upgrades:
+                        item_upgrade = await self.fetch_item(upgrade)
+                        # Jewels and stuff
+                        if "infix_upgrade" in item_upgrade["details"]:
+                            attributes = item_upgrade["details"]["infix_upgrade"][
+                                "attributes"]
+                            for attribute in attributes:
+                                attr_dict[attribute["attribute"]] += attribute[
+                                    "modifier"]
+                        # Runes
+                        if item_upgrade["details"]["type"] == "Rune":
+                            # Rune counter
+                            if upgrade in runes:
+                                runes[upgrade] += 1
+                            else:
+                                runes[upgrade] = 1
             # Infusions
             if "infusions" in piece:
-                infusions = piece["infusions"]
-                for infusion in infusions:
-                    item_infusion = await self.fetch_item(infusion)
-                    if "infix_upgrade" in item_infusion["details"]:
-                        attributes = item_infusion["details"]["infix_upgrade"][
-                            "attributes"]
-                        for attribute in attributes:
-                            attr_dict[attribute["attribute"]] += attribute[
-                                "modifier"]
+                if piece["slot"] not in ignore_list:
+                    infusions = piece["infusions"]
+                    for infusion in infusions:
+                        item_infusion = await self.fetch_item(infusion)
+                        if "infix_upgrade" in item_infusion["details"]:
+                            attributes = item_infusion["details"]["infix_upgrade"][
+                                "attributes"]
+                            for attribute in attributes:
+                                attr_dict[attribute["attribute"]] += attribute[
+                                    "modifier"]
 
         for rune, runecount in runes.items():
             rune_item = await self.fetch_item(rune)
