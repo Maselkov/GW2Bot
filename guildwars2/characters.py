@@ -385,19 +385,19 @@ class CharactersMixin:
                             attr_dict[attribute_name] += int(modifier)
                     count += 1
 
+        # Default
+        attr_dict["Critical Chance"] = 4
+        attr_dict["Critical Chance"] += round(attr_dict["Precision"]/21)
         # Calculate base value
         basevalue = self.calcBaselvl(level, 0, lvl_dict)
         attr_dict["Power"] += basevalue
         attr_dict["Vitality"] += basevalue
         attr_dict["Toughness"] += basevalue
         attr_dict["Precision"] += basevalue
-        attr_dict["Critical Chance"] = 150
 
         # Calculate derivative attributes
         attr_dict["defense"] += attr_dict["Toughness"]
         # boonduration += 1% per 15 points in concentration
-        # crit chance = 1% per 24 points
-        attr_dict["Critical Chance"] += round(attr_dict["Precision"]/24)
 
         # Mapping for old attribute names
         attr_dict["Concentration"] += attr_dict["BoonDuration"]
