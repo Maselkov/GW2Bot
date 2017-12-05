@@ -388,7 +388,10 @@ class CharactersMixin:
 
         # Calculate base value
         basevalue = self.calcBaselvl(level, 0, lvl_dict)
-        await ctx.send(basevalue)
+        attr_dict["Power"] += basevalue
+        attr_dict["Vitality"] += basevalue
+        attr_dict["Toughness"] += basevalue
+        attr_dict["Precision"] += basevalue
 
         # Mapping for old attribute names
         attr_dict["Concentration"] += attr_dict["BoonDuration"]
