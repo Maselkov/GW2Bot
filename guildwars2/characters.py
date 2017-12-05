@@ -404,7 +404,7 @@ class CharactersMixin:
         attr_dict["CritDamage"] = 150 + round(attr_dict["Ferocity"]/15, 2)
         attr_dict["BoonDuration"] = round(attr_dict["Concentration"]/15, 2)
         attr_dict["ConditionDuration"] = round(attr_dict["Expertise"]/15, 2)
-        attr_dict["Critical Chance"] = 4 + round(attr_dict["Precision"]/21, 2)
+        attr_dict["Critical Chance"] = 4 + round((attr_dict["Precision"]-1000)/21, 2)
         attr_dict["defense"] += attr_dict["Toughness"]
 
         for k, v in attr_dict.items():
