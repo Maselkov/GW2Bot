@@ -259,6 +259,10 @@ class CharactersMixin:
 
     @character.command(name="attributes")
     async def character_attributes(self, ctx, *, character: str):
+        """Lists attributes of given character
+
+        Required permissions: characters
+        """
         character = character.title()
         attr_list = [
             'defense', 'Power', 'Vitality', 'Precision', 'Toughness',
