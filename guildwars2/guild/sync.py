@@ -2,7 +2,6 @@ import discord
 from discord.ext import commands
 from discord.ext.commands.cooldowns import BucketType
 import asyncio
-import copy
 
 from ..exceptions import APIError, APIForbidden, APINotFound, APIKeyError
 
@@ -182,7 +181,6 @@ class SyncGuild:
         guilddoc = doc["sync"]
         guild = self.bot.get_guild(doc["_id"])
         enabled = self.sync_enabled(doc)
-        newname = copy.deepcopy(guilddoc["ranks"])
         if not enabled:
             await ctx.send(
                 "You need to run setup before you can toggle the guild role.")
@@ -196,11 +194,11 @@ class SyncGuild:
                         name=guilddoc["name"],
                         reason="GW2Bot Sync Role [$guildsync]",
                         color=discord.Color(self.embed_color))
-                    newname[guilddoc["name"]] = role.id
+                    guilddoc["ranks"][guilddoc["name"]] = role.id
                 except discord.Forbidden:
                     return await ctx.send(
                         "Couldn't create role {0}".format(guilddoc["name"]))
-                await self.bot.database.set_guild(guild, {"sync.ranks": newname},
+                await self.bot.database.set_guild(guild, {"sync.ranks": guilddoc["ranks"]},
                                             self)
             msg = ("Guild role enabled and created. Guild sync needs to run for members to be synced to the role.")
         else:
