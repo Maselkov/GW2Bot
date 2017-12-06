@@ -308,8 +308,6 @@ class CharactersMixin:
             text="A level {} {} ".format(level, profession), icon_url=icon)
         eq = results["equipment"]
         # TODO Percentage runes
-        # TODO sort embed
-        # TODO Healingpower needs to be fixed
         for piece in eq:
             item = await self.fetch_item(piece["id"])
             # Gear with selectable values
@@ -390,6 +388,7 @@ class CharactersMixin:
                         attr_dict["Toughness"] += int(modifier)
                         attr_dict["Precision"] += int(modifier)
                         attr_dict["Ferocity"] += int(modifier)
+                        attr_dict["Healing"] += int(modifier)
                         attr_dict["ConditionDamage"] += int(modifier)
                     elif pattern_single.match(bonus):
                         # Regex deciding the attribute name + modifier
