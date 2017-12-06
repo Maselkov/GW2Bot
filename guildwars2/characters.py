@@ -307,7 +307,6 @@ class CharactersMixin:
         embed.set_footer(
             text="A level {} {} ".format(level, profession), icon_url=icon)
         eq = results["equipment"]
-        # TODO Percentage runes
         for piece in eq:
             item = await self.fetch_item(piece["id"])
             # Gear with selectable values
@@ -316,10 +315,6 @@ class CharactersMixin:
                     attributes = piece["stats"]["attributes"]
                     for attribute in attributes:
                         attr_dict[attribute] += attributes[attribute]
-                        # await ctx.send("DEBUG: " + str(attributes[attribute]) + " "
-                        #                + str(attribute) + " added from " + str(
-                        #                    piece["id"]))
-
             # Gear with static values, except harvesting tools
             elif "charges" not in piece:
                 if piece["slot"] not in ignore_list:
@@ -329,14 +324,10 @@ class CharactersMixin:
                         for attribute in attributes:
                             attr_dict[attribute["attribute"]] += attribute[
                                 "modifier"]
-                            # await ctx.send("DEBUG: " + str(
-                            #     attribute["modifier"]) + " " + str(attribute) +
-                            #                " added from " + str(piece["id"]))
             # Get armor rating
             if "defense" in item["details"]:
                 if piece["slot"] not in ignore_list:
                     attr_dict['defense'] += item["details"]["defense"]
-
             # Get stats from item upgrades (runes ...)
             if "upgrades" in piece:
                 if piece["slot"] not in ignore_list:
@@ -369,16 +360,15 @@ class CharactersMixin:
                             for attribute in attributes:
                                 attr_dict[attribute["attribute"]] += attribute[
                                     "modifier"]
-
         for rune, runecount in runes.items():
             rune_item = await self.fetch_item(rune)
             bonuses = rune_item["details"]["bonuses"]
             count = 0
             for bonus in bonuses:
                 if count < runecount:
-                    # TODO regex for percentage (Crit Chance, boon duration ...)
                     pattern_single = re.compile("^\+\d{1,} ")
                     pattern_all_stats = re.compile(".* [s,S]tats$")
+                    pattern_percentage = re.compile("^\+\d{1,}% ")
                     # Regex deciding if it's a stat
                     if pattern_all_stats.match(bonus):
                         modifier = re.sub(' .*$', '', bonus)
@@ -397,6 +387,13 @@ class CharactersMixin:
                         attribute_name = re.sub('^.* ', '', bonus)
                         if attribute_name in attr_dict:
                             attr_dict[attribute_name] += int(modifier)
+                    elif pattern_percentage.match(bonus):
+                        modifier = re.sub(' .*$', '', bonus)
+                        modifier = re.sub('\+', '', modifier)
+                        attribute_name = re.sub(' Duration', 'Duration', bonus)
+                        attribute_name = re.sub('^.* ', '', attribute_name)
+                        if attribute_name in attr_dict:
+                            attr_dict[attribute_name] += int(modifier)
                     count += 1
 
         # Calculate base value
@@ -405,19 +402,22 @@ class CharactersMixin:
         attr_dict["Vitality"] += basevalue
         attr_dict["Toughness"] += basevalue
         attr_dict["Precision"] += basevalue
-
         # Mapping for old attribute names
         attr_dict["Concentration"] += attr_dict["BoonDuration"]
         attr_dict["Ferocity"] += attr_dict["CritDamage"]
         attr_dict["Expertise"] += attr_dict["ConditionDuration"]
-
         # Calculate derivative attributes
         # Reset to default after mapped to new attribute name
         attr_dict["CritDamage"] = 150 + round(attr_dict["Ferocity"] / 15, 2)
         attr_dict["BoonDuration"] = round(attr_dict["Concentration"] / 15, 2)
         attr_dict["ConditionDuration"] = round(attr_dict["Expertise"] / 15, 2)
+        # Base value of 1000 on lvl 80 doesn't get calculated, if below lvl 80 dont subtract it
+        if attr_dict["Precision"] < 1000:
+            base_prec = 0
+        else:
+            base_prec = 1000
         attr_dict["Critical Chance"] = 4 + round(
-            (attr_dict["Precision"] - 1000) / 21, 2)
+            (attr_dict["Precision"] - base_prec) / 21, 2)
         attr_dict["defense"] += attr_dict["Toughness"]
 
         ordered_list = ('Power', 'Toughness', 'defense', 'Vitality', 'Health',
