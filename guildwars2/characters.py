@@ -379,14 +379,7 @@ class CharactersMixin:
                     pattern_single = re.compile("^\+\d{1,} ")
                     pattern_all_stats = re.compile(".* [s,S]tats$")
                     # Regex deciding if it's a stat
-                    if pattern_single.match(bonus):
-                        # Regex deciding the attribute name + modifier
-                        modifier = re.sub(' .*$', '', bonus)
-                        modifier = re.sub('\+', '', modifier)
-                        attribute_name = re.sub('^.* ', '', bonus)
-                        if attribute_name in attr_dict:
-                            attr_dict[attribute_name] += int(modifier)
-                    elif pattern_all_stats.match(bonus):
+                    if pattern_all_stats.match(bonus):
                         modifier = re.sub(' .*$', '', bonus)
                         modifier = re.sub('\+', '', modifier)
                         attr_dict["Power"] += int(modifier)
@@ -395,6 +388,13 @@ class CharactersMixin:
                         attr_dict["Precision"] += int(modifier)
                         attr_dict["Ferocity"] += int(modifier)
                         attr_dict["ConditionDamage"] += int(modifier)
+                    elif pattern_single.match(bonus):
+                        # Regex deciding the attribute name + modifier
+                        modifier = re.sub(' .*$', '', bonus)
+                        modifier = re.sub('\+', '', modifier)
+                        attribute_name = re.sub('^.* ', '', bonus)
+                        if attribute_name in attr_dict:
+                            attr_dict[attribute_name] += int(modifier)
                     count += 1
 
         # Calculate base value
