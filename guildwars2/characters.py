@@ -427,7 +427,7 @@ class CharactersMixin:
                         'Expertise', 'ConditionDuration', 'Concentration',
                         'BoonDuration', 'AgonyResistance')
         for attribute in ordered_list:
-            embed.add_field(name=attribute, value=attr_dict["attribute"])
+            embed.add_field(name=attribute, value=attr_dict[attribute])
         try:
             await ctx.send(embed=embed)
         except discord.Forbidden:
