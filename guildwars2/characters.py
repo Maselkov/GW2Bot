@@ -394,9 +394,10 @@ class CharactersMixin:
                         attribute_name = re.sub('^.* ', '', attribute_name)
                         if attribute_name in attr_dict:
                             attr_dict[attribute_name] += int(modifier)
+                    # Amount of runes equipped
                     count += 1
 
-        # Calculate base value
+        # Calculate base value depending on char level
         basevalue = self.calcBaselvl(level, 0, lvl_dict)
         attr_dict["Power"] += basevalue
         attr_dict["Vitality"] += basevalue
@@ -425,10 +426,12 @@ class CharactersMixin:
                         'CritDamage', 'ConditionDamage', 'Healing',
                         'Expertise', 'ConditionDuration', 'Concentration',
                         'BoonDuration', 'AgonyResistance')
-        inline=False
+        # First one is not inline for layout purpose
+        inline = False
         for attribute in ordered_list:
-            embed.add_field(name=attribute, value=attr_dict[attribute], inline=inline)
-            inline=True
+            embed.add_field(
+                name=attribute, value=attr_dict[attribute], inline=inline)
+            inline = True
         try:
             await ctx.send(embed=embed)
         except discord.Forbidden:
