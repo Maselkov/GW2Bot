@@ -1,4 +1,5 @@
 import asyncio
+import collections
 import re
 import time
 
@@ -321,7 +322,20 @@ class DatabaseMixin:
                              *,
                              flags=[],
                              filters={},
-                             database="items"):  # TODO cleanup
+                             database="items",
+                             group_duplicates=False):  # TODO cleanup
+        def consolidate_duplicates(items):
+            unique_items = collections.OrderedDict()
+            for item in items:
+                item_tuple = item["name"], item["rarity"]
+                if item_tuple not in unique_items:
+                    unique_items[item_tuple] = []
+                unique_items[item_tuple].append(item["_id"])
+            unique_list = []
+            for k, v in unique_items.items():
+                unique_list.append({"name": k[0], "rarity": k[1], "ids": v})
+            return unique_list
+
         def check(m):
             if isinstance(destination, (discord.abc.User,
                                         discord.abc.PrivateChannel)):
@@ -380,6 +394,8 @@ class DatabaseMixin:
                 " " * (longest)), "-----|------{}|-------".format(
                     "-" * (longest))
         ]
+        if group_duplicates:
+            items = consolidate_duplicates(items)
         if number != 1:
             for c, m in enumerate(items, 1):
                 msg.append("  {} {}| {} {}| {}".format(c, " " * (

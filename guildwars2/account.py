@@ -314,8 +314,7 @@ class AccountMixin:
         if not self.can_embed_links(ctx):
             return await ctx.send("Need permission to embed links")
         await ctx.send(
-            "{.mention}, here are your raid bosses:".format(user),
-            embed=embed)
+            "{.mention}, here are your raid bosses:".format(user), embed=embed)
 
     @commands.command()
     @commands.cooldown(1, 5, BucketType.user)
@@ -326,7 +325,8 @@ class AccountMixin:
         """
         user = ctx.author
         scopes = ["inventories", "characters"]
-        choice = await self.itemname_to_id(ctx, item, user)
+        choice = await self.itemname_to_id(
+            ctx, item, user, group_duplicates=True)
         if not choice:
             ctx.command.reset_cooldown(ctx)
             return
@@ -344,7 +344,7 @@ class AccountMixin:
             return await self.error_handler(ctx, e)
 
         def check(item):
-            return item is not None and item["id"] == choice["_id"]
+            return item is not None and item["id"] in choice["ids"]
 
         storage_counts = OrderedDict()
         for k, v in storage_spaces.items():
