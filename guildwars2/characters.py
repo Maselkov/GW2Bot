@@ -284,7 +284,10 @@ class CharactersMixin:
             45: [75, 76],
             46: [77, 80]
         }
-        ignore_list = ['HelmAquatic', 'WeaponAquaticA', 'WeaponAquaticB', 'WeaponB1', 'WeaponB2']
+        ignore_list = [
+            'HelmAquatic', 'WeaponAquaticA', 'WeaponAquaticB', 'WeaponB1',
+            'WeaponB2'
+        ]
         attr_dict = {key: 0 for (key) in attr_list}
         runes = {}
         await ctx.trigger_typing()
@@ -304,7 +307,6 @@ class CharactersMixin:
         embed.set_footer(
             text="A level {} {} ".format(level, profession), icon_url=icon)
         eq = results["equipment"]
-        # TODO "+X to all stats" Runes
         # TODO Percentage runes
         # TODO sort embed
         # TODO Healingpower needs to be fixed
@@ -324,7 +326,8 @@ class CharactersMixin:
             elif "charges" not in piece:
                 if piece["slot"] not in ignore_list:
                     if "infix_upgrade" in item["details"]:
-                        attributes = item["details"]["infix_upgrade"]["attributes"]
+                        attributes = item["details"]["infix_upgrade"][
+                            "attributes"]
                         for attribute in attributes:
                             attr_dict[attribute["attribute"]] += attribute[
                                 "modifier"]
@@ -344,8 +347,8 @@ class CharactersMixin:
                         item_upgrade = await self.fetch_item(upgrade)
                         # Jewels and stuff
                         if "infix_upgrade" in item_upgrade["details"]:
-                            attributes = item_upgrade["details"]["infix_upgrade"][
-                                "attributes"]
+                            attributes = item_upgrade["details"][
+                                "infix_upgrade"]["attributes"]
                             for attribute in attributes:
                                 attr_dict[attribute["attribute"]] += attribute[
                                     "modifier"]
@@ -363,8 +366,8 @@ class CharactersMixin:
                     for infusion in infusions:
                         item_infusion = await self.fetch_item(infusion)
                         if "infix_upgrade" in item_infusion["details"]:
-                            attributes = item_infusion["details"]["infix_upgrade"][
-                                "attributes"]
+                            attributes = item_infusion["details"][
+                                "infix_upgrade"]["attributes"]
                             for attribute in attributes:
                                 attr_dict[attribute["attribute"]] += attribute[
                                     "modifier"]
@@ -411,14 +414,20 @@ class CharactersMixin:
 
         # Calculate derivative attributes
         # Reset to default after mapped to new attribute name
-        attr_dict["CritDamage"] = 150 + round(attr_dict["Ferocity"]/15, 2)
-        attr_dict["BoonDuration"] = round(attr_dict["Concentration"]/15, 2)
-        attr_dict["ConditionDuration"] = round(attr_dict["Expertise"]/15, 2)
-        attr_dict["Critical Chance"] = 4 + round((attr_dict["Precision"]-1000)/21, 2)
+        attr_dict["CritDamage"] = 150 + round(attr_dict["Ferocity"] / 15, 2)
+        attr_dict["BoonDuration"] = round(attr_dict["Concentration"] / 15, 2)
+        attr_dict["ConditionDuration"] = round(attr_dict["Expertise"] / 15, 2)
+        attr_dict["Critical Chance"] = 4 + round(
+            (attr_dict["Precision"] - 1000) / 21, 2)
         attr_dict["defense"] += attr_dict["Toughness"]
 
-        for k, v in attr_dict.items():
-            embed.add_field(name=k, value=v)
+        ordered_list = ('Power', 'Toughness', 'defense', 'Vitality', 'Health',
+                        'Precision', 'Critical Chance', 'Ferocity',
+                        'CritDamage', 'ConditionDamage', 'Healing',
+                        'Expertise', 'ConditionDuration', 'Concentration',
+                        'BoonDuration', 'AgonyResistance')
+        for attribute in ordered_list:
+            embed.add_field(name=attribute, value=attr_dict["attribute"])
         try:
             await ctx.send(embed=embed)
         except discord.Forbidden:
@@ -645,6 +654,7 @@ class CharactersMixin:
             acc_baselvl += 37
             return acc_baselvl
         else:
-            new_acc = acc_baselvl + self.search_lvl_to_increase(level, lvl_dict)
+            new_acc = acc_baselvl + self.search_lvl_to_increase(
+                level, lvl_dict)
             new_lvl = level - 1
             return self.calcBaselvl(new_lvl, new_acc, lvl_dict)
