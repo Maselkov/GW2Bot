@@ -258,6 +258,7 @@ class CharactersMixin:
             await ctx.send(second)
 
     @character.command(name="attributes")
+    @commands.cooldown(1, 10, BucketType.user)
     async def character_attributes(self, ctx, *, character: str):
         """Lists attributes of given character
 
@@ -481,7 +482,7 @@ class CharactersMixin:
         for attribute in ordered_list:
             attribute_sub = re.sub(r"(\w)([A-Z])", r"\1 \2", attribute)
             embed.add_field(
-                name=attribute_sub.capitalize(), value=attr_dict[attribute], inline=inline)
+                name=attribute_sub.title(), value=attr_dict[attribute], inline=inline)
             inline = True
         try:
             await ctx.send(embed=embed)
