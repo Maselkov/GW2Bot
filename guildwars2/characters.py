@@ -428,6 +428,7 @@ class CharactersMixin:
                     elif pattern_percentage.match(bonus):
                         modifier = re.sub(' .*$', '', bonus)
                         modifier = re.sub('\+', '', modifier)
+                        modifier = re.sub('%', '', modifier)
                         attribute_name = re.sub(' Duration', 'Duration', bonus)
                         attribute_name = re.sub('^.* ', '', attribute_name)
                         if attribute_name in attr_dict:
@@ -436,7 +437,7 @@ class CharactersMixin:
                     count += 1
 
         # Calculate base value depending on char level
-        basevalue = self.calcBaselvl(level, 0, lvl_dict)
+        basevalue = self.calc_base_lvl(level, 0, lvl_dict)
         attr_dict["Power"] += basevalue
         attr_dict["Vitality"] += basevalue
         attr_dict["Toughness"] += basevalue
@@ -448,8 +449,14 @@ class CharactersMixin:
         # Calculate derivative attributes
         # Reset to default after mapped to new attribute name
         attr_dict["CritDamage"] = 150 + round(attr_dict["Ferocity"] / 15, 2)
+        if attr_dict["CritDamage"] == 0:
+            attr_dict["CritDamage"] = int(attr_dict["CritDamage"])
         attr_dict["BoonDuration"] = round(attr_dict["Concentration"] / 15, 2)
+        if attr_dict["BoonDuration"] == 0:
+            attr_dict["BoonDuration"] = int(attr_dict["BoonDuration"])
         attr_dict["ConditionDuration"] = round(attr_dict["Expertise"] / 15, 2)
+        if attr_dict["ConditionDuration"] == 0:
+            attr_dict["ConditionDuration"] = int(attr_dict["ConditionDuration"])
         # Base value of 1000 on lvl 80 doesn't get calculated, if below lvl 80 dont subtract it
         if attr_dict["Precision"] < 1000:
             base_prec = 0
@@ -460,8 +467,8 @@ class CharactersMixin:
         attr_dict["defense"] += attr_dict["Toughness"]
 
         # Calculate base health
-        attr_dict["Health"] = self.calcBaseHealth(level, 0,
-                                                  profession_group[profession])
+        attr_dict["Health"] = self.calc_base_health(level, 0,
+                                                    profession_group[profession])
         attr_dict["Health"] += attr_dict["Vitality"] * 10
 
         ordered_list = ('Power', 'Toughness', 'defense', 'Vitality', 'Health',
@@ -472,8 +479,9 @@ class CharactersMixin:
         # First one is not inline for layout purpose
         inline = False
         for attribute in ordered_list:
+            attribute = re.sub(r"(\w)([A-Z])", r"\1 \2", attribute)
             embed.add_field(
-                name=attribute, value=attr_dict[attribute], inline=inline)
+                name=attribute.capitalize(), value=attr_dict[attribute], inline=inline)
             inline = True
         try:
             await ctx.send(embed=embed)
@@ -694,7 +702,7 @@ class CharactersMixin:
                 else:
                     return 0
 
-    def calcBaselvl(self, level: int, acc_baselvl: int, lvl_dict):
+    def calc_base_lvl(self, level: int, acc_baselvl: int, lvl_dict):
         # Recursive call of search_lvl_to_increase
         # Calculating the base primary attributes depending on char lvl
         if level == 1:
@@ -704,14 +712,14 @@ class CharactersMixin:
             new_acc = acc_baselvl + self.search_lvl_to_increase(
                 level, lvl_dict)
             new_lvl = level - 1
-            return self.calcBaselvl(new_lvl, new_acc, lvl_dict)
+            return self.calc_base_lvl(new_lvl, new_acc, lvl_dict)
 
     def search_lvl_to_health(self, level: int, health_dict):
         for increase, lvl in health_dict.items():
             if lvl[0] <= level <= lvl[1]:
                 return increase
 
-    def calcBaseHealth(self, level: int, acc_baselvl: int, health_dict):
+    def calc_base_health(self, level: int, acc_baselvl: int, health_dict):
         # Recursive call of search_lvl_to_health
         # Calculating the base health depending on char lvl
         if level == 1:
@@ -722,4 +730,4 @@ class CharactersMixin:
             new_acc = acc_baselvl + self.search_lvl_to_health(
                 level, health_dict)
             new_lvl = level - 1
-            return self.calcBaseHealth(new_lvl, new_acc, health_dict)
+            return self.calc_base_health(new_lvl, new_acc, health_dict)
