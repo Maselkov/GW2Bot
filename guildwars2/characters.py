@@ -479,9 +479,9 @@ class CharactersMixin:
         # First one is not inline for layout purpose
         inline = False
         for attribute in ordered_list:
-            attribute = re.sub(r"(\w)([A-Z])", r"\1 \2", attribute)
+            attribute_sub = re.sub(r"(\w)([A-Z])", r"\1 \2", attribute)
             embed.add_field(
-                name=attribute.capitalize(), value=attr_dict[attribute], inline=inline)
+                name=attribute_sub.capitalize(), value=attr_dict[attribute], inline=inline)
             inline = True
         try:
             await ctx.send(embed=embed)
