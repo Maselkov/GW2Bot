@@ -456,8 +456,10 @@ class CharactersMixin:
             attr_dict["Health"] = self.calcBaseHealth(level, 0, health_group1)
         elif profession in health_list2:
             attr_dict["Health"] = self.calcBaseHealth(level, 0, health_group2)
-        elif profession in health_list2:
+        elif profession in health_list3:
             attr_dict["Health"] = self.calcBaseHealth(level, 0, health_group3)
+        else:
+            await ctx.send("")
         attr_dict["Health"] += attr_dict["Vitality"] * 10
 
         ordered_list = ('Power', 'Toughness', 'defense', 'Vitality', 'Health',
