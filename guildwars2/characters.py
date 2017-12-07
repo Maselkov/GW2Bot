@@ -397,7 +397,7 @@ class CharactersMixin:
                                 attribute_name = bonus.title()
                                 attribute_name = re.sub(' Duration', 'Duration', attribute_name)
                                 attribute_name = re.sub('^.* ', '', attribute_name)
-                                if attribute_name.title() in attr_dict:
+                                if attribute_name in attr_dict:
                                     attr_dict[attribute_name] += int(modifier)
             # Infusions
             if "infusions" in piece:
