@@ -407,7 +407,7 @@ class CharactersMixin:
         # Reset old mapped attributes
         attr_dict["BoonDuration"] = 0
         attr_dict["CritDamage"] = 0
-        attr_dict["ConditionDuratio"] = 0
+        attr_dict["ConditionDuration"] = 0
 
         for rune, runecount in runes.items():
             rune_item = await self.fetch_item(rune)
