@@ -481,6 +481,7 @@ class CharactersMixin:
         inline = False
         for attribute in ordered_list:
             attribute_sub = re.sub(r"(\w)([A-Z])", r"\1 \2", attribute)
+            attribute_sub = re.sub('Crit ', 'Critical ', attribute_sub)
             embed.add_field(
                 name=attribute_sub.title(), value=attr_dict[attribute], inline=inline)
             inline = True
