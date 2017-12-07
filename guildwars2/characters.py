@@ -404,7 +404,11 @@ class CharactersMixin:
         attr_dict["Concentration"] += attr_dict["BoonDuration"]
         attr_dict["Ferocity"] += attr_dict["CritDamage"]
         attr_dict["Expertise"] += attr_dict["ConditionDuration"]
-        
+        # Reset old mapped attributes
+        attr_dict["BoonDuration"] = 0
+        attr_dict["CritDamage"] = 0
+        attr_dict["ConditionDuratio"] = 0
+
         for rune, runecount in runes.items():
             rune_item = await self.fetch_item(rune)
             bonuses = rune_item["details"]["bonuses"]
@@ -452,13 +456,13 @@ class CharactersMixin:
         attr_dict["Precision"] += basevalue
         # Calculate derivative attributes
         # Reset to default after mapped to new attribute name
-        attr_dict["CritDamage"] = 150 + round(attr_dict["Ferocity"] / 15, 2)
+        attr_dict["CritDamage"] += 150 + round(attr_dict["Ferocity"] / 15, 2)
         if attr_dict["CritDamage"] == 0:
             attr_dict["CritDamage"] = int(attr_dict["CritDamage"])
-        attr_dict["BoonDuration"] = round(attr_dict["Concentration"] / 15, 2)
+        attr_dict["BoonDuration"] += round(attr_dict["Concentration"] / 15, 2)
         if attr_dict["BoonDuration"] == 0:
             attr_dict["BoonDuration"] = int(attr_dict["BoonDuration"])
-        attr_dict["ConditionDuration"] = round(attr_dict["Expertise"] / 15, 2)
+        attr_dict["ConditionDuration"] += round(attr_dict["Expertise"] / 15, 2)
         if attr_dict["ConditionDuration"] == 0:
             attr_dict["ConditionDuration"] = int(attr_dict["ConditionDuration"])
         # Base value of 1000 on lvl 80 doesn't get calculated, if below lvl 80 dont subtract it
