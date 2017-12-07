@@ -368,6 +368,18 @@ class CharactersMixin:
                 if piece["slot"] not in ignore_list:
                     attr_dict['defense'] += item["details"]["defense"]
             # Get stats from item upgrades (runes ...)
+
+            # Mapping for old attribute names
+            attr_dict["Concentration"] += attr_dict["BoonDuration"]
+            attr_dict["Ferocity"] += attr_dict["CritDamage"]
+            attr_dict["Expertise"] += attr_dict["ConditionDuration"]
+            # Reset old mapped attributes
+            attr_dict["BoonDuration"] = 0
+            attr_dict["CritDamage"] = 0
+            attr_dict["ConditionDuration"] = 0
+
+        # Have to run again, because attributes from upgrades are named different
+        for piece in eq:
             if "upgrades" in piece:
                 if piece["slot"] not in ignore_list:
                     upgrades = piece["upgrades"]
@@ -397,6 +409,7 @@ class CharactersMixin:
                                 attribute_name = bonus.title()
                                 attribute_name = re.sub(' Duration', 'Duration', attribute_name)
                                 attribute_name = re.sub('^.* ', '', attribute_name)
+                                attribute_name = re.sub('\.', '', attribute_name)
                                 if attribute_name in attr_dict:
                                     attr_dict[attribute_name] += int(modifier)
             # Infusions
@@ -411,15 +424,6 @@ class CharactersMixin:
                             for attribute in attributes:
                                 attr_dict[attribute["attribute"]] += attribute[
                                     "modifier"]
-
-        # Mapping for old attribute names
-        attr_dict["Concentration"] += attr_dict["BoonDuration"]
-        attr_dict["Ferocity"] += attr_dict["CritDamage"]
-        attr_dict["Expertise"] += attr_dict["ConditionDuration"]
-        # Reset old mapped attributes
-        attr_dict["BoonDuration"] = 0
-        attr_dict["CritDamage"] = 0
-        attr_dict["ConditionDuration"] = 0
 
         for rune, runecount in runes.items():
             rune_item = await self.fetch_item(rune)
