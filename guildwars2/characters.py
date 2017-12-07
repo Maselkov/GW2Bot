@@ -288,6 +288,32 @@ class CharactersMixin:
             45: [75, 76],
             46: [77, 80]
         }
+        health_group1 = {
+            28: [1, 19],
+            70: [20, 39],
+            140: [40, 59],
+            210: [60, 79],
+            280: [80, 80]
+        }
+        health_group2 = {
+            18: [1, 19],
+            45: [20, 39],
+            90: [40, 59],
+            135: [60, 79],
+            180: [80, 80]
+        }
+        health_group3 = {
+            5: [1, 19],
+            12.5: [20, 39],
+            25: [40, 59],
+            37.5: [60, 79],
+            50: [80, 80]
+        }
+
+        health_list1 = ("warrior", "necromancer")
+        health_list2 = ("revenant", "engineer", "ranger", "mesmer")
+        health_list3 = ("guardian", "thief", "elementalist")
+
         ignore_list = [
             'HelmAquatic', 'WeaponAquaticA', 'WeaponAquaticB', 'WeaponB1',
             'WeaponB2'
@@ -424,6 +450,15 @@ class CharactersMixin:
         attr_dict["Critical Chance"] = 4 + round(
             (attr_dict["Precision"] - base_prec) / 21, 2)
         attr_dict["defense"] += attr_dict["Toughness"]
+
+        # Calculate base health
+        if profession in health_list1:
+            attr_dict["Health"] = self.calcBaseHealth(level, 0, health_group1)
+        elif profession in health_list2:
+            attr_dict["Health"] = self.calcBaseHealth(level, 0, health_group2)
+        elif profession in health_list2:
+            attr_dict["Health"] = self.calcBaseHealth(level, 0, health_group3)
+        attr_dict["Health"] += attr_dict["Vitality"] * 10
 
         ordered_list = ('Power', 'Toughness', 'defense', 'Vitality', 'Health',
                         'Precision', 'Critical Chance', 'Ferocity',
@@ -666,3 +701,21 @@ class CharactersMixin:
                 level, lvl_dict)
             new_lvl = level - 1
             return self.calcBaselvl(new_lvl, new_acc, lvl_dict)
+
+    def search_lvl_to_health(self, level: int, health_dict):
+        for increase, lvl in health_dict.items():
+            if lvl[0] <= level <= lvl[1]:
+                return increase
+
+    def calcBaseHealth(self, level: int, acc_baselvl: int, health_dict):
+        # Recursive call of search_lvl_to_health
+        # Calculating the base health depending on char lvl
+        if level == 1:
+            acc_baselvl += self.search_lvl_to_health(level, health_dict)
+            # Parse to int because of possible floats
+            return int(acc_baselvl)
+        else:
+            new_acc = acc_baselvl + self.search_lvl_to_health(
+                level, health_dict)
+            new_lvl = level - 1
+            return self.calcBaseHealth(new_lvl, new_acc, health_dict)
