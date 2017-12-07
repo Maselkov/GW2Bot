@@ -399,6 +399,12 @@ class CharactersMixin:
                             for attribute in attributes:
                                 attr_dict[attribute["attribute"]] += attribute[
                                     "modifier"]
+
+        # Mapping for old attribute names
+        attr_dict["Concentration"] += attr_dict["BoonDuration"]
+        attr_dict["Ferocity"] += attr_dict["CritDamage"]
+        attr_dict["Expertise"] += attr_dict["ConditionDuration"]
+        
         for rune, runecount in runes.items():
             rune_item = await self.fetch_item(rune)
             bonuses = rune_item["details"]["bonuses"]
@@ -444,10 +450,6 @@ class CharactersMixin:
         attr_dict["Vitality"] += basevalue
         attr_dict["Toughness"] += basevalue
         attr_dict["Precision"] += basevalue
-        # Mapping for old attribute names
-        attr_dict["Concentration"] += attr_dict["BoonDuration"]
-        attr_dict["Ferocity"] += attr_dict["CritDamage"]
-        attr_dict["Expertise"] += attr_dict["ConditionDuration"]
         # Calculate derivative attributes
         # Reset to default after mapped to new attribute name
         attr_dict["CritDamage"] = 150 + round(attr_dict["Ferocity"] / 15, 2)
