@@ -310,9 +310,17 @@ class CharactersMixin:
             50: [80, 80]
         }
 
-        health_list1 = ("warrior", "necromancer")
-        health_list2 = ("revenant", "engineer", "ranger", "mesmer")
-        health_list3 = ("guardian", "thief", "elementalist")
+        profession_group = {
+            "warrior": health_group1,
+            "necromancer": health_group1,
+            "revenant": health_group2,
+            "engineer": health_group2,
+            "ranger": health_group2,
+            "mesmer": health_group2,
+            "guardian": health_group3,
+            "thief": health_group3,
+            "elementalist": health_group3
+        }
 
         ignore_list = [
             'HelmAquatic', 'WeaponAquaticA', 'WeaponAquaticB', 'WeaponB1',
@@ -452,14 +460,8 @@ class CharactersMixin:
         attr_dict["defense"] += attr_dict["Toughness"]
 
         # Calculate base health
-        if profession in health_list1:
-            attr_dict["Health"] = self.calcBaseHealth(level, 0, health_group1)
-        elif profession in health_list2:
-            attr_dict["Health"] = self.calcBaseHealth(level, 0, health_group2)
-        elif profession in health_list3:
-            attr_dict["Health"] = self.calcBaseHealth(level, 0, health_group3)
-        else:
-            await ctx.send("")
+        attr_dict["Health"] = self.calcBaseHealth(level, 0,
+                                                  profession_group[profession])
         attr_dict["Health"] += attr_dict["Vitality"] * 10
 
         ordered_list = ('Power', 'Toughness', 'defense', 'Vitality', 'Health',
