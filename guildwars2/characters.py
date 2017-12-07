@@ -387,6 +387,17 @@ class CharactersMixin:
                                 runes[upgrade] += 1
                             else:
                                 runes[upgrade] = 1
+                        elif item_upgrade["details"]["type"] == "Sigil":
+                            pattern_percentage = re.compile("^\+\d{1,}% ")
+                            bonus = item_upgrade["details"]["infix_upgrade"]["buff"]["description"]
+                            if pattern_percentage.match(bonus):
+                                modifier = re.sub(' .*$', '', bonus)
+                                modifier = re.sub('\+', '', modifier)
+                                modifier = re.sub('%', '', modifier)
+                                attribute_name = re.sub(' Duration', 'Duration', bonus)
+                                attribute_name = re.sub('^.* ', '', attribute_name)
+                                if attribute_name in attr_dict:
+                                    attr_dict[attribute_name] += int(modifier)
             # Infusions
             if "infusions" in piece:
                 if piece["slot"] not in ignore_list:
