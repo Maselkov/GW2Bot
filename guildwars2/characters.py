@@ -341,7 +341,8 @@ class CharactersMixin:
         icon = self.gamedata["professions"][profession]["icon"]
         level = results["level"]
         color = int(color, 0)
-        embed = discord.Embed(description="Attributes", colour=color)
+        embed = discord.Embed(
+            description="Attributes of {0}".format(character), colour=color)
         embed.set_thumbnail(url=icon)
         embed.set_footer(
             text="A level {} {} ".format(level, profession), icon_url=icon)
@@ -367,8 +368,6 @@ class CharactersMixin:
             if "defense" in item["details"]:
                 if piece["slot"] not in ignore_list:
                     attr_dict['defense'] += item["details"]["defense"]
-            # Get stats from item upgrades (runes ...)
-
             # Mapping for old attribute names
             attr_dict["Concentration"] += attr_dict["BoonDuration"]
             attr_dict["Ferocity"] += attr_dict["CritDamage"]
@@ -378,7 +377,8 @@ class CharactersMixin:
             attr_dict["CritDamage"] = 0
             attr_dict["ConditionDuration"] = 0
 
-        # Have to run again, because attributes from upgrades are named different
+        # Have to run again through eq, because attributes from upgrades are named different
+        # Get stats from item upgrades (runes ...)
         for piece in eq:
             if "upgrades" in piece:
                 if piece["slot"] not in ignore_list:
@@ -401,15 +401,19 @@ class CharactersMixin:
                                 runes[upgrade] = 1
                         elif item_upgrade["details"]["type"] == "Sigil":
                             pattern_percentage = re.compile("^\+\d{1,}% ")
-                            bonus = item_upgrade["details"]["infix_upgrade"]["buff"]["description"]
+                            bonus = item_upgrade["details"]["infix_upgrade"][
+                                "buff"]["description"]
                             if pattern_percentage.match(bonus):
                                 modifier = re.sub(' .*$', '', bonus)
                                 modifier = re.sub('\+', '', modifier)
                                 modifier = re.sub('%', '', modifier)
                                 attribute_name = bonus.title()
-                                attribute_name = re.sub(' Duration', 'Duration', attribute_name)
-                                attribute_name = re.sub('^.* ', '', attribute_name)
-                                attribute_name = re.sub('\.', '', attribute_name)
+                                attribute_name = re.sub(
+                                    ' Duration', 'Duration', attribute_name)
+                                attribute_name = re.sub(
+                                    '^.* ', '', attribute_name)
+                                attribute_name = re.sub(
+                                    '\.', '', attribute_name)
                                 if attribute_name in attr_dict:
                                     attr_dict[attribute_name] += int(modifier)
             # Infusions
@@ -480,7 +484,8 @@ class CharactersMixin:
             attr_dict["BoonDuration"] = int(attr_dict["BoonDuration"])
         attr_dict["ConditionDuration"] += round(attr_dict["Expertise"] / 15, 2)
         if attr_dict["ConditionDuration"] == 0:
-            attr_dict["ConditionDuration"] = int(attr_dict["ConditionDuration"])
+            attr_dict["ConditionDuration"] = int(
+                attr_dict["ConditionDuration"])
         # Base value of 1000 on lvl 80 doesn't get calculated, if below lvl 80 dont subtract it
         if attr_dict["Precision"] < 1000:
             base_prec = 0
@@ -491,8 +496,8 @@ class CharactersMixin:
         attr_dict["defense"] += attr_dict["Toughness"]
 
         # Calculate base health
-        attr_dict["Health"] = self.calc_base_health(level, 0,
-                                                    profession_group[profession])
+        attr_dict["Health"] = self.calc_base_health(
+            level, 0, profession_group[profession])
         attr_dict["Health"] += attr_dict["Vitality"] * 10
 
         ordered_list = ('Power', 'Toughness', 'defense', 'Vitality', 'Health',
@@ -506,7 +511,9 @@ class CharactersMixin:
             attribute_sub = re.sub(r"(\w)([A-Z])", r"\1 \2", attribute)
             attribute_sub = re.sub('Crit ', 'Critical ', attribute_sub)
             embed.add_field(
-                name=attribute_sub.title(), value=attr_dict[attribute], inline=inline)
+                name=attribute_sub.title(),
+                value=attr_dict[attribute],
+                inline=inline)
             inline = True
         try:
             await ctx.send(embed=embed)
