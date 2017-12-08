@@ -476,7 +476,7 @@ class CharactersMixin:
         attr_dict["Precision"] += basevalue
         # Calculate derivative attributes
         # Reset to default after mapped to new attribute name
-        attr_dict["CritDamage"] += 150 + round(attr_dict["Ferocity"] / 15, 2)
+        attr_dict["CritDamage"] += round(150 + attr_dict["Ferocity"] / 15, 2)
         if attr_dict["CritDamage"] == 0:
             attr_dict["CritDamage"] = int(attr_dict["CritDamage"])
         attr_dict["BoonDuration"] += round(attr_dict["Concentration"] / 15, 2)
@@ -491,8 +491,8 @@ class CharactersMixin:
             base_prec = 0
         else:
             base_prec = 1000
-        attr_dict["Critical Chance"] = 4 + round(
-            (attr_dict["Precision"] - base_prec) / 21, 2)
+        attr_dict["Critical Chance"] = round(
+            4 + ((attr_dict["Precision"] - base_prec) / 21), 2)
         attr_dict["defense"] += attr_dict["Toughness"]
 
         # Calculate base health
