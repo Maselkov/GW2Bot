@@ -271,6 +271,7 @@ class CharactersMixin:
             'BoonDuration', 'ConditionDamage', 'Ferocity', 'CritDamage',
             'Healing', 'ConditionDuration', 'AgonyResistance'
         ]
+        percentage_list = ['Critical Chance', 'CritDamage', 'ConditionDuration', 'BoonDuration']
         lvl_dict = {
             7: [2, 10],
             10: [11, 20],
@@ -508,6 +509,8 @@ class CharactersMixin:
         # First one is not inline for layout purpose
         inline = False
         for attribute in ordered_list:
+            if attribute in percentage_list:
+                attr_dict[attribute] = '{0}%'.format(attr_dict[attribute])
             attribute_sub = re.sub(r"(\w)([A-Z])", r"\1 \2", attribute)
             attribute_sub = re.sub('Crit ', 'Critical ', attribute_sub)
             embed.add_field(
