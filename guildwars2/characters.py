@@ -1,3 +1,4 @@
+import collections
 import datetime
 
 import discord
@@ -50,15 +51,12 @@ class CharactersMixin:
             title = await self.get_title(results["title"])
         else:
             title = None
+        profession = await self.get_profession(results)
         gender = results["gender"]
-        profession = results["profession"].lower()
         race = results["race"].lower()
         guild = results["guild"]
-        color = self.gamedata["professions"][profession]["color"]
-        color = int(color, 0)
-        icon = self.gamedata["professions"][profession]["icon"]
-        data = discord.Embed(description=title, colour=color)
-        data.set_thumbnail(url=icon)
+        data = discord.Embed(description=title, colour=profession.color)
+        data.set_thumbnail(url=profession.icon)
         data.add_field(name="Created at", value=created)
         data.add_field(name="Played for", value=age)
         if guild is not None:
@@ -73,14 +71,12 @@ class CharactersMixin:
         data.add_field(name="Deaths", value=deaths)
         data.add_field(
             name="Deaths per hour", value=str(deathsperhour), inline=False)
-
         craft_list = self.get_crafting(results)
         if craft_list:
             data.add_field(name="Crafting", value="\n".join(craft_list))
-
         data.set_author(name=character)
         data.set_footer(text="A {} {} {}".format(gender.lower(), race,
-                                                 profession))
+                                                 profession.name.lower()))
         try:
             await ctx.send(embed=data)
         except discord.Forbidden:
@@ -101,11 +97,12 @@ class CharactersMixin:
             results = await self.call_api(endpoint, user, scopes)
         except APIError as e:
             return await self.error_handler(ctx, e)
-        output = "{.mention}, your characters: ```"
-        for x in results:
-            output += "\n" + x["name"] + " (" + x["profession"] + ")"
-        output += "```"
-        await ctx.send(output.format(user))
+        output = ["{.mention}, your characters: ```"]
+        for character in results:
+            profession = await self.get_profession(character)
+            output.append("{} ({})".format(character["name"], profession.name))
+        output.append("```")
+        await ctx.send("\n".join(output).format(user))
 
     @character.command(name="gear")
     @commands.cooldown(1, 10, BucketType.user)
@@ -176,12 +173,9 @@ class CharactersMixin:
                                 statid)
                         except:
                             gear[piece]["stat"] = ""
-        profession = results["profession"].lower()
+        profession = await self.get_profession(results)
         level = results["level"]
-        color = self.gamedata["professions"][profession]["color"]
-        icon = self.gamedata["professions"][profession]["icon"]
-        color = int(color, 0)
-        data = discord.Embed(description="Gear", colour=color)
+        data = discord.Embed(description="Gear", colour=profession.color)
         for piece in pieces:
             if gear[piece]["id"] is not None:
                 statname = gear[piece]["stat"]
@@ -197,7 +191,8 @@ class CharactersMixin:
                     inline=False)
         data.set_author(name=character)
         data.set_footer(
-            text="A level {} {} ".format(level, profession), icon_url=icon)
+            text="A level {} {} ".format(level, profession.name.lower()),
+            icon_url=profession.icon)
         try:
             await ctx.send(embed=data)
         except discord.Forbidden as e:
@@ -323,14 +318,11 @@ class CharactersMixin:
             await ctx.send("Need permission to embed links")
 
     async def build_embed(self, results, mode):
-        profession = results["profession"].lower()
+        profession = await self.get_profession(results, mode=mode)
         level = results["level"]
-        color = self.gamedata["professions"][profession]["color"]
-        icon = self.gamedata["professions"][profession]["icon"]
-        color = int(color, 0)
         specializations = results["specializations"][mode]
         embed = discord.Embed(
-            title="{} build".format(mode.upper()), color=color)
+            title="{} build".format(mode.upper()), color=profession.color)
         embed.set_author(name=results["name"])
         for spec in specializations:
             if spec is None:
@@ -352,7 +344,8 @@ class CharactersMixin:
                 embed.add_field(
                     name=spec_name, value="\n".join(traits), inline=False)
             embed.set_footer(
-                text="A level {} {} ".format(level, profession), icon_url=icon)
+                text="A level {} {} ".format(level, profession.name.lower()),
+                icon_url=profession.icon)
         return embed
 
     @character.command(name="togglepublic")
@@ -459,3 +452,29 @@ class CharactersMixin:
             discipline = crafting["discipline"]
             craft_list.append("Level {} {}".format(rating, discipline))
         return craft_list
+
+    async def get_profession(self, character, *, mode="pve"):
+        async def get_elite_spec(character):
+            spec = character["specializations"][mode][2]
+            if spec:
+                spec = await self.db.specializations.find_one({
+                    "_id": spec["id"]
+                })
+                if spec is None or not spec["elite"]:
+                    return None
+                return spec["name"]
+            return None
+
+        def get_icon_url(prof_name):
+            base_url = ("https://api.gw2bot.info/"
+                        "resources/professions/{}_icon.png")
+            return base_url.format(prof_name.replace(" ", "_").lower())
+
+        Profession = collections.namedtuple("Profession",
+                                            ["name", "icon", "color"])
+        color = discord.Color(
+            int(self.gamedata["professions"][character["profession"]
+                                             .lower()]["color"], 0))
+        name = await get_elite_spec(character) or character["profession"]
+        icon = get_icon_url(name)
+        return Profession(name, icon, color)
