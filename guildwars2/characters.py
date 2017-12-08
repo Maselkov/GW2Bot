@@ -271,7 +271,8 @@ class CharactersMixin:
             'BoonDuration', 'ConditionDamage', 'Ferocity', 'CritDamage',
             'Healing', 'ConditionDuration', 'AgonyResistance'
         ]
-        percentage_list = ['Critical Chance', 'CritDamage', 'ConditionDuration', 'BoonDuration']
+        percentage_list = ['Critical Chance', 'CritDamage', 'ConditionDuration',
+                           'BoonDuration']
         lvl_dict = {
             7: [2, 10],
             10: [11, 20],
