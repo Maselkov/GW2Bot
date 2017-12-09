@@ -334,12 +334,9 @@ class CharactersMixin:
         except APIError as e:
             return await self.error_handler(ctx, e)
         profession = await self.get_profession(results)
-        color = self.gamedata["professions"][profession]["color"]
-        icon = self.gamedata["professions"][profession]["icon"]
         level = results["level"]
-        color = int(color, 0)
         embed = discord.Embed(
-            description="Attributes of {0}".format(character), colour=color)
+            description="Attributes of {0}".format(character), colour=profession.color)
         embed.set_thumbnail(url=profession.icon)
         embed.set_footer(
             text="A level {} {} ".format(level, profession), icon_url=profession.icon)
