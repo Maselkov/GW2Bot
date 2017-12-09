@@ -259,6 +259,47 @@ class CharactersMixin:
 
         Required permissions: characters
         """
+        # Helper functions
+        def search_lvl_to_increase(level: int, lvl_dict):
+            for increase, lvl in lvl_dict.items():
+                if lvl[0] <= level <= lvl[1]:
+                    if level < 11:
+                        return increase
+                    elif level % 2 == 0:
+                        return increase
+                    else:
+                        return 0
+
+        def calc_base_lvl(level: int, acc_baselvl: int, lvl_dict):
+            # Recursive call of search_lvl_to_increase
+            # Calculating the base primary attributes depending on char lvl
+            if level == 1:
+                acc_baselvl += 37
+                return acc_baselvl
+            else:
+                new_acc = acc_baselvl + search_lvl_to_increase(
+                    level, lvl_dict)
+                new_lvl = level - 1
+                return calc_base_lvl(new_lvl, new_acc, lvl_dict)
+
+        def search_lvl_to_health(level: int, health_dict):
+            for increase, lvl in health_dict.items():
+                if lvl[0] <= level <= lvl[1]:
+                    return increase
+
+        def calc_base_health(level: int, acc_baselvl: int, health_dict):
+            # Recursive call of search_lvl_to_health
+            # Calculating the base health depending on char lvl
+            if level == 1:
+                acc_baselvl += search_lvl_to_health(level, health_dict)
+                # Parse to int because of possible floats
+                return int(acc_baselvl)
+            else:
+                new_acc = acc_baselvl + search_lvl_to_health(
+                    level, health_dict)
+                new_lvl = level - 1
+                return calc_base_health(new_lvl, new_acc, health_dict)
+
         character = character.title()
         attr_list = [
             'defense', 'Power', 'Vitality', 'Precision', 'Toughness',
@@ -718,45 +759,6 @@ class CharactersMixin:
             craft_list.append("Level {} {}".format(rating, discipline))
         return craft_list
 
-    def search_lvl_to_increase(self, level: int, lvl_dict):
-        for increase, lvl in lvl_dict.items():
-            if lvl[0] <= level <= lvl[1]:
-                if level < 11:
-                    return increase
-                elif level % 2 == 0:
-                    return increase
-                else:
-                    return 0
-
-    def calc_base_lvl(self, level: int, acc_baselvl: int, lvl_dict):
-        # Recursive call of search_lvl_to_increase
-        # Calculating the base primary attributes depending on char lvl
-        if level == 1:
-            acc_baselvl += 37
-            return acc_baselvl
-        else:
-            new_acc = acc_baselvl + self.search_lvl_to_increase(
-                level, lvl_dict)
-            new_lvl = level - 1
-            return self.calc_base_lvl(new_lvl, new_acc, lvl_dict)
-
-    def search_lvl_to_health(self, level: int, health_dict):
-        for increase, lvl in health_dict.items():
-            if lvl[0] <= level <= lvl[1]:
-                return increase
-
-    def calc_base_health(self, level: int, acc_baselvl: int, health_dict):
-        # Recursive call of search_lvl_to_health
-        # Calculating the base health depending on char lvl
-        if level == 1:
-            acc_baselvl += self.search_lvl_to_health(level, health_dict)
-            # Parse to int because of possible floats
-            return int(acc_baselvl)
-        else:
-            new_acc = acc_baselvl + self.search_lvl_to_health(
-                level, health_dict)
-            new_lvl = level - 1
-            return self.calc_base_health(new_lvl, new_acc, health_dict)
     async def get_profession(self, character, *, mode="pve"):
         async def get_elite_spec(character):
             spec = character["specializations"][mode][2]
