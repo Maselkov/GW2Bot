@@ -504,7 +504,7 @@ class CharactersMixin:
                     count += 1
 
         # Calculate base value depending on char level
-        basevalue = self.calc_base_lvl(level, 0, lvl_dict)
+        basevalue = calc_base_lvl(level, 0, lvl_dict)
         attr_dict["Power"] += basevalue
         attr_dict["Vitality"] += basevalue
         attr_dict["Toughness"] += basevalue
@@ -531,7 +531,7 @@ class CharactersMixin:
         attr_dict["defense"] += attr_dict["Toughness"]
 
         # Calculate base health
-        attr_dict["Health"] = self.calc_base_health(
+        attr_dict["Health"] = calc_base_health(
             level, 0, profession_group[results["profession"].lower()])
         attr_dict["Health"] += attr_dict["Vitality"] * 10
 
