@@ -333,16 +333,16 @@ class CharactersMixin:
             return await ctx.send("Invalid character name")
         except APIError as e:
             return await self.error_handler(ctx, e)
-        profession = results["profession"].lower()
+        profession = await self.get_profession(results)
         color = self.gamedata["professions"][profession]["color"]
         icon = self.gamedata["professions"][profession]["icon"]
         level = results["level"]
         color = int(color, 0)
         embed = discord.Embed(
             description="Attributes of {0}".format(character), colour=color)
-        embed.set_thumbnail(url=icon)
+        embed.set_thumbnail(url=profession.icon)
         embed.set_footer(
-            text="A level {} {} ".format(level, profession), icon_url=icon)
+            text="A level {} {} ".format(level, profession), icon_url=profession.icon)
         eq = results["equipment"]
         for piece in eq:
             item = await self.fetch_item(piece["id"])
