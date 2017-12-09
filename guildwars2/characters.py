@@ -491,7 +491,7 @@ class CharactersMixin:
 
         # Calculate base health
         attr_dict["Health"] = self.calc_base_health(
-            level, 0, profession_group[profession])
+            level, 0, profession_group[results["profession"].lower()])
         attr_dict["Health"] += attr_dict["Vitality"] * 10
 
         ordered_list = ('Power', 'Toughness', 'defense', 'Vitality', 'Health',
