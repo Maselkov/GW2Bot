@@ -339,7 +339,7 @@ class CharactersMixin:
             description="Attributes of {0}".format(character), colour=profession.color)
         embed.set_thumbnail(url=profession.icon)
         embed.set_footer(
-            text="A level {} {} ".format(level, profession), icon_url=profession.icon)
+            text="A level {} {} ".format(level, profession.name), icon_url=profession.icon)
         eq = results["equipment"]
         for piece in eq:
             item = await self.fetch_item(piece["id"])
