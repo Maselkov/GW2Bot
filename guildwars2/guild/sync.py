@@ -37,6 +37,8 @@ class SyncGuild:
             "sync.leader": None,
             "sync.setupdone": False,
             "sync.on": False,
+            "sync.guildrole": False,
+            "sync.name": None,
             "sync.gid": None
         }, self)
 
