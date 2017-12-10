@@ -177,7 +177,7 @@ class SyncGuild:
         await ctx.send(msg)
 
     @guildsync.command(name="guildrole")
-    async def sync_toggle(self, ctx, on_off: bool):
+    async def guildrole_toggle(self, ctx, on_off: bool):
         """Toggles guildrole on/off - does not wipe settings"""
         doc = await self.bot.database.get_guild(ctx.guild, self)
         guilddoc = doc["sync"]
@@ -235,11 +235,10 @@ class SyncGuild:
 
     async def add_member_to_role(self, role, member, guild):
         try:
-            results = await member.add_roles(
+            await member.add_roles(
                 role,
                 reason="GW2Bot Integration [$guildsync]"
             )
-            return results
         except discord.Forbidden:
             self.log.debug(
                 "Permissions error when trying to "
@@ -257,7 +256,7 @@ class SyncGuild:
         name = self.__class__.__name__
         guilddoc = doc["cogs"][name]["sync"]
         enabled = guilddoc.get("on", False)
-        guildrole = guilddoc["name"] if guilddoc.get("guildrole", False) else False
+        guildrole = guilddoc["name"] if guilddoc.get("guildrole", False) else None
         if not enabled:
             return
         guild = self.bot.get_guild(doc["_id"])
