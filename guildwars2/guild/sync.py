@@ -315,6 +315,8 @@ class SyncGuild:
                                           self)
         gw2members = await self.getmembers(leader, gid)
         rolelist = []
+        if guildrole:
+            guildrole = discord.utils.get(guild.roles, id=guilddoc["ranks"][guildrole])
         for role_id in newsaved.values():
             discordrole = discord.utils.get(guild.roles, id=role_id)
             rolelist.append(discordrole)
@@ -353,10 +355,8 @@ class SyncGuild:
                                         pass
                                 await self.add_member_to_role(desiredrole, member, guild)
                             if guildrole:
-                                desiredguildrole = discord.utils.get(
-                                    guild.roles, id=guilddoc["ranks"][guildrole])
-                                if desiredguildrole not in member.roles:
-                                    await self.add_member_to_role(desiredguildrole, member, guild)
+                                if guildrole not in member.roles:
+                                    await self.add_member_to_role(guildrole, member, guild)
                         except Exception as e:
                             self.log.debug(
                                 "Couldn't get the role object for {0} user "
