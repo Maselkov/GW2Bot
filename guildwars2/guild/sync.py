@@ -179,7 +179,7 @@ class SyncGuild:
 
     @guildsync.command(name="guildrole")
     async def guildrole_toggle(self, ctx, on_off: bool):
-        """Toggles guildrole on/off - does not wipe settings"""
+        """Toggles guildrole on/off. Adds a new role based on the guild tag (ie. [ANET]) for simpler channel management."""
         doc = await self.bot.database.get_guild(ctx.guild, self)
         guilddoc = doc["sync"]
         guild = self.bot.get_guild(doc["_id"])
