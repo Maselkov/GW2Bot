@@ -101,9 +101,10 @@ class SyncGuild:
             guild_id = guild_id[0]
             endpoints = [
                 "guild/{}/members".format(guild_id),
-                "guild/{}/ranks".format(guild_id)
+                "guild/{}/ranks".format(guild_id),
+                "guild/{}".format(guild_id)
             ]
-            results, ranks = await self.call_multiple(endpoints, ctx.author,
+            results, ranks, info = await self.call_multiple(endpoints, ctx.author,
                                                       scopes)
         except (IndexError, APINotFound):
             return await ctx.send("Invalid guild name")
@@ -133,7 +134,7 @@ class SyncGuild:
             "sync.setupdone": True,
             "sync.on": True,
             "sync.guildrole": False,
-            "sync.name": answer.content,
+            "sync.name": "[{0}]".format(info['tag']),
             "sync.gid": guild_id
         }, self)
         guidelines = (
