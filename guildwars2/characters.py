@@ -1,5 +1,6 @@
 import collections
 import datetime
+import re
 
 import discord
 from discord.ext import commands
@@ -250,6 +251,311 @@ class CharactersMixin:
             second = "```" + second
             await ctx.send(first.format(user))
             await ctx.send(second)
+
+    @character.command(name="attributes")
+    @commands.cooldown(1, 10, BucketType.user)
+    async def character_attributes(self, ctx, *, character: str):
+        """Lists attributes of given character
+
+        Required permissions: characters
+        """
+        # Helper functions
+        def search_lvl_to_increase(level: int, lvl_dict):
+            for increase, lvl in lvl_dict.items():
+                if lvl[0] <= level <= lvl[1]:
+                    if level < 11:
+                        return increase
+                    elif level % 2 == 0:
+                        return increase
+                    else:
+                        return 0
+
+        def calc_base_lvl(level: int, acc_baselvl: int, lvl_dict):
+            # Recursive call of search_lvl_to_increase
+            # Calculating the base primary attributes depending on char lvl
+            if level == 1:
+                acc_baselvl += 37
+                return acc_baselvl
+            else:
+                new_acc = acc_baselvl + search_lvl_to_increase(
+                    level, lvl_dict)
+                new_lvl = level - 1
+                return calc_base_lvl(new_lvl, new_acc, lvl_dict)
+
+        def search_lvl_to_health(level: int, health_dict):
+            for increase, lvl in health_dict.items():
+                if lvl[0] <= level <= lvl[1]:
+                    return increase
+
+        def calc_base_health(level: int, acc_baselvl: int, health_dict):
+            # Recursive call of search_lvl_to_health
+            # Calculating the base health depending on char lvl
+            if level == 1:
+                acc_baselvl += search_lvl_to_health(level, health_dict)
+                # Parse to int because of possible floats
+                return int(acc_baselvl)
+            else:
+                new_acc = acc_baselvl + search_lvl_to_health(
+                    level, health_dict)
+                new_lvl = level - 1
+                return calc_base_health(new_lvl, new_acc, health_dict)
+
+        character = character.title()
+        attr_list = [
+            'defense', 'Power', 'Vitality', 'Precision', 'Toughness',
+            'Critical Chance', 'Health', 'Concentration', 'Expertise',
+            'BoonDuration', 'ConditionDamage', 'Ferocity', 'CritDamage',
+            'Healing', 'ConditionDuration', 'AgonyResistance'
+        ]
+        percentage_list = ['Critical Chance', 'CritDamage', 'ConditionDuration',
+                           'BoonDuration']
+        lvl_dict = {
+            7: [2, 10],
+            10: [11, 20],
+            14: [21, 24],
+            15: [25, 26],
+            16: [27, 30],
+            20: [31, 40],
+            24: [41, 44],
+            25: [45, 46],
+            26: [47, 50],
+            30: [51, 60],
+            34: [61, 64],
+            35: [65, 66],
+            36: [67, 70],
+            44: [71, 74],
+            45: [75, 76],
+            46: [77, 80]
+        }
+        health_group1 = {
+            28: [1, 19],
+            70: [20, 39],
+            140: [40, 59],
+            210: [60, 79],
+            280: [80, 80]
+        }
+        health_group2 = {
+            18: [1, 19],
+            45: [20, 39],
+            90: [40, 59],
+            135: [60, 79],
+            180: [80, 80]
+        }
+        health_group3 = {
+            5: [1, 19],
+            12.5: [20, 39],
+            25: [40, 59],
+            37.5: [60, 79],
+            50: [80, 80]
+        }
+
+        profession_group = {
+            "warrior": health_group1,
+            "necromancer": health_group1,
+            "revenant": health_group2,
+            "engineer": health_group2,
+            "ranger": health_group2,
+            "mesmer": health_group2,
+            "guardian": health_group3,
+            "thief": health_group3,
+            "elementalist": health_group3
+        }
+
+        ignore_list = [
+            'HelmAquatic', 'WeaponAquaticA', 'WeaponAquaticB', 'WeaponB1',
+            'WeaponB2'
+        ]
+        attr_dict = {key: 0 for (key) in attr_list}
+        runes = {}
+        await ctx.trigger_typing()
+        try:
+            results = await self.get_character(ctx, character)
+        except APINotFound:
+            return await ctx.send("Invalid character name")
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+        profession = await self.get_profession(results)
+        level = results["level"]
+        embed = discord.Embed(
+            description="Attributes of {0}".format(character), colour=profession.color)
+        embed.set_thumbnail(url=profession.icon)
+        embed.set_footer(
+            text="A level {} {} ".format(level, profession.name), icon_url=profession.icon)
+        eq = results["equipment"]
+        for piece in eq:
+            item = await self.fetch_item(piece["id"])
+            # Gear with selectable values
+            if "stats" in piece:
+                if piece["slot"] not in ignore_list:
+                    attributes = piece["stats"]["attributes"]
+                    for attribute in attributes:
+                        attr_dict[attribute] += attributes[attribute]
+            # Gear with static values, except harvesting tools
+            elif "charges" not in piece:
+                if piece["slot"] not in ignore_list:
+                    if "infix_upgrade" in item["details"]:
+                        attributes = item["details"]["infix_upgrade"][
+                            "attributes"]
+                        for attribute in attributes:
+                            attr_dict[attribute["attribute"]] += attribute[
+                                "modifier"]
+            # Get armor rating
+            if "defense" in item["details"]:
+                if piece["slot"] not in ignore_list:
+                    attr_dict['defense'] += item["details"]["defense"]
+            # Mapping for old attribute names
+            attr_dict["Concentration"] += attr_dict["BoonDuration"]
+            attr_dict["Ferocity"] += attr_dict["CritDamage"]
+            attr_dict["Expertise"] += attr_dict["ConditionDuration"]
+            # Reset old mapped attributes
+            attr_dict["BoonDuration"] = 0
+            attr_dict["CritDamage"] = 0
+            attr_dict["ConditionDuration"] = 0
+
+        # Have to run again through eq, because attributes from upgrades are named different
+        # Get stats from item upgrades (runes ...)
+        for piece in eq:
+            if "upgrades" in piece:
+                if piece["slot"] not in ignore_list:
+                    upgrades = piece["upgrades"]
+                    for upgrade in upgrades:
+                        item_upgrade = await self.fetch_item(upgrade)
+                        # Jewels and stuff
+                        if "infix_upgrade" in item_upgrade["details"]:
+                            attributes = item_upgrade["details"][
+                                "infix_upgrade"]["attributes"]
+                            for attribute in attributes:
+                                attr_dict[attribute["attribute"]] += attribute[
+                                    "modifier"]
+                        # Runes
+                        if item_upgrade["details"]["type"] == "Rune":
+                            # Rune counter
+                            if upgrade in runes:
+                                runes[upgrade] += 1
+                            else:
+                                runes[upgrade] = 1
+                        elif item_upgrade["details"]["type"] == "Sigil":
+                            pattern_percentage = re.compile("^\+\d{1,}% ")
+                            bonus = item_upgrade["details"]["infix_upgrade"][
+                                "buff"]["description"]
+                            if pattern_percentage.match(bonus):
+                                modifier = re.sub(' .*$', '', bonus)
+                                modifier = re.sub('\+', '', modifier)
+                                modifier = re.sub('%', '', modifier)
+                                attribute_name = bonus.title()
+                                attribute_name = re.sub(
+                                    ' Duration', 'Duration', attribute_name)
+                                attribute_name = re.sub(
+                                    '^.* ', '', attribute_name)
+                                attribute_name = re.sub(
+                                    '\.', '', attribute_name)
+                                if attribute_name in attr_dict:
+                                    attr_dict[attribute_name] += int(modifier)
+            # Infusions
+            if "infusions" in piece:
+                if piece["slot"] not in ignore_list:
+                    infusions = piece["infusions"]
+                    for infusion in infusions:
+                        item_infusion = await self.fetch_item(infusion)
+                        if "infix_upgrade" in item_infusion["details"]:
+                            attributes = item_infusion["details"][
+                                "infix_upgrade"]["attributes"]
+                            for attribute in attributes:
+                                attr_dict[attribute["attribute"]] += attribute[
+                                    "modifier"]
+
+        for rune, runecount in runes.items():
+            rune_item = await self.fetch_item(rune)
+            bonuses = rune_item["details"]["bonuses"]
+            count = 0
+            for bonus in bonuses:
+                if count < runecount:
+                    pattern_single = re.compile("^\+\d{1,} ")
+                    pattern_all_stats = re.compile(".* [s,S]tats$")
+                    pattern_percentage = re.compile("^\+\d{1,}% ")
+                    # Regex deciding if it's a stat
+                    if pattern_all_stats.match(bonus):
+                        modifier = re.sub(' .*$', '', bonus)
+                        modifier = re.sub('\+', '', modifier)
+                        attr_dict["Power"] += int(modifier)
+                        attr_dict["Vitality"] += int(modifier)
+                        attr_dict["Toughness"] += int(modifier)
+                        attr_dict["Precision"] += int(modifier)
+                        attr_dict["Ferocity"] += int(modifier)
+                        attr_dict["Healing"] += int(modifier)
+                        attr_dict["ConditionDamage"] += int(modifier)
+                    elif pattern_single.match(bonus):
+                        # Regex deciding the attribute name + modifier
+                        modifier = re.sub(' .*$', '', bonus)
+                        modifier = re.sub('\+', '', modifier)
+                        attribute_name = re.sub(' Damage', 'Damage', bonus)
+                        attribute_name = re.sub('^.* ', '', attribute_name)
+                        if attribute_name in attr_dict:
+                            attr_dict[attribute_name] += int(modifier)
+                    elif pattern_percentage.match(bonus):
+                        modifier = re.sub(' .*$', '', bonus)
+                        modifier = re.sub('\+', '', modifier)
+                        modifier = re.sub('%', '', modifier)
+                        attribute_name = re.sub(' Duration', 'Duration', bonus)
+                        attribute_name = re.sub('^.* ', '', attribute_name)
+                        if attribute_name in attr_dict:
+                            attr_dict[attribute_name] += int(modifier)
+                    # Amount of runes equipped
+                    count += 1
+
+        # Calculate base value depending on char level
+        basevalue = calc_base_lvl(level, 0, lvl_dict)
+        attr_dict["Power"] += basevalue
+        attr_dict["Vitality"] += basevalue
+        attr_dict["Toughness"] += basevalue
+        attr_dict["Precision"] += basevalue
+        # Calculate derivative attributes
+        # Reset to default after mapped to new attribute name
+        attr_dict["CritDamage"] += round(150 + attr_dict["Ferocity"] / 15, 2)
+        if attr_dict["CritDamage"] == 0:
+            attr_dict["CritDamage"] = int(attr_dict["CritDamage"])
+        attr_dict["BoonDuration"] += round(attr_dict["Concentration"] / 15, 2)
+        if attr_dict["BoonDuration"] == 0:
+            attr_dict["BoonDuration"] = int(attr_dict["BoonDuration"])
+        attr_dict["ConditionDuration"] += round(attr_dict["Expertise"] / 15, 2)
+        if attr_dict["ConditionDuration"] == 0:
+            attr_dict["ConditionDuration"] = int(
+                attr_dict["ConditionDuration"])
+        # Base value of 1000 on lvl 80 doesn't get calculated, if below lvl 80 dont subtract it
+        if attr_dict["Precision"] < 1000:
+            base_prec = 0
+        else:
+            base_prec = 1000
+        attr_dict["Critical Chance"] = round(
+            4 + ((attr_dict["Precision"] - base_prec) / 21), 2)
+        attr_dict["defense"] += attr_dict["Toughness"]
+
+        # Calculate base health
+        attr_dict["Health"] = calc_base_health(
+            level, 0, profession_group[results["profession"].lower()])
+        attr_dict["Health"] += attr_dict["Vitality"] * 10
+
+        ordered_list = ('Power', 'Toughness', 'defense', 'Vitality', 'Health',
+                        'Precision', 'Critical Chance', 'Ferocity',
+                        'CritDamage', 'ConditionDamage', 'Healing',
+                        'Expertise', 'ConditionDuration', 'Concentration',
+                        'BoonDuration', 'AgonyResistance')
+        # First one is not inline for layout purpose
+        inline = False
+        for attribute in ordered_list:
+            if attribute in percentage_list:
+                attr_dict[attribute] = '{0}%'.format(attr_dict[attribute])
+            attribute_sub = re.sub(r"(\w)([A-Z])", r"\1 \2", attribute)
+            attribute_sub = re.sub('Crit ', 'Critical ', attribute_sub)
+            embed.add_field(
+                name=attribute_sub.title(),
+                value=attr_dict[attribute],
+                inline=inline)
+            inline = True
+        try:
+            await ctx.send(embed=embed)
+        except discord.Forbidden:
+            await ctx.send("Need permission to embed links")
 
     @character.command(name="build", aliases=["pvebuild"])
     @commands.cooldown(1, 10, BucketType.user)
