@@ -112,10 +112,6 @@ class WalletMixin:
             "count": 0,
             "id": 16,
             "name": "Guild Commendations"
-        }, {
-            "count": 0,
-            "id": 15,
-            "name": "Badges of Honor"
         }]
         for x in wallet:
             for curr in results:
@@ -258,7 +254,8 @@ class WalletMixin:
                 if curr["id"] == x["id"]:
                     x["count"] = curr["value"]
         accountname = doc["account_name"]
-        data = discord.Embed(description="Map currencies", colour=self.embed_color)
+        data = discord.Embed(
+            description="Map currencies", colour=self.embed_color)
         for x in wallet:
             if x["name"] == "Magnetite Shards":
                 data.add_field(name=x["name"], value=x["count"], inline=False)
