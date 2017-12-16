@@ -197,7 +197,7 @@ class SyncGuild:
             return
 
         # Find and create name if key doesn't exist.
-        if name not in guilddoc:
+        if "name" not in guilddoc:
             info = await self.call_api("guild/{0}".format(guilddoc["gid"]))
             guilddoc["name"] = "[{0}]".format(info['tag'])
             await self.bot.database.set_guild(guild,
