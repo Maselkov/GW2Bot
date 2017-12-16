@@ -37,6 +37,8 @@ class SyncGuild:
             "sync.leader": None,
             "sync.setupdone": False,
             "sync.on": False,
+            "sync.guildrole": False,
+            "sync.name": None,
             "sync.gid": None
         }, self)
 
@@ -99,9 +101,10 @@ class SyncGuild:
             guild_id = guild_id[0]
             endpoints = [
                 "guild/{}/members".format(guild_id),
-                "guild/{}/ranks".format(guild_id)
+                "guild/{}/ranks".format(guild_id),
+                "guild/{}".format(guild_id)
             ]
-            results, ranks = await self.call_multiple(endpoints, ctx.author,
+            results, ranks, info = await self.call_multiple(endpoints, ctx.author,
                                                       scopes)
         except (IndexError, APINotFound):
             return await ctx.send("Invalid guild name")
@@ -130,6 +133,8 @@ class SyncGuild:
             "sync.leader": ctx.author.id,
             "sync.setupdone": True,
             "sync.on": True,
+            "sync.guildrole": False,
+            "sync.name": "[{0}]".format(info['tag']),
             "sync.gid": guild_id
         }, self)
         guidelines = (
@@ -172,6 +177,40 @@ class SyncGuild:
             msg = ("Synchronization disabled.")
         await ctx.send(msg)
 
+    @guildsync.command(name="guildrole")
+    async def guildrole_toggle(self, ctx, on_off: bool):
+        """Toggles guildrole on/off. Adds a new role based on the guild tag (ie. [ANET]) for simpler channel management."""
+        doc = await self.bot.database.get_guild(ctx.guild, self)
+        guilddoc = doc["sync"]
+        guild = self.bot.get_guild(doc["_id"])
+        enabled = self.sync_enabled(doc)
+        if not enabled:
+            await ctx.send(
+                "You need to run setup before you can toggle the guild role.")
+            return
+        await self.bot.database.set_guild(ctx.guild, {"sync.guildrole": on_off}, self)
+        if on_off:
+            # Create role if not enabled already.
+            if not guilddoc["guildrole"]:
+                try:
+                    role = await ctx.guild.create_role(
+                        name=guilddoc["name"],
+                        reason="GW2Bot Sync Role [$guildsync]",
+                        color=discord.Color(self.embed_color))
+                    guilddoc["ranks"][guilddoc["name"]] = role.id
+                except discord.Forbidden:
+                    return await ctx.send(
+                        "Couldn't create role {0}".format(guilddoc["name"]))
+                await self.bot.database.set_guild(guild, {"sync.ranks": guilddoc["ranks"]},
+                                            self)
+            msg = ("Guild role enabled and created. Guild sync needs to run for members to be synced to the role.")
+        else:
+            #Force sync
+            doc = await self.bot.database.get_guild(ctx.guild)
+            await self.sync_guild_ranks(doc)
+            msg = ("Guild role disabled and cleared.")
+        await ctx.send(msg)
+
     @guildsync.command(name="now")
     @commands.cooldown(1, 60, BucketType.user)
     async def sync_now(self, ctx):
@@ -195,10 +234,30 @@ class SyncGuild:
         except Exception as e:
             return None
 
+    async def add_member_to_role(self, role, member, guild):
+        try:
+            await member.add_roles(
+                role,
+                reason="GW2Bot Integration [$guildsync]"
+            )
+        except discord.Forbidden:
+            self.log.debug(
+                "Permissions error when trying to "
+                "give {0} role to {1} user "
+                "in {2} server.".format(
+                    role.name, member.name,
+                    guild.name))
+            return None
+        except AttributeError:
+            # role no longer exists - deleted?
+            return None
+
+
     async def sync_guild_ranks(self, doc, initial=False):
         name = self.__class__.__name__
         guilddoc = doc["cogs"][name]["sync"]
         enabled = guilddoc.get("on", False)
+        guildrole = guilddoc["name"] if guilddoc.get("guildrole", False) else None
         if not enabled:
             return
         guild = self.bot.get_guild(doc["_id"])
@@ -221,6 +280,9 @@ class SyncGuild:
             ranks = await self.call_api(endpoint, leader, scopes)
         except APIError:
             return
+        #Add guildrole to allowed ranks
+        if guildrole:
+            ranks.append({'id' : guildrole})
         for rank in ranks:
             try:
                 discordrole = discord.utils.get(
@@ -254,6 +316,8 @@ class SyncGuild:
                                           self)
         gw2members = await self.getmembers(leader, gid)
         rolelist = []
+        if guildrole:
+            guildrole = discord.utils.get(guild.roles, id=guilddoc["ranks"][guildrole])
         for role_id in newsaved.values():
             discordrole = discord.utils.get(guild.roles, id=role_id)
             rolelist.append(discordrole)
@@ -290,21 +354,10 @@ class SyncGuild:
                                     except AttributeError:
                                         # role no longer exists - deleted?
                                         pass
-                                try:
-                                    await member.add_roles(
-                                        desiredrole,
-                                        reason="GW2Bot Integration [$guildsync]"
-                                    )
-                                except discord.Forbidden:
-                                    self.log.debug(
-                                        "Permissions error when trying to "
-                                        "give {0} role to {1} user "
-                                        "in {2} server.".format(
-                                            desiredrole.name, member.name,
-                                            guild.name))
-                                except AttributeError:
-                                    # role no longer exists - deleted?
-                                    pass
+                                await self.add_member_to_role(desiredrole, member, guild)
+                            if guildrole:
+                                if guildrole not in member.roles:
+                                    await self.add_member_to_role(guildrole, member, guild)
                         except Exception as e:
                             self.log.debug(
                                 "Couldn't get the role object for {0} user "
