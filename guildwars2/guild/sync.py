@@ -195,6 +195,14 @@ class SyncGuild:
             await ctx.send(
                 "You need to run setup before you can toggle the guild role.")
             return
+
+        # Find and create name if key doesn't exist.
+        if "name" not in guilddoc:
+            info = await self.call_api("guild/{0}".format(guilddoc["gid"]))
+            guilddoc["name"] = "[{0}]".format(info['tag'])
+            await self.bot.database.set_guild(guild,
+                                               {"sync.name": guilddoc["name"]}, self)
+
         await self.bot.database.set_guild(ctx.guild,
                                           {"sync.guildrole": on_off}, self)
         if on_off:
