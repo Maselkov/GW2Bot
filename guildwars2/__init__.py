@@ -90,7 +90,7 @@ def setup(bot):
     tasks = (cog.game_update_checker, cog.daily_checker, cog.news_checker,
              cog.gem_tracker, cog.world_population_checker,
              cog.guild_synchronizer, cog.boss_notifier,
-             cog.forced_account_names)
+             cog.forced_account_names, cog.guild_motd_checker)
     for task in tasks:
         cog.tasks.append(loop.create_task(task()))
     bot.add_cog(cog)

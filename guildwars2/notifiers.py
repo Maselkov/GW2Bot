@@ -713,3 +713,19 @@ class NotiifiersMixin:
                     "Exception during forced names: ", exc_info=e)
                 await asyncio.sleep(300)
                 continue
+
+    async def guild_motd_checker(self):
+        while self is self.bot.get_cog("GuildWars2"):
+            try:
+                await self.send_motd_notifs()
+                await asyncio.sleep(30)
+                await self.cache_endpoint("guild", True)
+            except asyncio.CancelledError:
+                self.log.info("Motdtracker terminated")
+            except Exception as e:
+                self.log.exception("Exception during motdnotifs: ", exc_info=e)
+                await asyncio.sleep(30)
+                continue
+    
+    async def send_motd_notifs(self):
+        print("hi")
