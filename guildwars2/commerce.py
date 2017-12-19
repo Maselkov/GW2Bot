@@ -46,13 +46,8 @@ class CommerceMixin:
         results = results[:20]  # Only display 20 most recent transactions
         item_id = ""
         dup_item = {}
-        transactions = {}
         # Collect listed items
         for result in results:
-            if result["item_id"] not in transactions:
-                transactions[result["item_id"]] = result["quantity"]
-            else:
-                transactions[result["item_id"]] += result["quantity"]
             item_id += str(result["item_id"]) + ","
             if result["item_id"] not in dup_item:
                 dup_item[result["item_id"]] = len(dup_item)
