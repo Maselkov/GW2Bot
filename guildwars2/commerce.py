@@ -46,11 +46,13 @@ class CommerceMixin:
         results = results[:20]  # Only display 20 most recent transactions
         item_id = ""
         dup_item = {}
-        itemlist = []
+        transactions = {}
         # Collect listed items
         for result in results:
-            itemdoc = await self.fetch_item(result["item_id"])
-            itemlist.append(itemdoc)
+            if result["item_id"] not in transactions:
+                transactions[result["item_id"]] = result["quantity"]
+            else:
+                transactions[result["item_id"]] += result["quantity"]
             item_id += str(result["item_id"]) + ","
             if result["item_id"] not in dup_item:
                 dup_item[result["item_id"]] = len(dup_item)
@@ -64,12 +66,13 @@ class CommerceMixin:
                                   "transactions".format(user))
         except APIError as e:
             return await self.error_handler(ctx, e)
+
         for result in results:
-            # Store data about transaction
             index = dup_item[result["item_id"]]
-            quantity = result["quantity"]
             price = result["price"]
-            item_name = itemlist[index]["name"]
+            itemdoc = await self.fetch_item(result["item_id"])
+            quantity = transactions[result["item_id"]]
+            item_name = itemdoc["name"]
             offers = listings[index][state]
             max_price = offers[0]["unit_price"]
             undercuts = 0
@@ -87,6 +90,7 @@ class CommerceMixin:
                     self.gold_to_coins(price),
                     self.gold_to_coins(max_price), undercuts),
                 inline=False)
+
         try:
             await ctx.send(embed=data)
         except discord.HTTPException:
