@@ -71,7 +71,7 @@ class CommerceMixin:
             index = dup_item[result["item_id"]]
             price = result["price"]
             itemdoc = await self.fetch_item(result["item_id"])
-            quantity = transactions[result["item_id"]]
+            quantity = result["quantity"]
             item_name = itemdoc["name"]
             offers = listings[index][state]
             max_price = offers[0]["unit_price"]
