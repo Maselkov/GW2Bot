@@ -78,12 +78,16 @@ class CommerceMixin:
                 undercuts += offer["listings"]
             undercuts = "· Undercuts: {}".format(
                 undercuts) if undercuts else ""
+            if quantity == 1:
+                total = 0
+            else:
+                total = self.gold_to_coins(quantity * price)
             data.add_field(
                 name=item_name,
                 value="{} x {} - Total: {}\nMax. offer: {} {}".format(
                     quantity,
                     self.gold_to_coins(price),
-                    self.gold_to_coins(quantity * price),
+                    total,
                     self.gold_to_coins(max_price), undercuts),
                 inline=False)
 
