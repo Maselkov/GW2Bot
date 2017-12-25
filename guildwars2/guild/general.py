@@ -181,27 +181,25 @@ class GeneralGuild:
         Required permissions: guilds and in game permissions"""
         state = log_type.lower()
         member_list = ["invited", "joined", "invite_declined"]
-        if state == "stash" or state == "treasury" or state == "members":
-            try:
-                guild = await self.get_guild(ctx, guild_name=guild_name)
-                if not guild:
-                    raise BadArgument
-                guild_id = guild["id"]
-                guild_name = guild["name"]
-                endpoint = "guild/{0}/log/".format(guild_id)
-                log = await self.call_api(endpoint, ctx.author, ["guilds"])
-            except (IndexError, APINotFound):
-                return await ctx.send("Invalid guild name")
-            except APIForbidden:
-                return await ctx.send(
-                    "You don't have enough permissions in game to "
-                    "use this command")
-            except APIError as e:
-                return await self.error_handler(ctx, e)
-        else:
+        if state not in ("stash", "treasury", "members"):
+            return await self.bot.send_cmd_help(ctx)
+        try:
+            guild = await self.get_guild(ctx, guild_name=guild_name)
+            if not guild:
+                raise BadArgument
+            guild_id = guild["id"]
+            guild_name = guild["name"]
+            endpoint = "guild/{0}/log/".format(guild_id)
+            log = await self.call_api(endpoint, ctx.author, ["guilds"])
+        except (IndexError, APINotFound):
+            return await ctx.send("Invalid guild name")
+        except APIForbidden:
             return await ctx.send(
-                "{0.mention}, Please us either 'stash' or 'treasury' as parameter".
-                    format(ctx.author))
+                "You don't have enough permissions in game to "
+                "use this command")
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+
         data = discord.Embed(description="{0} Log".format(state.capitalize()), colour=self.embed_color)
         data.set_author(name=guild_name.title())
         counter = 0
