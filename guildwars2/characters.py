@@ -38,8 +38,9 @@ class CharactersMixin:
         await ctx.trigger_typing()
         character = character.title()
         endpoint = "characters/" + character.replace(" ", "%20")
+        scopes = ["characters", "builds"]
         try:
-            results = await self.call_api(endpoint, ctx.author, ["characters"])
+            results = await self.call_api(endpoint, ctx.author, scopes)
         except APINotFound:
             return await ctx.send("Invalid character name")
         except APIError as e:
@@ -91,7 +92,7 @@ class CharactersMixin:
         Required permissions: characters
         """
         user = ctx.author
-        scopes = ["characters"]
+        scopes = ["characters", "builds"]
         endpoint = "characters?page=0"
         await ctx.trigger_typing()
         try:
