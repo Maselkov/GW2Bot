@@ -86,8 +86,7 @@ class CommerceMixin:
                 name=item_name,
                 value="{} x {}{}\nMax. offer: {} {}".format(
                     quantity,
-                    self.gold_to_coins(price),
-                    total,
+                    self.gold_to_coins(price), total,
                     self.gold_to_coins(max_price), undercuts),
                 inline=False)
 

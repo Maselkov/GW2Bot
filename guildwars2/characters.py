@@ -259,6 +259,7 @@ class CharactersMixin:
 
         Required permissions: characters
         """
+
         # Helper functions
         def search_lvl_to_increase(level: int, lvl_dict):
             for increase, lvl in lvl_dict.items():
@@ -277,8 +278,7 @@ class CharactersMixin:
                 acc_baselvl += 37
                 return acc_baselvl
             else:
-                new_acc = acc_baselvl + search_lvl_to_increase(
-                    level, lvl_dict)
+                new_acc = acc_baselvl + search_lvl_to_increase(level, lvl_dict)
                 new_lvl = level - 1
                 return calc_base_lvl(new_lvl, new_acc, lvl_dict)
 
@@ -307,8 +307,10 @@ class CharactersMixin:
             'BoonDuration', 'ConditionDamage', 'Ferocity', 'CritDamage',
             'Healing', 'ConditionDuration', 'AgonyResistance'
         ]
-        percentage_list = ['Critical Chance', 'CritDamage', 'ConditionDuration',
-                           'BoonDuration']
+        percentage_list = [
+            'Critical Chance', 'CritDamage', 'ConditionDuration',
+            'BoonDuration'
+        ]
         lvl_dict = {
             7: [2, 10],
             10: [11, 20],
@@ -377,10 +379,12 @@ class CharactersMixin:
         profession = await self.get_profession(results)
         level = results["level"]
         embed = discord.Embed(
-            description="Attributes of {0}".format(character), colour=profession.color)
+            description="Attributes of {0}".format(character),
+            colour=profession.color)
         embed.set_thumbnail(url=profession.icon)
         embed.set_footer(
-            text="A level {} {} ".format(level, profession.name), icon_url=profession.icon)
+            text="A level {} {} ".format(level, profession.name),
+            icon_url=profession.icon)
         eq = results["equipment"]
         for piece in eq:
             item = await self.fetch_item(piece["id"])
@@ -412,7 +416,8 @@ class CharactersMixin:
             attr_dict["CritDamage"] = 0
             attr_dict["ConditionDuration"] = 0
 
-        # Have to run again through eq, because attributes from upgrades are named different
+        # Have to run again through eq, because attributes
+        # from upgrades are named different
         # Get stats from item upgrades (runes ...)
         for piece in eq:
             if "upgrades" in piece:
@@ -521,7 +526,8 @@ class CharactersMixin:
         if attr_dict["ConditionDuration"] == 0:
             attr_dict["ConditionDuration"] = int(
                 attr_dict["ConditionDuration"])
-        # Base value of 1000 on lvl 80 doesn't get calculated, if below lvl 80 dont subtract it
+        # Base value of 1000 on lvl 80 doesn't get calculated,
+        # if below lvl 80 dont subtract it
         if attr_dict["Precision"] < 1000:
             base_prec = 0
         else:
