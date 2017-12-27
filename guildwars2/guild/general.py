@@ -180,7 +180,7 @@ class GeneralGuild:
         """Get log of last 20 entries of stash/treasury/members
         Required permissions: guilds and in game permissions"""
         state = log_type.lower()
-        member_list = ["invited", "joined", "invite_declined"]
+        member_list = ["invited", "joined", "invite_declined", "rank_change", "kick"]
         if state not in ("stash", "treasury", "members"):
             return await self.bot.send_cmd_help(ctx)
         try:
@@ -271,13 +271,21 @@ class GeneralGuild:
                     elif entry["type"] == "rank_change":
                         old_rank = entry["old_rank"]
                         new_rank = entry["new_rank"]
-                        changed_by = entry["changed_by"]
-                        data.add_field(
-                            name=timedate,
-                            value="{} has changed"
-                            " the role of {} from {} to {}.".format(
-                                changed_by, user, old_rank, new_rank),
-                            inline=False)
+                        if "changed_by" in entry:
+                            changed_by = entry["changed_by"]
+                            data.add_field(
+                                name=timedate,
+                                value="{} has changed"
+                                " the role of {} from {} to {}.".format(
+                                    changed_by, user, old_rank, new_rank),
+                                inline=False)
+                        else:
+                            data.add_field(
+                                name=timedate,
+                                value="{} changed his"
+                                " role from {} to {}.".format(
+                                    user, old_rank, new_rank),
+                                inline=False)
                     counter += 1
         if counter == 0:
             return await ctx.send("No {} log entries yet for {}".format(
