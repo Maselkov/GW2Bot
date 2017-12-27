@@ -13,7 +13,7 @@ class SyncGuild:
     @commands.group(name="guildsync")
     async def guildsync(self, ctx):
         """In game guild rank to discord roles synchronization commands
-        This group of commands allows you to set up a link between your ingame roster and discord.
+        This grou= allows you to set up a link between your ingame roster and discord.
         When enabled, new roles will be created for each of your ingame ranks,
         and ingame members are periodically synced to have the
         correct role in discord."""
@@ -200,8 +200,8 @@ class SyncGuild:
         if "name" not in guilddoc:
             info = await self.call_api("guild/{0}".format(guilddoc["gid"]))
             guilddoc["name"] = "[{0}]".format(info['tag'])
-            await self.bot.database.set_guild(guild,
-                                               {"sync.name": guilddoc["name"]}, self)
+            await self.bot.database.set_guild(
+                guild, {"sync.name": guilddoc["name"]}, self)
 
         await self.bot.database.set_guild(ctx.guild,
                                           {"sync.guildrole": on_off}, self)

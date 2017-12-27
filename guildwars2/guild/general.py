@@ -180,7 +180,9 @@ class GeneralGuild:
         """Get log of last 20 entries of stash/treasury/members
         Required permissions: guilds and in game permissions"""
         state = log_type.lower()
-        member_list = ["invited", "joined", "invite_declined", "rank_change", "kick"]
+        member_list = [
+            "invited", "joined", "invite_declined", "rank_change", "kick"
+        ]
         if state not in ("stash", "treasury", "members"):
             return await self.bot.send_cmd_help(ctx)
         try:
