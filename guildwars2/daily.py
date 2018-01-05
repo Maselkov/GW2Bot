@@ -79,7 +79,10 @@ class DailyMixin:
         embed = discord.Embed(title="Dailies", color=self.embed_color)
         dailies = doc["cache"]["dailies"]
         for category in categories:
-            value = "\n".join(dailies[category])
+            if category == "psna" and datetime.datetime.utcnow().hour >= 8:
+                value = "\n".join(dailies["psna_later"])
+            else:
+                value = "\n".join(dailies[category])
             if category == "psna_later":
                 category = "psna in 8 hours"
             embed.add_field(name=category.upper(), value=value, inline=False)
