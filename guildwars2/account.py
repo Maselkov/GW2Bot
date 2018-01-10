@@ -440,7 +440,7 @@ class AccountMixin:
 
         def readable_id(_id):
             _id = _id.split("_")
-            dont_capitalize = ("of", "the")
+            dont_capitalize = ("of", "the", "in")
             return " ".join([
                 x.capitalize() if x not in dont_capitalize else x for x in _id
             ])
