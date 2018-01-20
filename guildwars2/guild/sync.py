@@ -387,25 +387,18 @@ class SyncGuild:
                            format(guild.name))
 
     async def guild_synchronizer(self):
-        while self is self.bot.get_cog("GuildWars2"):
+        cursor = self.bot.database.get_guilds_cursor({
+            "sync.on":
+            True,
+            "sync.setupdone":
+            True
+        }, self)
+        async for doc in cursor:
             try:
-                cursor = self.bot.database.get_guilds_cursor({
-                    "sync.on":
-                    True,
-                    "sync.setupdone":
-                    True
-                }, self)
-                async for doc in cursor:
-                    try:
-                        await self.sync_guild_ranks(doc)
-                    except:
-                        pass
-                    await asyncio.sleep(5)
-                await asyncio.sleep(60)
-            except asyncio.CancelledError:
-                self.log.info("Guildsync terminated")
-            except Exception as e:
-                self.log.exception("Exception during guildsync: ", exc_info=e)
+                await self.sync_guild_ranks(doc)
+            except:
+                pass
+            await asyncio.sleep(5)
 
     def sync_enabled(self, doc):
         try:
