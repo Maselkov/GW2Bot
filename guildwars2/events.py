@@ -147,6 +147,8 @@ class EventsMixin:
         await ctx.send("```markdown\n" + output + "```")
 
     async def get_timezone(self, guild):
+        if not guild:
+            return UTC_TZ
         doc = await self.bot.database.get_guild(guild, self)
         if not doc:
             return UTC_TZ
