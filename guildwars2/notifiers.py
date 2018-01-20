@@ -1,5 +1,7 @@
 import asyncio
 import datetime
+import html
+import re
 import xml.etree.ElementTree as et
 
 import discord
@@ -246,6 +248,25 @@ class NotiifiersMixin:
             msg = ("Update notifier disabled")
         await ctx.send(msg)
 
+    @commands.cooldown(1, 5, BucketType.guild)
+    @updatenotifier.command(name="mention", usage="<mention type>")
+    async def updatenotifier_mention(self, ctx, mention_type):
+        """Change the type of mention to be included with update notifier
+
+        Possible values:
+        none
+        here
+        everyone
+        """
+        valid_types = "none", "here", "everyone"
+        mention_type = mention_type.lower()
+        if mention_type not in valid_types:
+            return await self.bot.send_cmd_help(ctx)
+        guild = ctx.guild
+        await self.bot.database.set_guild(
+            guild, {"updates.mention": mention_type}, self)
+        await ctx.send("Mention type set")
+
     @commands.group()
     @commands.guild_only()
     @commands.has_permissions(manage_guild=True)
@@ -301,33 +322,73 @@ class NotiifiersMixin:
             msg = ("Boss notifier disabled")
         await ctx.send(msg)
 
-    async def get_patchnotes(self):
-        def get_short_patchnotes(soup):
-            message = soup.find_all(class_="Message")[-1].get_text()
-            message = "```{}```".format(message)
-            if len(message) > 1000:
-                return ""
-            return message
+    async def update_notification(self, new_build):
+        def get_short_patchnotes(body, url):
+            if len(body) < 1000:
+                return body
+            return body[:1000] + "... [Read more]({})".format(url)
+
+        async def get_page(url):
+            async with self.session.get(url + ".json") as r:
+                return await r.json()
+
+        def patchnotes_embed(embed, notes):
+            notes = "\n".join(html.unescape(notes).splitlines())
+            notes = re.sub('#{5} ', '**', notes)
+            notes = re.sub('(\*{2}.*)', r'\1**', notes)
+            notes = re.sub('\*{4}', '**', notes)
+            headers = re.findall('#{4}.*', notes, re.MULTILINE)
+            values = re.split('#{4}.*', notes)
+            counter = 0
+            if headers:
+                for header in headers:
+                    counter += 1
+                    header = re.sub("#{4} ", "", header)
+                    values[counter] = re.sub("\n\n", "\n", values[counter])
+                    embed.add_field(name=header, value=values[counter])
+            else:
+                embed.description = notes
+            return embed
 
         base_url = "https://en-forum.guildwars2.com"
-        url_updates = base_url + "/categories/game-release-notes"
-        async with self.session.get(url_updates) as r:
-            results = await r.text()
-        soup = BeautifulSoup(results, 'html.parser')
-        post = soup.find(class_="Title")
-        link = post["href"]
+        url_category = base_url + "/categories/game-release-notes"
+        category = await get_page(url_category)
+        category = category["Category"]
+        last_discussion = category["LastDiscussionID"]
+        url_topic = base_url + "/discussion/{}".format(last_discussion)
         patch_notes = ""
-        try:
-            async with self.session.get(link) as r:
-                results = await r.text()
-            soup = BeautifulSoup(results, 'html.parser')
-            patch_notes = get_short_patchnotes(soup)
-            new_link = soup.find_all(class_="Permalink")[-1].get('href')
-            if new_link != link:
-                link = base_url + new_link
-        except:
-            pass
-        return "\nUpdate notes: <{}>{}".format(link, patch_notes)
+        title = "GW2 has just updated"
+        try:  # Playing it safe in case forums die or something
+            topic_result = await get_page(url_topic)
+            topic = topic_result["Discussion"]
+            last_comment = topic["LastCommentID"]
+            if not last_comment:
+                comment_url = url_topic
+                body = topic["Body"]
+            else:
+                comment_url = url_topic + "#Comment_{}".format(last_comment)
+                for comment in topic_result["Comments"]:
+                    if comment["CommentID"] == last_comment:
+                        body = comment["Body"]
+                        break
+                else:
+                    raise Exception("Comment not found")
+            patch_notes = get_short_patchnotes(body, comment_url)
+            url_topic = comment_url
+            title = topic["Name"]
+        except Exception as e:
+            self.log.exception(e)
+        embed = discord.Embed(
+            title="**{}**".format(title),
+            url=url_topic,
+            color=self.embed_color)
+        if patch_notes:
+            embed = patchnotes_embed(embed, patch_notes)
+        embed.set_footer(text="Build: {}".format(new_build))
+        text_version = ("@here Guild Wars 2 has just updated! "
+                        "New build: {} Update notes: <{}>\n{}".format(
+                            new_build, url_topic, patch_notes))
+        return embed, text_version
 
     async def check_news(self):
         doc = await self.bot.database.get_cog_config(self)
@@ -501,15 +562,16 @@ class NotiifiersMixin:
 
     async def send_update_notifs(self):
         try:
-            name = self.__class__.__name__
-            try:
-                patchnotes = await self.get_patchnotes()
-            except:
-                patchnotes = ""
             doc = await self.bot.database.get_cog_config(self)
             build = doc["cache"]["build"]
-            message = ("@here Guild Wars 2 has just updated! New build: "
-                       "`{}`{}".format(build, patchnotes))
+            name = self.__class__.__name__
+            embed_available = False
+            try:
+                embed, text = await self.update_notification(build)
+                embed_available = True
+            except:
+                text = ("Guild Wars 2 has just updated! New build: {}".format(
+                    build))
             cursor = self.bot.database.get_guilds_cursor({
                 "updates.on": True,
                 "updates.channel": {
@@ -520,7 +582,18 @@ class NotiifiersMixin:
             async for doc in cursor:
                 try:
                     guild = doc["cogs"][name]["updates"]
-                    await self.bot.get_channel(guild["channel"]).send(message)
+                    mention = guild.get("mention", "here")
+                    if mention == "none":
+                        mention = ""
+                    else:
+                        mention = "@{} ".format(mention)
+                    channel = self.bot.get_channel(guild["channel"])
+                    if (channel.permissions_for(channel.guild.me).embed_links
+                            and embed_available):
+                        message = mention + "Guild Wars 2 has just updated!"
+                        await channel.send(message, embed=embed)
+                    else:
+                        await channel.send(text)
                     sent += 1
                 except:
                     pass
@@ -529,155 +602,88 @@ class NotiifiersMixin:
             self.log.exception(e)
 
     async def daily_checker(self):
-        while self is self.bot.get_cog("GuildWars2"):
-            try:
-                if await self.check_day():
-                    await asyncio.sleep(300)
-                    if not self.bot.available:
-                        await asyncio.sleep(360)
-                    await self.cache_dailies()
-                    await self.send_daily_notifs()
-                await asyncio.sleep(60)
-            except asyncio.CancelledError:
-                self.log.info("Daily checker terminated")
-            except Exception as e:
-                self.log.exception(e)
-                await asyncio.sleep(60)
-                continue
+        if await self.check_day():
+            await asyncio.sleep(300)
+            if not self.bot.available:
+                await asyncio.sleep(360)
+            await self.cache_dailies()
+            await self.send_daily_notifs()
 
     async def news_checker(self):
-        while self is self.bot.get_cog("GuildWars2"):
-            try:
-                to_post = await self.check_news()
-                if to_post:
-                    embeds = []
-                    for item in to_post:
-                        embeds.append(self.news_embed(item))
-                    await self.send_news(embeds)
-                await asyncio.sleep(300)
-            except asyncio.CancelledError:
-                self.log.info("News checker terminated")
-            except Exception as e:
-                self.log.exception(e)
-                await asyncio.sleep(300)
-                continue
+        to_post = await self.check_news()
+        if to_post:
+            embeds = []
+            for item in to_post:
+                embeds.append(self.news_embed(item))
+            await self.send_news(embeds)
 
     async def game_update_checker(self):
-        while self is self.bot.get_cog("GuildWars2"):
-            try:
-                if await self.check_build():
-                    await self.send_update_notifs()
-                    await self.rebuild_database()
-                await asyncio.sleep(60)
-            except asyncio.CancelledError:
-                self.log.info("Update checker temrinated")
-            except Exception as e:
-                self.log.exception(e)
-                await asyncio.sleep(60)
-                continue
+        if await self.check_build():
+            await self.send_update_notifs()
+            await self.rebuild_database()
 
-    async def set_account_names(self):
-        cursor = self.bot.database.get_guilds_cursor({
-            "force_account_names":
-            True
+    async def gem_tracker(self):
+        name = self.__class__.__name__
+        cost = await self.get_gem_price()
+        cost_coins = self.gold_to_coins(cost)
+        cursor = self.bot.database.get_users_cursor({
+            "gemtrack": {
+                "$ne": None
+            }
         }, self)
         async for doc in cursor:
             try:
-                guild = self.bot.get_guild(doc["_id"])
-                await self.force_guild_account_names(guild)
+                user_price = doc["cogs"][name]["gemtrack"]
+                if cost < user_price:
+                    user = await self.bot.get_user_info(doc["_id"])
+                    user_price = self.gold_to_coins(user_price)
+                    msg = ("Hey, {.mention}! You asked to be notified "
+                           "when 400 gems were cheaper than {}. Guess "
+                           "what? They're now only "
+                           "{}!".format(user, user_price, cost_coins))
+                    await user.send(msg)
+                    await self.bot.database.set_user(user, {"gemtrack": None},
+                                                     self)
             except:
                 pass
 
-    async def gem_tracker(self):
-        while self is self.bot.get_cog("GuildWars2"):
-            try:
-                name = self.__class__.__name__
-                cost = await self.get_gem_price()
-                cost_coins = self.gold_to_coins(cost)
-                cursor = self.bot.database.get_users_cursor({
-                    "gemtrack": {
-                        "$ne": None
-                    }
-                }, self)
-                async for doc in cursor:
-                    try:
-                        user_price = doc["cogs"][name]["gemtrack"]
-                        if cost < user_price:
-                            user = await self.bot.get_user_info(doc["_id"])
-                            user_price = self.gold_to_coins(user_price)
-                            msg = ("Hey, {.mention}! You asked to be notified "
-                                   "when 400 gems were cheaper than {}. Guess "
-                                   "what? They're now only "
-                                   "{}!".format(user, user_price, cost_coins))
-                            await user.send(msg)
-                            await self.bot.database.set_user(
-                                user, {"gemtrack": None}, self)
-                    except:
-                        pass
-                await asyncio.sleep(150)
-            except asyncio.CancelledError:
-                self.log.info("Gem tracker terminated")
-            except Exception as e:
-                self.log.exception("Exception during gemtracker: ", exc_info=e)
-                await asyncio.sleep(150)
-
     async def boss_notifier(self):
-        while self is self.bot.get_cog("GuildWars2"):
+        name = self.__class__.__name__
+        boss = self.get_upcoming_bosses(1)[0]
+        await asyncio.sleep(boss["diff"].total_seconds() + 1)
+        cursor = self.bot.database.get_guilds_cursor({
+            "bossnotifs.on": True,
+            "bossnotifs.channel": {
+                "$ne": None
+            }
+        }, self)
+        async for doc in cursor:
             try:
-                name = self.__class__.__name__
-                boss = self.get_upcoming_bosses(1)[0]
-                await asyncio.sleep(boss["diff"].total_seconds() + 1)
-                cursor = self.bot.database.get_guilds_cursor({
-                    "bossnotifs.on":
-                    True,
-                    "bossnotifs.channel": {
-                        "$ne": None
-                    }
-                }, self)
-                async for doc in cursor:
-                    try:
-                        doc = doc["cogs"][name]["bossnotifs"]
-                        timezone = doc.get("timezone")
-                        bosses = self.get_upcoming_bosses(2)
-                        embed = self.schedule_embed(bosses)
-                        channel = self.bot.get_channel(doc["channel"])
-                        try:
-                            message = await channel.send(embed=embed)
-                        except discord.Forbidden:
-                            message = await channel.send(
-                                "Need permission to "
-                                "embed links in order "
-                                "to send boss "
-                                "notifs!")
-                            continue
-                        await self.bot.database.set_guild(
-                            channel.guild, {"bossnotifs.message": message.id},
-                            self)
-                        old_message = doc.get("message")
-                        if old_message:
-                            to_delete = await channel.get_message(old_message)
-                            await to_delete.delete()
-                    except:
-                        pass
-            except asyncio.CancelledError:
-                self.log.info("Boss notifier terminated")
-            except Exception as e:
-                self.log.exception(e)
-                await asyncio.sleep(300)
-                continue
+                doc = doc["cogs"][name]["bossnotifs"]
+                channel = self.bot.get_channel(doc["channel"])
+                timezone = await self.get_timezone(channel.guild)
+                embed = self.schedule_embed(2, timezone=timezone)
+                try:
+                    message = await channel.send(embed=embed)
+                except discord.Forbidden:
+                    message = await channel.send("Need permission to "
+                                                 "embed links in order "
+                                                 "to send boss "
+                                                 "notifs!")
+                    continue
+                await self.bot.database.set_guild(
+                    channel.guild, {"bossnotifs.message": message.id}, self)
+                old_message = doc.get("message")
+                if old_message:
+                    to_delete = await channel.get_message(old_message)
+                    await to_delete.delete()
+            except:
+                pass
 
     async def world_population_checker(self):
-        while self is self.bot.get_cog("GuildWars2"):
-            try:
-                await self.send_population_notifs()
-                await asyncio.sleep(300)
-                await self.cache_endpoint("worlds", True)
-            except asyncio.CancelledError:
-                self.log.info("Worldtracker terminated")
-            except Exception as e:
-                self.log.exception("Exception during popnotifs: ", exc_info=e)
-                await asyncio.sleep(300)
-                continue
+        await self.send_population_notifs()
+        await asyncio.sleep(300)
+        await self.cache_endpoint("worlds", True)
 
     async def send_population_notifs(self):
         async for world in self.db.worlds.find({
@@ -702,14 +708,13 @@ class NotiifiersMixin:
                     pass
 
     async def forced_account_names(self):
-        while self is self.bot.get_cog("GuildWars2"):
+        cursor = self.bot.database.get_guilds_cursor({
+            "force_account_names":
+            True
+        }, self)
+        async for doc in cursor:
             try:
-                await self.set_account_names()
-                await asyncio.sleep(300)
-            except asyncio.CancelledError:
-                self.log.info("FAC terminated")
-            except Exception as e:
-                self.log.exception(
-                    "Exception during forced names: ", exc_info=e)
-                await asyncio.sleep(300)
-                continue
+                guild = self.bot.get_guild(doc["_id"])
+                await self.force_guild_account_names(guild)
+            except:
+                pass
