@@ -50,7 +50,7 @@ class GuildManageMixin:
                        "bot cannot change nicknames for roles above the bot.")
 
     @guild_manage.command(name="timezone", usage="<offset from UTC>")
-    @commands.has_permissions(manage_nicknames=True)
+    @commands.has_permissions(manage_guild=True)
     async def guild_manage_timezone(self, ctx, offset: int):
         """Change the timezone bot will use in this server.
         Affects various commands
