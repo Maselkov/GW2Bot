@@ -3,12 +3,15 @@ import datetime
 import discord
 from discord.ext import commands
 
+UTC_TZ = datetime.timezone.utc
+
 
 class EventsMixin:
     @commands.command(aliases=["eventtimer", "eventtimers"])
     async def et(self, ctx):
         """The event timer. Shows upcoming world bosses."""
-        embed = self.schedule_embed(self.get_upcoming_bosses())
+        tz = await self.get_timezone(ctx.guild)
+        embed = self.schedule_embed(timezone=tz)
         try:
             await ctx.send(embed=embed)
         except:
@@ -24,8 +27,8 @@ class EventsMixin:
             for boss in normal:
                 increment = datetime.timedelta(
                     hours=boss["interval"] * counter)
-                time = (datetime.datetime(1, 1, 1, *boss["start_time"]) +
-                        increment)
+                time = (datetime.datetime(
+                    1, 1, 1, *boss["start_time"], tzinfo=UTC_TZ) + increment)
                 if time.day != 1:
                     continue
                 output = {
@@ -48,9 +51,9 @@ class EventsMixin:
             key=
             lambda t: datetime.datetime.strptime(t["time"], "%H:%M:%S").time())
 
-    def get_upcoming_bosses(self, limit=8, *, timezone=None):
+    def get_upcoming_bosses(self, limit=8, *, timezone=UTC_TZ):
         upcoming_bosses = []
-        time = datetime.datetime.utcnow()
+        time = datetime.datetime.now(UTC_TZ)
         counter = 0
         day = 0
         done = False
@@ -62,12 +65,14 @@ class EventsMixin:
                 boss_time = datetime.datetime.strptime(boss["time"],
                                                        "%H:%M:%S")
                 boss_time = boss_time.replace(
-                    year=time.year, month=time.month,
-                    day=time.day) + datetime.timedelta(days=day)
+                    year=time.year,
+                    month=time.month,
+                    day=time.day,
+                    tzinfo=UTC_TZ) + datetime.timedelta(days=day)
                 if time < boss_time:
                     output = {
                         "name": boss["name"],
-                        "time": str(boss_time.time()),
+                        "time": str(boss_time.astimezone(tz=timezone).time()),
                         "waypoint": boss["waypoint"],
                         "diff": boss_time - time
                     }
@@ -76,7 +81,8 @@ class EventsMixin:
             day += 1
         return upcoming_bosses
 
-    def schedule_embed(self, schedule):
+    def schedule_embed(self, limit=8, *, timezone=UTC_TZ):
+        schedule = self.get_upcoming_bosses(limit, timezone=timezone)
         data = discord.Embed(
             title="Upcoming world bosses", color=self.embed_color)
         for boss in schedule:
@@ -87,7 +93,7 @@ class EventsMixin:
                                        self.format_timedelta(boss["diff"])),
                 value=value,
                 inline=False)
-        data.set_footer(text="All times are for UTC.")
+        data.set_footer(text="Timezone: {}".format(timezone.tzname(None)))
         return data
 
     def format_timedelta(self, td):
@@ -139,3 +145,13 @@ class EventsMixin:
                     break
             output = output + "\n"
         await ctx.send("```markdown\n" + output + "```")
+
+    async def get_timezone(self, guild):
+        doc = await self.bot.database.get_guild(guild, self)
+        if not doc:
+            return UTC_TZ
+        tz = doc.get("timezone")
+        if tz:
+            offset = datetime.timedelta(hours=tz)
+            tz = datetime.timezone(offset)
+        return tz or UTC_TZ
