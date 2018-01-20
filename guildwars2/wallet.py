@@ -40,7 +40,7 @@ class WalletMixin:
         if not cid:
             await ctx.send("Invalid currency. See `[p]wallet currencies`")
             return
-        data = discord.Embed(description="Currency", colour=self.embed_color)
+        data = discord.Embed(description=desc, colour=self.embed_color)
         try:
             endpoint = "account/wallet"
             wallet = await self.call_api(endpoint, ctx.author, ["wallet"])
@@ -53,7 +53,6 @@ class WalletMixin:
         except:
             pass
         data.set_thumbnail(url=icon)
-        data.add_field(name="Description", value=desc, inline=False)
         data.set_author(name=currency.title())
         try:
             await ctx.send(embed=data)
