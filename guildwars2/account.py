@@ -384,10 +384,12 @@ class AccountMixin:
                 total += v
                 output.append("{} {} | {}".format(k.upper(), " " * (
                     longest - len(k)), v))
-        output.append(
-            "--------{}------".format("-" * (longest - len("location") + 2)))
+        output.append("--------{}------".format("-" * (longest - 10)))
         output.append("TOTAL:{}{}".format(" " * (longest - 2), total))
-        await ctx.send("```ml\n" + "\n".join(output) + "```")
+        message = (
+            "{.mention}, search results for `{}`:\n```ml\n{}\n```".format(
+                user, choice["name"], "\n".join(output)))
+        await ctx.send(message)
 
     @commands.command()
     @commands.cooldown(1, 10, BucketType.user)
