@@ -1,31 +1,49 @@
 {
   "professions": {
     "elementalist": {
-      "color": "0xDC423E"
+      "color": "0xDC423E",
+      "icon": "https://wiki.guildwars2.com/images/a/a0/Elementalist_tango_icon_200px.png",
+      "name": "Elementalist"
     },
     "engineer": {
-      "color": "0x87581D"
+      "color": "0x87581D",
+      "icon": "https://wiki.guildwars2.com/images/2/2f/Engineer_tango_icon_200px.png",
+      "name": "Engineer"
     },
     "guardian": {
-      "color": "0x186885"
+      "color": "0x186885",
+      "icon": "https://wiki.guildwars2.com/images/6/6c/Guardian_tango_icon_200px.png",
+      "name": "Guardian"
     },
     "mesmer": {
-      "color": "0x69278A"
+      "color": "0x69278A",
+      "icon": "https://wiki.guildwars2.com/images/7/73/Mesmer_tango_icon_200px.png",
+      "name": "Mesmer"
     },
     "necromancer": {
-      "color": "0x2C9D5D"
+      "color": "0x2C9D5D",
+      "icon": "https://wiki.guildwars2.com/images/c/cd/Necromancer_tango_icon_200px.png",
+      "name": "Necromancer"
     },
     "ranger": {
-      "color": "0x67A833"
+      "color": "0x67A833",
+      "icon": "https://wiki.guildwars2.com/images/5/51/Ranger_tango_icon_200px.png",
+      "name": "Necromancer"
     },
     "revenant": {
-      "color": "0xA66356"
+      "color": "0xA66356",
+      "icon": "https://wiki.guildwars2.com/images/a/a8/Revenant_tango_icon_200px.png",
+      "name": "Revenant"
     },
     "thief": {
-      "color": "0x974550"
+      "color": "0x974550",
+      "icon": "https://wiki.guildwars2.com/images/1/19/Thief_tango_icon_200px.png",
+      "name": "Thief"
     },
     "warrior": {
-      "color": "0xCAAA2A"
+      "color": "0xCAAA2A",
+      "icon": "https://wiki.guildwars2.com/images/d/db/Warrior_tango_icon_200px.png",
+      "name": "Warrior"
     }
   },
   "items": {
