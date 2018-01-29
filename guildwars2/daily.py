@@ -28,6 +28,7 @@ class DailyMixin:
     async def daily_wvw(self, ctx):
         """Show today's WvW dailies"""
         embed = await self.daily_embed(["wvw"])
+        embed.set_thumbnail(url="https://render.guildwars2.com/file/2BBA251A24A2C1A0A305D561580449AF5B55F54F/338457.png")
         try:
             await ctx.send(embed=embed)
         except discord.Forbidden:
@@ -39,6 +40,7 @@ class DailyMixin:
         """Show today's PvP dailies"""
         embed = await self.daily_embed(["pvp"])
         try:
+            embed.set_thumbnail(url="https://render.guildwars2.com/file/FE01AF14D91F52A1EF2B22FE0A552B9EE2E4C3F6/511340.png")
             await ctx.send(embed=embed)
         except discord.Forbidden:
             await ctx.send("Need permission to embed links")
@@ -49,6 +51,7 @@ class DailyMixin:
         """Show today's fractal dailies"""
         embed = await self.daily_embed(["fractals"])
         try:
+            embed.set_thumbnail(url="https://render.guildwars2.com/file/4A5834E40CDC6A0C44085B1F697565002D71CD47/1228226.png")
             await ctx.send(embed=embed)
         except discord.Forbidden:
             await ctx.send("Need permission to embed links")
@@ -58,6 +61,7 @@ class DailyMixin:
     async def daily_psna(self, ctx):
         """Show today's Pact Supply Network Agent locations"""
         embed = await self.daily_embed(["psna"])
+        embed.set_thumbnail(url="https://wiki.guildwars2.com/images/1/14/Daily_Achievement.png")
         try:
             await ctx.send(embed=embed)
         except discord.Forbidden:
@@ -69,6 +73,7 @@ class DailyMixin:
         """Show today's all dailies"""
         embed = await self.daily_embed(
             ["psna", "pve", "pvp", "wvw", "fractals"])
+        embed.set_thumbnail(url="https://wiki.guildwars2.com/images/1/14/Daily_Achievement.png")
         try:
             await ctx.send(embed=embed)
         except discord.Forbidden:
