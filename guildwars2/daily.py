@@ -3,6 +3,7 @@ import datetime
 from discord.ext import commands
 from discord.ext.commands.cooldowns import BucketType
 import discord
+import re
 
 
 class DailyMixin:
@@ -81,12 +82,33 @@ class DailyMixin:
         for category in categories:
             if category == "psna" and datetime.datetime.utcnow().hour >= 8:
                 value = "\n".join(dailies["psna_later"])
+            elif category == "fractals":
+                fractals = self.get_fractals(dailies["fractals"])
+                value = "".join(fractals + "\n")
             else:
                 value = "\n".join(dailies[category])
             if category == "psna_later":
                 category = "psna in 8 hours"
             embed.add_field(name=category.upper(), value=value, inline=False)
         return embed
+
+    def get_fractals(self, fractals):
+        daily_recs = []
+        fractal_final = ""
+        fractals_data = self.gamedata["fractals"]
+        for fractal in fractals:
+            fractal_level = fractal.replace("Daily Recommended Fractal—Scale ",
+                                            "")
+            if re.match("[0-9]{1,3}", fractal_level):
+                daily_recs.append(fractal_level)
+            else:
+                fractal_final += "{}\n".format(fractal)
+        for level in sorted(daily_recs):
+            for k, v in fractals_data[0].items():
+                if int(level) in v:
+                    fractal_final += "Daily Recommended Fractal-Scale {0} {1}\n".format(
+                        level, k)
+        return fractal_final
 
     def get_psna(self, *, offset_days=0):
         offset = datetime.timedelta(hours=-8)
