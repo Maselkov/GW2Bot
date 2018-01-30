@@ -125,7 +125,7 @@ class DailyMixin:
             else:
                 fractal_final.append(fractal)
         for level in sorted(daily_recs, key=int):
-            for k, v in fractals_data[0].items():
+            for k, v in fractals_data.items():
                 if int(level) in v:
                     fractal_final.append(
                         "Daily Recommended Fractal-Scale {0} {1}".format(

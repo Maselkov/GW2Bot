@@ -67,7 +67,7 @@
     "[&BCECAAA=][&BC0AAAA=][&BDoBAAA=][&BIkHAAA=][&BO4CAAA=][&BIUCAAA=]"
   ],
 
-  "fractals": [
+  "fractals":
     {
       "Aquatic Ruins": [
         7,
@@ -205,7 +205,7 @@
         59,
         87
       ]
-    }],
+    },
 
   "event_timers": {
     "bosses": {
