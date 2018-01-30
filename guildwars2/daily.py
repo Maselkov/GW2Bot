@@ -89,7 +89,7 @@ class DailyMixin:
                 value = "\n".join(dailies["psna_later"])
             elif category == "fractals":
                 fractals = self.get_fractals(dailies["fractals"])
-                value = "".join(fractals + "\n")
+                value = "\n".join(fractals)
             else:
                 value = "\n".join(dailies[category])
             if category == "psna_later":
@@ -99,7 +99,7 @@ class DailyMixin:
 
     def get_fractals(self, fractals):
         daily_recs = []
-        fractal_final = ""
+        fractal_final = []
         fractals_data = self.gamedata["fractals"]
         for fractal in fractals:
             fractal_level = fractal.replace("Daily Recommended Fractal—Scale ",
@@ -107,12 +107,12 @@ class DailyMixin:
             if re.match("[0-9]{1,3}", fractal_level):
                 daily_recs.append(fractal_level)
             else:
-                fractal_final += "{}\n".format(fractal)
-        for level in sorted(daily_recs):
+                fractal_final.append(fractal)
+        for level in sorted(daily_recs, key=int):
             for k, v in fractals_data[0].items():
                 if int(level) in v:
-                    fractal_final += "Daily Recommended Fractal-Scale {0} {1}\n".format(
-                        level, k)
+                    fractal_final.append("Daily Recommended Fractal-Scale {0} {1}".format(
+                        level, k))
         return fractal_final
 
     def get_psna(self, *, offset_days=0):
