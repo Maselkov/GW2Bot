@@ -327,6 +327,16 @@ class AccountMixin:
         scopes = ["inventories", "characters"]
         choice = await self.itemname_to_id(
             ctx, item, user, group_duplicates=True)
+        try:
+            doc = await self.fetch_key(user, scopes)
+            endpoints = [
+                "account/bank", "account/materials", "account/inventory",
+                "characters?page=0"
+            ]
+            results = await self.call_multiple(endpoints, key=doc["key"])
+            bank, materials, shared, characters = results
+        except APIError as e:
+            return await self.error_handler(ctx, e)
         if not choice:
             ctx.command.reset_cooldown(ctx)
             return
@@ -387,9 +397,22 @@ class AccountMixin:
         output.append("--------{}------".format("-" * (longest - 10)))
         output.append("TOTAL:{}{}".format(" " * (longest - 2), total))
         message = (
-            "{.mention}, search results for `{}`:\n```ml\n{}\n```".format(
-                user, choice["name"], "\n".join(output)))
+            "{.mention}, here are your search results".format(
+                user))
+
+        color = int(self.gamedata["items"]["rarity_colors"][choice["rarity"]], 16)
+        icon_url = choice["icon"]
+        data = discord.Embed(description="Search results", color=color)
+        data.add_field(name=choice["name"], value="```ml\n{}\n```".format("\n".join(output)))
+        data.set_author(name=doc["account_name"], icon_url=user.avatar_url)
+        data.set_footer(
+            text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
+        data.set_thumbnail(url=icon_url)
         await ctx.send(message)
+        try:
+            await ctx.send(embed=data)
+        except discord.Forbidden:
+            await ctx.send("Need permission to embed links")
 
     @commands.command()
     @commands.cooldown(1, 10, BucketType.user)
