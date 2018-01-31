@@ -84,6 +84,147 @@
     "[&BBABAAA=][&BJIBAAA=][&BLkCAAA=][&BH8HAAA=][&BBEDAAA=][&BEICAAA=]",
     "[&BCECAAA=][&BC0AAAA=][&BDoBAAA=][&BIkHAAA=][&BO4CAAA=][&BIUCAAA=]"
   ],
+
+  "fractals":
+    {
+      "Aquatic Ruins": [
+        7,
+        26,
+        61,
+        76
+      ],
+      "Swampland": [
+        5,
+        21,
+        32,
+        56,
+        67,
+        77,
+        89
+      ],
+      "Uncategorized": [
+        2,
+        12,
+        36,
+        44,
+        62,
+        79,
+        91
+      ],
+      "Urban Battleground": [
+        4,
+        11,
+        31,
+        57,
+        66,
+        78,
+        85
+      ],
+      "Molten Furnace": [
+        9,
+        23,
+        39,
+        58,
+        83
+      ],
+      "Snowblind": [
+        3,
+        27,
+        37,
+        51,
+        68,
+        86,
+        93
+      ],
+      "Cliffside": [
+        6,
+        22,
+        33,
+        47,
+        69,
+        82,
+        94
+      ],
+      "Underground Facility": [
+        8,
+        17,
+        29,
+        43,
+        53,
+        81
+      ],
+      "Aetherblade": [
+        14,
+        46,
+        65,
+        71,
+        96
+      ],
+      "Thaumanova Reactor": [
+        15,
+        34,
+        48,
+        55,
+        64,
+        84,
+        97
+      ],
+      "Volcanic": [
+        1,
+        19,
+        28,
+        52,
+        72,
+        92
+      ],
+      "Captain Mai Trin Boss": [
+        18,
+        42,
+        73,
+        95
+      ],
+      "Molten Boss": [
+        10,
+        40,
+        70,
+        90
+      ],
+      "Solid Ocean": [
+        20,
+        35,
+        45,
+        60,
+        80
+      ],
+      "Chaos Isles": [
+        13,
+        30,
+        38,
+        54,
+        63,
+        88,
+        98
+      ],
+      "Nightmare": [
+        24,
+        49,
+        74,
+        99
+      ],
+      "Shattered Observatory": [
+        25,
+        50,
+        75,
+        100
+      ],
+      "Twilight Oasis": [
+        16,
+        41,
+        59,
+        87
+      ]
+    },
+
   "event_timers": {
     "bosses": {
       "normal": [{

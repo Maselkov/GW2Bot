@@ -488,6 +488,9 @@ class NotiifiersMixin:
                     embed = await self.daily_embed(categories, doc=daily_doc)
                     channel = self.bot.get_channel(guild["channel"])
                     try:
+                        embed.set_thumbnail(url=
+                                            "https://wiki.guildwars2.com/images/"
+                                            "1/14/Daily_Achievement.png")
                         message = await channel.send(embed=embed)
                         sent += 1
                     except discord.Forbidden:
