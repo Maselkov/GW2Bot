@@ -29,10 +29,8 @@ class DailyMixin:
         """Show today's WvW dailies"""
         embed = await self.daily_embed(["wvw"])
         embed.set_thumbnail(
-            url=
-            "https://render.guildwars2.com/file/"
-            "2BBA251A24A2C1A0A305D561580449AF5B55F54F/338457.png"
-        )
+            url="https://render.guildwars2.com/file/"
+            "2BBA251A24A2C1A0A305D561580449AF5B55F54F/338457.png")
         try:
             await ctx.send(embed=embed)
         except discord.Forbidden:
@@ -45,10 +43,8 @@ class DailyMixin:
         embed = await self.daily_embed(["pvp"])
         try:
             embed.set_thumbnail(
-                url=
-                "https://render.guildwars2.com/file/"
-                "FE01AF14D91F52A1EF2B22FE0A552B9EE2E4C3F6/511340.png"
-            )
+                url="https://render.guildwars2.com/file/"
+                "FE01AF14D91F52A1EF2B22FE0A552B9EE2E4C3F6/511340.png")
             await ctx.send(embed=embed)
         except discord.Forbidden:
             await ctx.send("Need permission to embed links")
@@ -60,10 +56,8 @@ class DailyMixin:
         embed = await self.daily_embed(["fractals"])
         try:
             embed.set_thumbnail(
-                url=
-                "https://render.guildwars2.com/file/"
-                "4A5834E40CDC6A0C44085B1F697565002D71CD47/1228226.png"
-            )
+                url="https://render.guildwars2.com/file/"
+                "4A5834E40CDC6A0C44085B1F697565002D71CD47/1228226.png")
             await ctx.send(embed=embed)
         except discord.Forbidden:
             await ctx.send("Need permission to embed links")

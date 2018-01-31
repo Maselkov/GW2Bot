@@ -387,15 +387,16 @@ class AccountMixin:
                     longest - len(k)), v))
         output.append("--------{}------".format("-" * (longest - 10)))
         output.append("TOTAL:{}{}".format(" " * (longest - 2), total))
-        message = (
-            "{.mention}, here are your search results".format(
-                user))
+        message = ("{.mention}, here are your search results".format(user))
 
-        color = int(self.gamedata["items"]["rarity_colors"][choice["rarity"]], 16)
+        color = int(self.gamedata["items"]["rarity_colors"][choice["rarity"]],
+                    16)
         item_doc = await self.fetch_item(choice["ids"][0])
         icon_url = item_doc["icon"]
         data = discord.Embed(description="Search results", color=color)
-        data.add_field(name=choice["name"], value="```ml\n{}\n```".format("\n".join(output)))
+        data.add_field(
+            name=choice["name"],
+            value="```ml\n{}\n```".format("\n".join(output)))
         data.set_author(name=doc["account_name"], icon_url=user.avatar_url)
         data.set_footer(
             text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
