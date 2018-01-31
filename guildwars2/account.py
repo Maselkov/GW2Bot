@@ -327,7 +327,6 @@ class AccountMixin:
         scopes = ["inventories", "characters"]
         choice = await self.itemname_to_id(
             ctx, item, user, group_duplicates=True)
-        doc = await self.fetch_key(user, scopes)
         if not choice:
             ctx.command.reset_cooldown(ctx)
             return
@@ -337,7 +336,8 @@ class AccountMixin:
                 "account/bank", "account/inventory", "account/materials",
                 "characters?page=0"
             ]
-            results = await self.call_multiple(endpoints, user, scopes)
+            doc = await self.fetch_key(user, scopes)
+            results = await self.call_multiple(endpoints, key=doc["key"])
             storage_spaces = ("bank", "shared", "material storage")
             storage_spaces = OrderedDict(list(zip(storage_spaces, results)))
             characters = results[3]
