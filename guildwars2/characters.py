@@ -162,7 +162,6 @@ class CharactersMixin:
             for piece in pieces:
                 if item["slot"] == piece:
                     gear[piece]["id"] = item["id"]
-                    print(item["id"])
                     c = await self.fetch_item(item["id"])
                     gear[piece]["rarity"] = c["rarity"]
                     gear[piece]["name"] = item_name(c, piece)
