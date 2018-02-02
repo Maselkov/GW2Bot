@@ -249,13 +249,20 @@ class DatabaseMixin:
         config = await self.bot.database.get_cog_config(self)
         return config["cache"].get("raids")
 
-    async def cache_endpoint(self, endpoint, all=False):
-        await self.db[endpoint].drop()
-        try:
-            items = await self.call_api(endpoint)
-        except Exception as e:
-            self.log.warn(e)
-        if not all:
+    async def cache_endpoint(self, endpoint, all_at_once=False):
+        async def bulk_write(item_group):
+            bulk = self.db[endpoint].initialize_unordered_bulk_op()
+            for item in itemgroup:
+                item["_id"] = item.pop("id")
+                bulk.find({"_id": item["_id"]}).upsert().replace_one(item)
+            try:
+                await bulk.execute()
+            except BulkWriteError as e:
+                self.log.exception(
+                    "BWE while caching {}".format(endpoint), exc_info=e)
+
+        items = await self.call_api(endpoint)
+        if not all_at_once:
             counter = 0
             total = len(items)
             while True:
@@ -267,19 +274,11 @@ class DatabaseMixin:
                     break
                 itemgroup = await self.call_api(
                     "{}?ids={}".format(endpoint, ids))
+                await bulk_write(itemgroup)
                 counter += 200
-                for item in itemgroup:
-                    item["_id"] = item.pop("id")
-                try:
-                    await self.db[endpoint].insert_many(itemgroup)
-                except BulkWriteError as e:
-                    self.log.exception(
-                        "BWE while caching {}".format(endpoint), exc_info=e)
         else:
             itemgroup = await self.call_api("{}?ids=all".format(endpoint))
-            for item in itemgroup:
-                item["_id"] = item.pop("id")
-            await self.db[endpoint].insert_many(itemgroup)
+            await bulk_write(itemgroup)
 
     async def rebuild_database(self):
         start = time.time()
