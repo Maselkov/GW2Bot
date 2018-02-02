@@ -125,6 +125,15 @@ class CharactersMixin:
                     formatted_list.append(x)
             return formatted_list
 
+        def item_name(item, item_type):
+            for trinket in "Accessory", "Ring":
+                if item_type.startswith(trinket):
+                    return trinket
+            if item_type.startswith("Weapon"):
+                return "{} (Set {})".format(item["details"]["type"],
+                                            item_type[-2])
+            return item_type
+
         character = character.title()
         await ctx.trigger_typing()
         try:
@@ -146,14 +155,17 @@ class CharactersMixin:
                 "upgrades": [],
                 "infusions": [],
                 "stat": None,
-                "name": None
+                "name": None,
+                "rarity": None
             }
         for item in eq:
             for piece in pieces:
                 if item["slot"] == piece:
                     gear[piece]["id"] = item["id"]
+                    print(item["id"])
                     c = await self.fetch_item(item["id"])
-                    gear[piece]["name"] = c["name"]
+                    gear[piece]["rarity"] = c["rarity"]
+                    gear[piece]["name"] = item_name(c, piece)
                     if "upgrades" in item:
                         for u in item["upgrades"]:
                             upgrade = await self.db.items.find_one({"_id": u})
@@ -166,11 +178,8 @@ class CharactersMixin:
                         gear[piece]["stat"] = await self.fetch_statname(
                             item["stats"]["id"])
                     else:
-                        thing = await self.db.items.find_one({
-                            "_id": item["id"]
-                        })
                         try:
-                            statid = thing["details"]["infix_upgrade"]["id"]
+                            statid = c["details"]["infix_upgrade"]["id"]
                             gear[piece]["stat"] = await self.fetch_statname(
                                 statid)
                         except:
@@ -181,6 +190,7 @@ class CharactersMixin:
         for piece in pieces:
             if gear[piece]["id"] is not None:
                 statname = gear[piece]["stat"]
+                rarity = gear[piece]["rarity"]
                 itemname = gear[piece]["name"]
                 upgrade = handle_duplicates(gear[piece]["upgrades"])
                 infusion = handle_duplicates(gear[piece]["infusions"])
@@ -188,7 +198,7 @@ class CharactersMixin:
                 if not msg:
                     msg = u'\u200b'
                 data.add_field(
-                    name="{} {} [{}]".format(statname, itemname, piece),
+                    name="{} {} {}".format(statname, rarity, itemname),
                     value=msg,
                     inline=False)
         data.set_author(name=character)
