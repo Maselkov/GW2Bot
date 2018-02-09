@@ -239,56 +239,57 @@ class GeneralGuild:
                             inline=False)
                         counter += 1
             if state == "members":
-                if entry["type"] in member_list:
-                    time = entry["time"]
-                    timedate = datetime.datetime.strptime(
-                        time,
-                        "%Y-%m-%dT%H:%M:%S.%fZ").strftime('%d.%m.%Y %H:%M')
-                    user = entry["user"]
-                    if entry["type"] == "invited":
-                        invited_by = entry["invited_by"]
-                        data.add_field(
-                            name=timedate,
-                            value="{} has invited {} to the guild.".format(
-                                invited_by, user),
-                            inline=False)
-                    elif entry["type"] == "joined":
-                        data.add_field(
-                            name=timedate,
-                            value="{} has joined the guild.".format(user),
-                            inline=False)
-                    elif entry["type"] == "kick":
-                        kicked_by = entry["kicked_by"]
-                        if kicked_by == user:
+                if counter < 20:
+                    if entry["type"] in member_list:
+                        time = entry["time"]
+                        timedate = datetime.datetime.strptime(
+                            time,
+                            "%Y-%m-%dT%H:%M:%S.%fZ").strftime('%d.%m.%Y %H:%M')
+                        user = entry["user"]
+                        if entry["type"] == "invited":
+                            invited_by = entry["invited_by"]
                             data.add_field(
                                 name=timedate,
-                                value="{} has left the guild.".format(user),
+                                value="{} has invited {} to the guild.".format(
+                                    invited_by, user),
                                 inline=False)
-                        else:
+                        elif entry["type"] == "joined":
                             data.add_field(
                                 name=timedate,
-                                value="{} has been kicked by {}.".format(
-                                    user, kicked_by),
+                                value="{} has joined the guild.".format(user),
                                 inline=False)
-                    elif entry["type"] == "rank_change":
-                        old_rank = entry["old_rank"]
-                        new_rank = entry["new_rank"]
-                        if "changed_by" in entry:
-                            changed_by = entry["changed_by"]
-                            data.add_field(
-                                name=timedate,
-                                value="{} has changed"
-                                " the role of {} from {} to {}.".format(
-                                    changed_by, user, old_rank, new_rank),
-                                inline=False)
-                        else:
-                            data.add_field(
-                                name=timedate,
-                                value="{} changed his"
-                                " role from {} to {}.".format(
-                                    user, old_rank, new_rank),
-                                inline=False)
-                    counter += 1
+                        elif entry["type"] == "kick":
+                            kicked_by = entry["kicked_by"]
+                            if kicked_by == user:
+                                data.add_field(
+                                    name=timedate,
+                                    value="{} has left the guild.".format(user),
+                                    inline=False)
+                            else:
+                                data.add_field(
+                                    name=timedate,
+                                    value="{} has been kicked by {}.".format(
+                                        user, kicked_by),
+                                    inline=False)
+                        elif entry["type"] == "rank_change":
+                            old_rank = entry["old_rank"]
+                            new_rank = entry["new_rank"]
+                            if "changed_by" in entry:
+                                changed_by = entry["changed_by"]
+                                data.add_field(
+                                    name=timedate,
+                                    value="{} has changed"
+                                    " the role of {} from {} to {}.".format(
+                                        changed_by, user, old_rank, new_rank),
+                                    inline=False)
+                            else:
+                                data.add_field(
+                                    name=timedate,
+                                    value="{} changed his"
+                                    " role from {} to {}.".format(
+                                        user, old_rank, new_rank),
+                                    inline=False)
+                        counter += 1
         if counter == 0:
             return await ctx.send("No {} log entries yet for {}".format(
                 state, guild_name.title()))
