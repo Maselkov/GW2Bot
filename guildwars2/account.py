@@ -323,6 +323,8 @@ class AccountMixin:
 
         Required permissions: inventories, characters
         """
+        if not self.can_embed_links(ctx):
+            return await ctx.send("Need permission to embed links")
         user = ctx.author
         scopes = ["inventories", "characters"]
         choice = await self.itemname_to_id(
@@ -401,11 +403,7 @@ class AccountMixin:
         data.set_footer(
             text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
         data.set_thumbnail(url=icon_url)
-        await ctx.send(message)
-        try:
-            await ctx.send(embed=data)
-        except discord.Forbidden:
-            await ctx.send("Need permission to embed links")
+        await ctx.send(message, embed=data)
 
     @commands.command()
     @commands.cooldown(1, 10, BucketType.user)
