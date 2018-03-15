@@ -306,5 +306,5 @@ class KeyMixin:
         key = keys[num]
         await self.bot.database.set_user(ctx.author, {"key": key}, self)
         await destination.send(
-            "Successfully swapped to the selected key. Name: {}".format(
+            "Successfully swapped to the selected key. Name: `{}`".format(
                 key["name"]))
