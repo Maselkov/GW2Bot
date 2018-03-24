@@ -126,13 +126,15 @@ class CharactersMixin:
             return formatted_list
 
         def item_name(item, item_type):
+            level = "" if item["level"] == 80 else " (Level {})".format(
+                item["level"])
             for trinket in "Accessory", "Ring":
                 if item_type.startswith(trinket):
-                    return trinket
+                    return trinket + level
             if item_type.startswith("Weapon"):
                 return "{} (Set {})".format(item["details"]["type"],
-                                            item_type[-2])
-            return item_type
+                                            item_type[-2]) + level
+            return item_type + level
 
         character = character.title()
         await ctx.trigger_typing()
