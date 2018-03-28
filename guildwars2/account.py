@@ -79,7 +79,7 @@ class AccountMixin:
             doc = await self.fetch_key(user, scopes)
             endpoints = [
                 "account/bank", "account/materials", "account/inventory",
-                "characters?page=0"
+                "characters?page=0&page_size=200"
             ]
             results = await self.call_multiple(endpoints, key=doc["key"])
             bank, materials, shared, characters = results
@@ -336,7 +336,7 @@ class AccountMixin:
         try:
             endpoints = [
                 "account/bank", "account/inventory", "account/materials",
-                "characters?page=0"
+                "characters?page=0&page_size=200"
             ]
             doc = await self.fetch_key(user, scopes)
             results = await self.call_multiple(endpoints, key=doc["key"])

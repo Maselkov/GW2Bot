@@ -93,7 +93,7 @@ class CharactersMixin:
         """
         user = ctx.author
         scopes = ["characters", "builds"]
-        endpoint = "characters?page=0"
+        endpoint = "characters?page=0&page_size=200"
         await ctx.trigger_typing()
         try:
             results = await self.call_api(endpoint, user, scopes)
@@ -218,7 +218,7 @@ class CharactersMixin:
         Required permissions: characters
         """
         user = ctx.message.author
-        endpoint = "characters?page=0"
+        endpoint = "characters?page=0&page_size=200"
         await ctx.trigger_typing()
         try:
             results = await self.call_api(endpoint, user, ["characters"])
@@ -720,7 +720,7 @@ class CharactersMixin:
     @commands.cooldown(1, 10, BucketType.user)
     async def character_crafting(self, ctx):
         """Displays your characters and their crafting level"""
-        endpoint = "characters?page=0"
+        endpoint = "characters?page=0&page_size=200"
         await ctx.trigger_typing()
         try:
             doc = await self.fetch_key(ctx.author, ["characters"])
