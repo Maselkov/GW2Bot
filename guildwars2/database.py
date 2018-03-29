@@ -430,6 +430,6 @@ class DatabaseMixin:
         for item in items:
             if item["_id"] in choice["ids"]:
                 if item["type"] is "UpgradeComponent":
-                    choice["isUpgrade"] = true
+                    choice["isUpgrade"] = True
 
         return choice
