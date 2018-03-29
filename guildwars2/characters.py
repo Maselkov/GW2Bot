@@ -791,9 +791,7 @@ class CharactersMixin:
             worlds = 1, 2
             number_of_zones = 3
             [z.pop("id") for z in zones]
-            print(zones)
             missing = []
-            print("\n\n\n\n\n\n")
             for world in worlds:
                 for mode in modes:
                     for zone in range(1, number_of_zones + 1):
@@ -803,7 +801,6 @@ class CharactersMixin:
                             "mode": mode
                         }
                         if zone_dict not in zones:
-                            print(zone_dict)
                             missing.append("W{}Z{} {} mode".format(
                                 world, zone, mode.title()))
             return missing
