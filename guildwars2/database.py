@@ -326,13 +326,13 @@ class DatabaseMixin:
         def consolidate_duplicates(items):
             unique_items = collections.OrderedDict()
             for item in items:
-                item_tuple = item["name"], item["rarity"]
+                item_tuple = item["name"], item["rarity"], item["type"]
                 if item_tuple not in unique_items:
                     unique_items[item_tuple] = []
                 unique_items[item_tuple].append(item["_id"])
             unique_list = []
             for k, v in unique_items.items():
-                unique_list.append({"name": k[0], "rarity": k[1], "ids": v})
+                unique_list.append({"name": k[0], "rarity": k[1], "type": k[2], "ids": v})
             return unique_list
 
         def check(m):

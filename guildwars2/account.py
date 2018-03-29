@@ -347,13 +347,38 @@ class AccountMixin:
             return await self.error_handler(ctx, e)
 
         def check(item):
-            return item is not None and item["id"] in choice["ids"]
+            if item is None:
+                return 0
+            if item["id"] in choice["ids"]:
+                if item["count"] is not None:
+                    return item["count"]
+                return 1
+            if choice["type"] is not "UpgradeComponent":
+                return 0
+
+            def countUpgrades(iteratable):
+                infusions_sum = 0
+                for i in iteratable:
+                    if i in choice["ids"]:
+                        infusions_sum += 1
+                return infusions_sum
+
+            if item["infusions"] is not None:
+                infusions_sum = countUpgrades(item["infusions"])
+                if infusions_sum is not 0:
+                    return infusions_sum
+            if item["upgrades"] is not None:
+                upgrades_sum = countUpgrades(item["upgrades"])
+                if upgrades_sum is not 0:
+                    return upgrades_sum
+            return 0
+            
 
         storage_counts = OrderedDict()
         for k, v in storage_spaces.items():
             count = 0
-            for item in filter(check, v):
-                count += item["count"]
+            for item in v:
+                count += check(item)
             storage_counts[k] = count
         for character in characters:
             bags = [
@@ -361,10 +386,11 @@ class AccountMixin:
             ]
             bag_total = 0
             for bag in bags:
-                bag_total += sum(
-                    [item["count"] for item in filter(check, bag)])
-            equipment = sum(
-                [1 for piece in filter(check, character["equipment"])])
+                for item in bag:
+                    bag_total += check(item)
+            equipment = 0
+                for piece in character["equipment"]:
+                    equipment += check(piece)
             count = bag_total + equipment
             storage_counts[character["name"]] = count
         seq = [k for k, v in storage_counts.items() if v]
