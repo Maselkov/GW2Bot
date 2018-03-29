@@ -353,7 +353,7 @@ class AccountMixin:
                 if item["count"] is not None:
                     return item["count"]
                 return 1
-            if choice["isUpgrade"] is None:
+            if choice.get("isUpgrade") is None:
                 return 0
 
             def countUpgrades(iteratable):
@@ -363,11 +363,11 @@ class AccountMixin:
                         infusions_sum += 1
                 return infusions_sum
 
-            if item["infusions"] is not None:
+            if item.get("infusions") is not None:
                 infusions_sum = countUpgrades(item["infusions"])
                 if infusions_sum is not 0:
                     return infusions_sum
-            if item["upgrades"] is not None:
+            if item.get("upgrades") is not None:
                 upgrades_sum = countUpgrades(item["upgrades"])
                 if upgrades_sum is not 0:
                     return upgrades_sum
