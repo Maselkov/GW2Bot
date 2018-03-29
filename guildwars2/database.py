@@ -394,14 +394,14 @@ class DatabaseMixin:
                     "-" * (longest))
         ]
 
-        items_copy = items
         if group_duplicates:
-            items = consolidate_duplicates(items)
+            crunched_items = consolidate_duplicates(items)
         else:
             for item in items:
                 item["ids"] = [item["_id"]]
+            crunched_items = items
         if number != 1:
-            for c, m in enumerate(items, 1):
+            for c, m in enumerate(crunched_items, 1):
                 msg.append("  {} {}| {} {}| {}".format(c, " " * (
                     2 - len(str(c))), m["name"].upper(), " " * (
                         4 + longest - len(m["name"])), m["rarity"]))
@@ -415,7 +415,7 @@ class DatabaseMixin:
                 return None
             try:
                 num = int(answer.content) - 1
-                choice = items[num]
+                choice = crunched_items[num]
             except:
                 await message.edit(content="That's not a number in the list")
                 return None
@@ -425,9 +425,9 @@ class DatabaseMixin:
             except:
                 pass
         else:
-            choice = items[0]
+            choice = crunched_items[0]
 
-        for item in items_copy:
+        for item in items:
             if item["_id"] in choice["ids"]:
                 if item["type"] is "UpgradeComponent":
                     choice["isUpgrade"] = true
