@@ -353,7 +353,7 @@ class AccountMixin:
                 if item["count"] is not None:
                     return item["count"]
                 return 1
-            if choice["type"] is not "UpgradeComponent":
+            if choice["isUpgrade"] is None:
                 return 0
 
             def countUpgrades(iteratable):
@@ -372,7 +372,7 @@ class AccountMixin:
                 if upgrades_sum is not 0:
                     return upgrades_sum
             return 0
-            
+
 
         storage_counts = OrderedDict()
         for k, v in storage_spaces.items():

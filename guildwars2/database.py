@@ -394,20 +394,12 @@ class DatabaseMixin:
                     "-" * (longest))
         ]
 
-        def isUpgrade(original, iteratable):
-            for i in original:
-                if i["_id"] in iteratable:
-                    if i["type"] is "UpgradeComponent":
-                        return true
-            return false
-
         items_copy = items
         if group_duplicates:
             items = consolidate_duplicates(items)
         else:
             for item in items:
                 item["ids"] = [item["_id"]]
-        isUpgrade(items_copy, items["ids"])
         if number != 1:
             for c, m in enumerate(items, 1):
                 msg.append("  {} {}| {} {}| {}".format(c, " " * (
@@ -434,4 +426,10 @@ class DatabaseMixin:
                 pass
         else:
             choice = items[0]
+
+        for item in items_copy:
+            if item["_id"] in choice["ids"]:
+                if item["type"] is "UpgradeComponent":
+                    choice["isUpgrade"] = true
+
         return choice
