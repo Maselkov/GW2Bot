@@ -183,7 +183,7 @@ class CharactersMixin:
                             statid = c["details"]["infix_upgrade"]["id"]
                             gear[piece]["stat"] = await self.fetch_statname(
                                 statid)
-                        except:
+                        except KeyError:
                             gear[piece]["stat"] = ""
         profession = await self.get_profession(results)
         level = results["level"]
@@ -234,8 +234,8 @@ class CharactersMixin:
             floor = int(days / 365)
             daystill = 365 - (days -
                               (365 * floor))  # finds days till next birthday
-            charlist.append(character["name"] + " " + str(floor + 1) + " " +
-                            str(daystill))
+            charlist.append(
+                character["name"] + " " + str(floor + 1) + " " + str(daystill))
         sortedlist = sorted(charlist, key=lambda v: int(v.rsplit(' ', 1)[1]))
         output = "{.mention}, days until each of your characters birthdays:```"
         for character in sortedlist:
@@ -745,6 +745,87 @@ class CharactersMixin:
         except discord.HTTPException:
             await ctx.send("Need permission to embed links")
 
+    @commands.group()
+    async def sab(self, ctx):
+        """Super Adventure Box commands"""
+        if ctx.invoked_subcommand is None:
+            await self.bot.send_cmd_help(ctx)
+
+    @sab.command(name="unlocks")
+    @commands.cooldown(1, 10, BucketType.user)
+    async def sab_unlocks(self, ctx, *, character):
+        """Displays missing SAB unlocks for specified character"""
+
+        def readable(_id):
+            return _id.replace("_", " ").title()
+
+        user = ctx.author
+        scopes = ["characters", "progression"]
+        character = character.title().replace(" ", "%20")
+        endpoint = "characters/{}/sab".format(character)
+        try:
+            results = await self.call_api(endpoint, user, scopes)
+        except APINotFound:
+            return await ctx.send("Invalid character name")
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+        unlocked = [u["name"] for u in results["unlocks"]]
+        missing = [
+            readable(u) for u in self.gamedata["sab"]["unlocks"]
+            if u not in unlocked
+        ]
+        if missing:
+            return await ctx.send(
+                "This character is missing the following SAB "
+                "upgrades:\n```fix\n{}\n```".format("\n".join(missing)))
+        await ctx.send("You have unlocked all the upgrades on "
+                       "this character! Congratulations!")
+
+    @sab.command(name="zones")
+    @commands.cooldown(1, 10, BucketType.user)
+    async def sab_zones(self, ctx, *, character):
+        """Displays missing SAB zones for specified character"""
+
+        def missing_zones(zones):
+            modes = ["infantile", "normal", "tribulation"]
+            worlds = 1, 2
+            number_of_zones = 3
+            [z.pop("id") for z in zones]
+            print(zones)
+            missing = []
+            print("\n\n\n\n\n\n")
+            for world in worlds:
+                for mode in modes:
+                    for zone in range(1, number_of_zones + 1):
+                        zone_dict = {
+                            "world": world,
+                            "zone": zone,
+                            "mode": mode
+                        }
+                        if zone_dict not in zones:
+                            print(zone_dict)
+                            missing.append("W{}Z{} {} mode".format(
+                                world, zone, mode.title()))
+            return missing
+
+        user = ctx.author
+        scopes = ["characters", "progression"]
+        character = character.title().replace(" ", "%20")
+        endpoint = "characters/{}/sab".format(character)
+        try:
+            results = await self.call_api(endpoint, user, scopes)
+        except APINotFound:
+            return await ctx.send("Invalid character name")
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+        missing = missing_zones(results["zones"])
+        if missing:
+            return await ctx.send(
+                "This character is missing the following SAB "
+                "zones:\n```fix\n{}\n```".format("\n".join(missing)))
+        await ctx.send("You have unlocked all zones on "
+                       "this character! Congratulations!")
+
     async def get_character(self, ctx, character):
         character = character.title()
         endpoint = "characters/" + character.replace(" ", "%20")
@@ -765,7 +846,7 @@ class CharactersMixin:
             user = await self.bot.get_user_info(doc["owner"])
             try:
                 return await self.call_api(endpoint, user)
-            except:
+            except APIError:
                 return None
         return None
 

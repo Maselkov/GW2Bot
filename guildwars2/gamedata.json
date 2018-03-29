@@ -654,5 +654,13 @@
       "name": "Holographic Cat - Purchased from Holomancer Netto (next to [&BLgEAAA=]) for 1g",
       "order": 34
     }
+  },
+  "sab": {
+    "unlocks": [
+      "chain_stick", "slingshot", "whip", "mini_bomb", "candle", "torch",
+      "wooden_whistle", "digger", "nice_scoop", "glove_of_wisdom", "bauble_purse",
+      "bauble_tote_bag", "moto_breath", "moto_finger", "health_vessel_1",
+      "health_vessel_2", "medium_health_potion"
+    ]
   }
 }
