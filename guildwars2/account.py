@@ -389,8 +389,8 @@ class AccountMixin:
                 for item in bag:
                     bag_total += check(item)
             equipment = 0
-                for piece in character["equipment"]:
-                    equipment += check(piece)
+            for piece in character["equipment"]:
+                equipment += check(piece)
             count = bag_total + equipment
             storage_counts[character["name"]] = count
         seq = [k for k, v in storage_counts.items() if v]
