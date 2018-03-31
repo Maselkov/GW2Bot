@@ -350,7 +350,7 @@ class AccountMixin:
             if item is None:
                 return 0
             if item["id"] in choice["ids"]:
-                if item["count"] is not None:
+                if item.get("count") is not None:
                     return item["count"]
                 return 1
             if choice.get("isUpgrade") is None:
@@ -365,11 +365,11 @@ class AccountMixin:
 
             if item.get("infusions") is not None:
                 infusions_sum = countUpgrades(item["infusions"])
-                if infusions_sum is not 0:
+                if infusions_sum != 0:
                     return infusions_sum
             if item.get("upgrades") is not None:
                 upgrades_sum = countUpgrades(item["upgrades"])
-                if upgrades_sum is not 0:
+                if upgrades_sum != 0:
                     return upgrades_sum
             return 0
 
