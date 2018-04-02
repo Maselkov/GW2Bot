@@ -284,7 +284,7 @@ class DatabaseMixin:
         start = time.time()
         self.bot.available = False
         await self.bot.change_presence(
-            game=discord.Game(name="Rebuilding API cache"),
+            activity=discord.Game(name="Rebuilding API cache"),
             status=discord.Status.dnd)
         endpoints = [["items"], ["achievements"], ["itemstats", True], [
             "titles", True
