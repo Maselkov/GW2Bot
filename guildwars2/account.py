@@ -29,6 +29,10 @@ class AccountMixin:
         hascommander = "Yes" if results["commander"] else "No"
         data = discord.Embed(colour=self.embed_color)
         data.add_field(name="Created account on", value=created)
+        # Add world name to account info
+        wid = results["world"]
+        world = await self.get_world_name(wid)
+        data.add_field(name="WvW Server", value=world)
         if "progression" in doc["permissions"]:
             try:
                 endpoints = ["account/achievements", "account"]
