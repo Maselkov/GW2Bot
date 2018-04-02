@@ -174,11 +174,17 @@ class GeneralGuild:
         except discord.Forbidden:
             await ctx.send("Need permission to embed links")
 
-    @guild.command(name="log", usage="<guild name>")
+    @guild.command(name="log", usage="stash/treasury/members <guild name>")
     @commands.cooldown(1, 10, BucketType.user)
-    async def guild_log(self, ctx, *, guild_name=None):
-        """Get log of last 20 entries of stash
+    async def guild_log(self, ctx, log_type, *, guild_name=None):
+        """Get log of last 20 entries of stash/treasury/members
         Required permissions: guilds and in game permissions"""
+        state = log_type.lower()
+        member_list = [
+            "invited", "joined", "invite_declined", "rank_change", "kick"
+        ]
+        if state not in ("stash", "treasury", "members"):
+            return await self.bot.send_cmd_help(ctx)
         try:
             guild = await self.get_guild(ctx, guild_name=guild_name)
             if not guild:
@@ -195,39 +201,98 @@ class GeneralGuild:
                 "use this command")
         except APIError as e:
             return await self.error_handler(ctx, e)
-        data = discord.Embed(description="Stash Log", colour=self.embed_color)
+
+        data = discord.Embed(
+            description="{0} Log".format(state.capitalize()),
+            colour=self.embed_color)
         data.set_author(name=guild_name.title())
         counter = 0
         for entry in log:
-            if entry["type"] == "stash":
+            if entry["type"] == state:
                 if counter < 20:
-                    quantity = entry["count"]
                     time = entry["time"]
                     timedate = datetime.datetime.strptime(
                         time,
                         "%Y-%m-%dT%H:%M:%S.%fZ").strftime('%d.%m.%Y %H:%M')
                     user = entry["user"]
-                    if entry["item_id"] is 0:
-                        item_name = self.gold_to_coins(entry["coins"])
-                        quantity = ""
-                        multiplier = ""
-                    else:
-                        itemdoc = await self.fetch_item(entry["item_id"])
-                        item_name = itemdoc["name"]
-                        multiplier = "x"
-                    if entry["operation"] == "withdraw":
-                        operator = " withdrew"
-                    else:
-                        operator = " deposited"
-                    data.add_field(
-                        name=timedate,
-                        value=user + "{} {}{} {}".format(
-                            operator, quantity, multiplier, item_name),
-                        inline=False)
-                    counter += 1
+                    if state == "stash" or state == "treasury":
+                        quantity = entry["count"]
+                        if entry["item_id"] is 0:
+                            item_name = self.gold_to_coins(entry["coins"])
+                            quantity = ""
+                            multiplier = ""
+                        else:
+                            itemdoc = await self.fetch_item(entry["item_id"])
+                            item_name = itemdoc["name"]
+                            multiplier = "x"
+                        if state == "stash":
+                            if entry["operation"] == "withdraw":
+                                operator = " withdrew"
+                            else:
+                                operator = " deposited"
+                        else:
+                            operator = " donated"
+                        data.add_field(
+                            name=timedate,
+                            value=user + "{} {}{} {}".format(
+                                operator, quantity, multiplier, item_name),
+                            inline=False)
+                        counter += 1
+            if state == "members":
+                if counter < 20:
+                    if entry["type"] in member_list:
+                        time = entry["time"]
+                        timedate = datetime.datetime.strptime(
+                            time,
+                            "%Y-%m-%dT%H:%M:%S.%fZ").strftime('%d.%m.%Y %H:%M')
+                        user = entry["user"]
+                        if entry["type"] == "invited":
+                            invited_by = entry["invited_by"]
+                            data.add_field(
+                                name=timedate,
+                                value="{} has invited {} to the guild.".format(
+                                    invited_by, user),
+                                inline=False)
+                        elif entry["type"] == "joined":
+                            data.add_field(
+                                name=timedate,
+                                value="{} has joined the guild.".format(user),
+                                inline=False)
+                        elif entry["type"] == "kick":
+                            kicked_by = entry["kicked_by"]
+                            if kicked_by == user:
+                                data.add_field(
+                                    name=timedate,
+                                    value="{} has left the guild.".format(user),
+                                    inline=False)
+                            else:
+                                data.add_field(
+                                    name=timedate,
+                                    value="{} has been kicked by {}.".format(
+                                        user, kicked_by),
+                                    inline=False)
+                        elif entry["type"] == "rank_change":
+                            old_rank = entry["old_rank"]
+                            new_rank = entry["new_rank"]
+                            if "changed_by" in entry:
+                                changed_by = entry["changed_by"]
+                                data.add_field(
+                                    name=timedate,
+                                    value="{} has changed"
+                                    " the role of {} from {} to {}.".format(
+                                        changed_by, user, old_rank, new_rank),
+                                    inline=False)
+                            else:
+                                data.add_field(
+                                    name=timedate,
+                                    value="{} changed his"
+                                    " role from {} to {}.".format(
+                                        user, old_rank, new_rank),
+                                    inline=False)
+                        counter += 1
         if counter == 0:
-            return await ctx.send(
-                "No stash log entries yet for {}".format(guild_name.title()))
+            return await ctx.send("No {} log entries yet for {}".format(
+                state, guild_name.title()))
         try:
             await ctx.send(embed=data)
         except discord.Forbidden:

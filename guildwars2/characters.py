@@ -38,8 +38,9 @@ class CharactersMixin:
         await ctx.trigger_typing()
         character = character.title()
         endpoint = "characters/" + character.replace(" ", "%20")
+        scopes = ["characters", "builds"]
         try:
-            results = await self.call_api(endpoint, ctx.author, ["characters"])
+            results = await self.call_api(endpoint, ctx.author, scopes)
         except APINotFound:
             return await ctx.send("Invalid character name")
         except APIError as e:
@@ -91,8 +92,8 @@ class CharactersMixin:
         Required permissions: characters
         """
         user = ctx.author
-        scopes = ["characters"]
-        endpoint = "characters?page=0"
+        scopes = ["characters", "builds"]
+        endpoint = "characters?page=0&page_size=200"
         await ctx.trigger_typing()
         try:
             results = await self.call_api(endpoint, user, scopes)
@@ -124,6 +125,17 @@ class CharactersMixin:
                     formatted_list.append(x)
             return formatted_list
 
+        def item_name(item, item_type):
+            level = "" if item["level"] == 80 else " (Level {})".format(
+                item["level"])
+            for trinket in "Accessory", "Ring":
+                if item_type.startswith(trinket):
+                    return trinket + level
+            if item_type.startswith("Weapon"):
+                return "{} (Set {})".format(item["details"]["type"],
+                                            item_type[-2]) + level
+            return item_type + level
+
         character = character.title()
         await ctx.trigger_typing()
         try:
@@ -145,14 +157,16 @@ class CharactersMixin:
                 "upgrades": [],
                 "infusions": [],
                 "stat": None,
-                "name": None
+                "name": None,
+                "rarity": None
             }
         for item in eq:
             for piece in pieces:
                 if item["slot"] == piece:
                     gear[piece]["id"] = item["id"]
                     c = await self.fetch_item(item["id"])
-                    gear[piece]["name"] = c["name"]
+                    gear[piece]["rarity"] = c["rarity"]
+                    gear[piece]["name"] = item_name(c, piece)
                     if "upgrades" in item:
                         for u in item["upgrades"]:
                             upgrade = await self.db.items.find_one({"_id": u})
@@ -165,14 +179,11 @@ class CharactersMixin:
                         gear[piece]["stat"] = await self.fetch_statname(
                             item["stats"]["id"])
                     else:
-                        thing = await self.db.items.find_one({
-                            "_id": item["id"]
-                        })
                         try:
-                            statid = thing["details"]["infix_upgrade"]["id"]
+                            statid = c["details"]["infix_upgrade"]["id"]
                             gear[piece]["stat"] = await self.fetch_statname(
                                 statid)
-                        except:
+                        except KeyError:
                             gear[piece]["stat"] = ""
         profession = await self.get_profession(results)
         level = results["level"]
@@ -180,6 +191,7 @@ class CharactersMixin:
         for piece in pieces:
             if gear[piece]["id"] is not None:
                 statname = gear[piece]["stat"]
+                rarity = gear[piece]["rarity"]
                 itemname = gear[piece]["name"]
                 upgrade = handle_duplicates(gear[piece]["upgrades"])
                 infusion = handle_duplicates(gear[piece]["infusions"])
@@ -187,7 +199,7 @@ class CharactersMixin:
                 if not msg:
                     msg = u'\u200b'
                 data.add_field(
-                    name="{} {} [{}]".format(statname, itemname, piece),
+                    name="{} {} {}".format(statname, rarity, itemname),
                     value=msg,
                     inline=False)
         data.set_author(name=character)
@@ -206,7 +218,7 @@ class CharactersMixin:
         Required permissions: characters
         """
         user = ctx.message.author
-        endpoint = "characters?page=0"
+        endpoint = "characters?page=0&page_size=200"
         await ctx.trigger_typing()
         try:
             results = await self.call_api(endpoint, user, ["characters"])
@@ -222,8 +234,8 @@ class CharactersMixin:
             floor = int(days / 365)
             daystill = 365 - (days -
                               (365 * floor))  # finds days till next birthday
-            charlist.append(character["name"] + " " + str(floor + 1) + " " +
-                            str(daystill))
+            charlist.append(
+                character["name"] + " " + str(floor + 1) + " " + str(daystill))
         sortedlist = sorted(charlist, key=lambda v: int(v.rsplit(' ', 1)[1]))
         output = "{.mention}, days until each of your characters birthdays:```"
         for character in sortedlist:
@@ -259,6 +271,7 @@ class CharactersMixin:
 
         Required permissions: characters
         """
+
         # Helper functions
         def search_lvl_to_increase(level: int, lvl_dict):
             for increase, lvl in lvl_dict.items():
@@ -277,8 +290,7 @@ class CharactersMixin:
                 acc_baselvl += 37
                 return acc_baselvl
             else:
-                new_acc = acc_baselvl + search_lvl_to_increase(
-                    level, lvl_dict)
+                new_acc = acc_baselvl + search_lvl_to_increase(level, lvl_dict)
                 new_lvl = level - 1
                 return calc_base_lvl(new_lvl, new_acc, lvl_dict)
 
@@ -307,8 +319,10 @@ class CharactersMixin:
             'BoonDuration', 'ConditionDamage', 'Ferocity', 'CritDamage',
             'Healing', 'ConditionDuration', 'AgonyResistance'
         ]
-        percentage_list = ['Critical Chance', 'CritDamage', 'ConditionDuration',
-                           'BoonDuration']
+        percentage_list = [
+            'Critical Chance', 'CritDamage', 'ConditionDuration',
+            'BoonDuration'
+        ]
         lvl_dict = {
             7: [2, 10],
             10: [11, 20],
@@ -377,10 +391,12 @@ class CharactersMixin:
         profession = await self.get_profession(results)
         level = results["level"]
         embed = discord.Embed(
-            description="Attributes of {0}".format(character), colour=profession.color)
+            description="Attributes of {0}".format(character),
+            colour=profession.color)
         embed.set_thumbnail(url=profession.icon)
         embed.set_footer(
-            text="A level {} {} ".format(level, profession.name), icon_url=profession.icon)
+            text="A level {} {} ".format(level, profession.name),
+            icon_url=profession.icon)
         eq = results["equipment"]
         for piece in eq:
             item = await self.fetch_item(piece["id"])
@@ -412,7 +428,8 @@ class CharactersMixin:
             attr_dict["CritDamage"] = 0
             attr_dict["ConditionDuration"] = 0
 
-        # Have to run again through eq, because attributes from upgrades are named different
+        # Have to run again through eq, because attributes
+        # from upgrades are named different
         # Get stats from item upgrades (runes ...)
         for piece in eq:
             if "upgrades" in piece:
@@ -521,7 +538,8 @@ class CharactersMixin:
         if attr_dict["ConditionDuration"] == 0:
             attr_dict["ConditionDuration"] = int(
                 attr_dict["ConditionDuration"])
-        # Base value of 1000 on lvl 80 doesn't get calculated, if below lvl 80 dont subtract it
+        # Base value of 1000 on lvl 80 doesn't get calculated,
+        # if below lvl 80 dont subtract it
         if attr_dict["Precision"] < 1000:
             base_prec = 0
         else:
@@ -702,7 +720,7 @@ class CharactersMixin:
     @commands.cooldown(1, 10, BucketType.user)
     async def character_crafting(self, ctx):
         """Displays your characters and their crafting level"""
-        endpoint = "characters?page=0"
+        endpoint = "characters?page=0&page_size=200"
         await ctx.trigger_typing()
         try:
             doc = await self.fetch_key(ctx.author, ["characters"])
@@ -727,6 +745,84 @@ class CharactersMixin:
         except discord.HTTPException:
             await ctx.send("Need permission to embed links")
 
+    @commands.group()
+    async def sab(self, ctx):
+        """Super Adventure Box commands"""
+        if ctx.invoked_subcommand is None:
+            await self.bot.send_cmd_help(ctx)
+
+    @sab.command(name="unlocks")
+    @commands.cooldown(1, 10, BucketType.user)
+    async def sab_unlocks(self, ctx, *, character):
+        """Displays missing SAB unlocks for specified character"""
+
+        def readable(_id):
+            return _id.replace("_", " ").title()
+
+        user = ctx.author
+        scopes = ["characters", "progression"]
+        character = character.title().replace(" ", "%20")
+        endpoint = "characters/{}/sab".format(character)
+        try:
+            results = await self.call_api(endpoint, user, scopes)
+        except APINotFound:
+            return await ctx.send("Invalid character name")
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+        unlocked = [u["name"] for u in results["unlocks"]]
+        missing = [
+            readable(u) for u in self.gamedata["sab"]["unlocks"]
+            if u not in unlocked
+        ]
+        if missing:
+            return await ctx.send(
+                "This character is missing the following SAB "
+                "upgrades:\n```fix\n{}\n```".format("\n".join(missing)))
+        await ctx.send("You have unlocked all the upgrades on "
+                       "this character! Congratulations!")
+
+    @sab.command(name="zones")
+    @commands.cooldown(1, 10, BucketType.user)
+    async def sab_zones(self, ctx, *, character):
+        """Displays missing SAB zones for specified character"""
+
+        def missing_zones(zones):
+            modes = ["infantile", "normal", "tribulation"]
+            worlds = 1, 2
+            number_of_zones = 3
+            [z.pop("id") for z in zones]
+            missing = []
+            for world in worlds:
+                for mode in modes:
+                    for zone in range(1, number_of_zones + 1):
+                        zone_dict = {
+                            "world": world,
+                            "zone": zone,
+                            "mode": mode
+                        }
+                        if zone_dict not in zones:
+                            missing.append("W{}Z{} {} mode".format(
+                                world, zone, mode.title()))
+            return missing
+
+        user = ctx.author
+        scopes = ["characters", "progression"]
+        character = character.title().replace(" ", "%20")
+        endpoint = "characters/{}/sab".format(character)
+        try:
+            results = await self.call_api(endpoint, user, scopes)
+        except APINotFound:
+            return await ctx.send("Invalid character name")
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+        missing = missing_zones(results["zones"])
+        if missing:
+            return await ctx.send(
+                "This character is missing the following SAB "
+                "zones:\n```fix\n{}\n```".format("\n".join(missing)))
+        await ctx.send("You have unlocked all zones on "
+                       "this character! Congratulations!")
+
     async def get_character(self, ctx, character):
         character = character.title()
         endpoint = "characters/" + character.replace(" ", "%20")
@@ -747,7 +843,7 @@ class CharactersMixin:
             user = await self.bot.get_user_info(doc["owner"])
             try:
                 return await self.call_api(endpoint, user)
-            except:
+            except APIError:
                 return None
         return None
 

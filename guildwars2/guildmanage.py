@@ -49,6 +49,23 @@ class GuildManageMixin:
                        "`$server forceaccountnames off`\nPlease note that the "
                        "bot cannot change nicknames for roles above the bot.")
 
+    @guild_manage.command(name="timezone", usage="<offset from UTC>")
+    @commands.has_permissions(manage_guild=True)
+    async def guild_manage_timezone(self, ctx, offset: int):
+        """Change the timezone bot will use in this server.
+        Affects various commands
+
+        Enter value as offset from UTC. UTC is 0.
+        Examples:
+        `-8` for PST
+        `1` for CET
+        """
+        guild = ctx.guild
+        if not -12 < offset < 14:
+            return await self.bot.send_cmd_help(ctx)
+        await self.bot.database.set_guild(guild, {"timezone": offset}, self)
+        await ctx.send("Timezone set")
+
     async def force_guild_account_names(self, guild):
         for member in guild.members:
             try:

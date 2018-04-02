@@ -79,7 +79,7 @@ class AccountMixin:
             doc = await self.fetch_key(user, scopes)
             endpoints = [
                 "account/bank", "account/materials", "account/inventory",
-                "characters?page=0"
+                "characters?page=0&page_size=200"
             ]
             results = await self.call_multiple(endpoints, key=doc["key"])
             bank, materials, shared, characters = results
@@ -323,6 +323,8 @@ class AccountMixin:
 
         Required permissions: inventories, characters
         """
+        if not self.can_embed_links(ctx):
+            return await ctx.send("Need permission to embed links")
         user = ctx.author
         scopes = ["inventories", "characters"]
         choice = await self.itemname_to_id(
@@ -334,9 +336,10 @@ class AccountMixin:
         try:
             endpoints = [
                 "account/bank", "account/inventory", "account/materials",
-                "characters?page=0"
+                "characters?page=0&page_size=200"
             ]
-            results = await self.call_multiple(endpoints, user, scopes)
+            doc = await self.fetch_key(user, scopes)
+            results = await self.call_multiple(endpoints, key=doc["key"])
             storage_spaces = ("bank", "shared", "material storage")
             storage_spaces = OrderedDict(list(zip(storage_spaces, results)))
             characters = results[3]
@@ -384,10 +387,23 @@ class AccountMixin:
                 total += v
                 output.append("{} {} | {}".format(k.upper(), " " * (
                     longest - len(k)), v))
-        output.append(
-            "--------{}------".format("-" * (longest - len("location") + 2)))
+        output.append("--------{}------".format("-" * (longest - 10)))
         output.append("TOTAL:{}{}".format(" " * (longest - 2), total))
-        await ctx.send("```ml\n" + "\n".join(output) + "```")
+        message = ("{.mention}, here are your search results".format(user))
+
+        color = int(self.gamedata["items"]["rarity_colors"][choice["rarity"]],
+                    16)
+        item_doc = await self.fetch_item(choice["ids"][0])
+        icon_url = item_doc["icon"]
+        data = discord.Embed(description="Search results", color=color)
+        data.add_field(
+            name=choice["name"],
+            value="```ml\n{}\n```".format("\n".join(output)))
+        data.set_author(name=doc["account_name"], icon_url=user.avatar_url)
+        data.set_footer(
+            text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
+        data.set_thumbnail(url=icon_url)
+        await ctx.send(message, embed=data)
 
     @commands.command()
     @commands.cooldown(1, 10, BucketType.user)
@@ -440,7 +456,7 @@ class AccountMixin:
 
         def readable_id(_id):
             _id = _id.split("_")
-            dont_capitalize = ("of", "the")
+            dont_capitalize = ("of", "the", "in")
             return " ".join([
                 x.capitalize() if x not in dont_capitalize else x for x in _id
             ])

@@ -2,6 +2,7 @@ import datetime
 import json
 import logging
 import aiohttp
+import asyncio
 
 import discord
 
@@ -74,6 +75,17 @@ class GuildWars2(AccountMixin, AchievementsMixin, ApiMixin, CharactersMixin,
             return True
         return ctx.channel.permissions_for(ctx.me).embed_links
 
+    async def run_task(self, f, interval=60):
+        while self is self.bot.get_cog("GuildWars2"):
+            try:
+                await f()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                self.log.exception(e)
+                continue
+            await asyncio.sleep(interval)
+
 
 def setup(bot):
     cog = GuildWars2(bot)
@@ -87,10 +99,16 @@ def setup(bot):
                 "dailies": {}
             }
         }))
-    tasks = (cog.game_update_checker, cog.daily_checker, cog.news_checker,
-             cog.gem_tracker, cog.world_population_checker,
-             cog.guild_synchronizer, cog.boss_notifier,
-             cog.forced_account_names, cog.guild_motd_checker)
-    for task in tasks:
-        cog.tasks.append(loop.create_task(task()))
+    tasks = {
+        cog.game_update_checker: 60,
+        cog.daily_checker: 60,
+        cog.news_checker: 180,
+        cog.gem_tracker: 150,
+        cog.world_population_checker: 300,
+        cog.guild_synchronizer: 60,
+        cog.boss_notifier: 300,
+        cog.forced_account_names: 300
+    }
+    for kv in tasks.items():
+        cog.tasks.append(loop.create_task(cog.run_task(*kv)))
     bot.add_cog(cog)

@@ -11,9 +11,14 @@ class KeyMixin:
     @commands.group()
     async def key(self, ctx):
         """Commands related to API keys"""
+        try:
+            if not ctx.invoked_subcommand and len(ctx.message.content) > 74:
+                await ctx.send(
+                    "Perhaps you meant {}key add?".format(ctx.prefix))
+        except:
+            pass
         if ctx.invoked_subcommand is None:
-            await self.bot.send_cmd_help(ctx)
-            return
+            return await self.bot.send_cmd_help(ctx)
 
     @key.command(name="add")
     @commands.cooldown(1, 2, BucketType.user)
@@ -41,6 +46,10 @@ class KeyMixin:
         else:
             output = ("I would've removed your message as well, but I don't "
                       "have the neccesary permissions.")
+        if key.startswith("<") and key.endswith(">"):
+            return await ctx.send(
+                "{.mention}, please don't use `<` and `>` in the actual key. "
+                "{}".format(user, output))
         doc = await self.bot.database.get_user(user, self)
         if not doc:
             doc = {}
@@ -78,7 +87,8 @@ class KeyMixin:
                     "another. {}".format(user, output))
         else:
             return await ctx.send(
-                "You have already added this key before. {}".format(output))
+                "{.mention}, you have already added this key before. {}".
+                format(user, output))
         await self.bot.database.set_user(user,
                                          {"key": newkeydoc,
                                           "keys": keys}, self)
@@ -296,5 +306,5 @@ class KeyMixin:
         key = keys[num]
         await self.bot.database.set_user(ctx.author, {"key": key}, self)
         await destination.send(
-            "Successfully swapped to the selected key. Name: {}".format(
+            "Successfully swapped to the selected key. Name: `{}`".format(
                 key["name"]))
