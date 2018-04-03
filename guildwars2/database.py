@@ -272,8 +272,8 @@ class DatabaseMixin:
                 if not ids:
                     print("{} done".format(endpoint))
                     break
-                itemgroup = await self.call_api(
-                    "{}?ids={}".format(endpoint, ids))
+                itemgroup = await self.call_api("{}?ids={}".format(
+                    endpoint, ids))
                 await bulk_write(itemgroup)
                 counter += 200
         else:
@@ -284,7 +284,7 @@ class DatabaseMixin:
         start = time.time()
         self.bot.available = False
         await self.bot.change_presence(
-            game=discord.Game(name="Rebuilding API cache"),
+            activity=discord.Game(name="Rebuilding API cache"),
             status=discord.Status.dnd)
         endpoints = [["items"], ["achievements"], ["itemstats", True], [
             "titles", True
@@ -336,8 +336,8 @@ class DatabaseMixin:
             return unique_list
 
         def check(m):
-            if isinstance(destination, (discord.abc.User,
-                                        discord.abc.PrivateChannel)):
+            if isinstance(destination,
+                          (discord.abc.User, discord.abc.PrivateChannel)):
                 chan = isinstance(m.channel, discord.abc.PrivateChannel)
             else:
                 chan = m.channel == destination.channel
@@ -345,9 +345,13 @@ class DatabaseMixin:
 
         item_sanitized = re.escape(item)
         search = re.compile(item_sanitized + ".*", re.IGNORECASE)
-        cursor = self.db[database].find({"name": search,
-                                         "flags": {"$nin": flags},
-                                         **filters})
+        cursor = self.db[database].find({
+            "name": search,
+            "flags": {
+                "$nin": flags
+            },
+            **filters
+        })
         number = await cursor.count()
         if not number:
             await destination.send(
@@ -367,9 +371,13 @@ class DatabaseMixin:
                 return
             exact_match = "^" + item_sanitized + "$"
             search = re.compile(exact_match, re.IGNORECASE)
-            cursor = self.db[database].find({"name": search,
-                                             "flags": {"$nin": flags},
-                                             **filters})
+            cursor = self.db[database].find({
+                "name": search,
+                "flags": {
+                    "$nin": flags
+                },
+                **filters
+            })
             number = await cursor.count()
             if not number:
                 await destination.send(
@@ -395,16 +403,16 @@ class DatabaseMixin:
         ]
 
         if group_duplicates:
-            crunched_items = consolidate_duplicates(items)
+            distinct_items = consolidate_duplicates(items)
         else:
             for item in items:
                 item["ids"] = [item["_id"]]
-            crunched_items = items
+            distinct_items = items
         if number != 1:
-            for c, m in enumerate(crunched_items, 1):
-                msg.append("  {} {}| {} {}| {}".format(c, " " * (
-                    2 - len(str(c))), m["name"].upper(), " " * (
-                        4 + longest - len(m["name"])), m["rarity"]))
+            for c, m in enumerate(distinct_items, 1):
+                msg.append("  {} {}| {} {}| {}".format(
+                    c, " " * (2 - len(str(c))), m["name"].upper(),
+                    " " * (4 + longest - len(m["name"])), m["rarity"]))
             msg.append("```")
             message = await destination.send("\n".join(msg))
             try:
@@ -415,7 +423,7 @@ class DatabaseMixin:
                 return None
             try:
                 num = int(answer.content) - 1
-                choice = crunched_items[num]
+                choice = distinct_items[num]
             except:
                 await message.edit(content="That's not a number in the list")
                 return None
@@ -425,11 +433,11 @@ class DatabaseMixin:
             except:
                 pass
         else:
-            choice = crunched_items[0]
+            choice = distinct_items[0]
 
         for item in items:
             if item["_id"] in choice["ids"]:
                 if item["type"] == "UpgradeComponent":
-                    choice["isUpgrade"] = True
+                    choice["is_upgrade"] = True
 
         return choice
