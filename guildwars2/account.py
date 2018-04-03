@@ -107,8 +107,8 @@ class AccountMixin:
         # generators, so the order of access to an inventory is not immediately
         # obvious in the code).
         __pre_filter = ids_perfected_envoy_armor.union(
-            {id_legendary_insight, id_gift_of_prowess,
-             id_envoy_insignia}, ids_refined_envoy_armor)
+            {id_legendary_insight, id_gift_of_prowess, id_envoy_insignia},
+            ids_refined_envoy_armor)
 
         # If an item slot is empty, or the item is not interesting,
         # filter it out.
@@ -350,14 +350,32 @@ class AccountMixin:
         except APIError as e:
             return await self.error_handler(ctx, e)
 
-        def check(item):
-            return item is not None and item["id"] in choice["ids"]
+        def get_amount_in_slot(item):
+            def count_upgrades(slots):
+                return sum(1 for i in slots if i in choice["ids"])
+
+            if not item:
+                return 0
+            if item["id"] in choice["ids"]:
+                return item.get("count") or 1
+            if not choice.get("is_upgrade"):
+                return 0
+
+            if item.get("infusions"):
+                infusions_sum = count_upgrades(item["infusions"])
+                if infusions_sum:
+                    return infusions_sum
+            if item.get("upgrades"):
+                upgrades_sum = count_upgrades(item["upgrades"])
+                if upgrades_sum:
+                    return upgrades_sum
+            return 0
 
         storage_counts = OrderedDict()
         for k, v in storage_spaces.items():
             count = 0
-            for item in filter(check, v):
-                count += item["count"]
+            for item in v:
+                count += get_amount_in_slot(item)
             storage_counts[k] = count
         for character in characters:
             bags = [
@@ -365,10 +383,11 @@ class AccountMixin:
             ]
             bag_total = 0
             for bag in bags:
-                bag_total += sum(
-                    [item["count"] for item in filter(check, bag)])
-            equipment = sum(
-                [1 for piece in filter(check, character["equipment"])])
+                for item in bag:
+                    bag_total += get_amount_in_slot(item)
+            equipment = 0
+            for piece in character["equipment"]:
+                equipment += get_amount_in_slot(piece)
             count = bag_total + equipment
             storage_counts[character["name"]] = count
         seq = [k for k, v in storage_counts.items() if v]
@@ -389,8 +408,8 @@ class AccountMixin:
         for k, v in storage_counts.items():
             if v:
                 total += v
-                output.append("{} {} | {}".format(k.upper(), " " * (
-                    longest - len(k)), v))
+                output.append("{} {} | {}".format(k.upper(),
+                                                  " " * (longest - len(k)), v))
         output.append("--------{}------".format("-" * (longest - 10)))
         output.append("TOTAL:{}{}".format(" " * (longest - 2), total))
         message = ("{.mention}, here are your search results".format(user))
