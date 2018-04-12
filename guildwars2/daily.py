@@ -104,7 +104,7 @@ class DailyMixin:
                 value = "\n".join(dailies[category])
             if category == "psna_later":
                 category = "psna in 8 hours"
-            value = re.sub(r"(?:Daily|Tier 4 |PvP|WvW) ", "", value)
+            value = re.sub(r"(?:Daily|Tier 4|PvP|WvW) ", "", value)
             embed.add_field(name=category.upper(), value=value, inline=False)
         return embed
 
