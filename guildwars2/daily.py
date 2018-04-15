@@ -104,6 +104,7 @@ class DailyMixin:
                 value = "\n".join(dailies[category])
             if category == "psna_later":
                 category = "psna in 8 hours"
+            value = re.sub(r"(?:Daily|Tier 4|PvP|WvW) ", "", value)
             embed.add_field(name=category.upper(), value=value, inline=False)
         return embed
 
@@ -122,7 +123,7 @@ class DailyMixin:
             for k, v in fractals_data.items():
                 if int(level) in v:
                     fractal_final.append(
-                        "Daily Recommended Fractal-Scale {0} {1}".format(
+                        "Recommended - {} {}".format(
                             level, k))
         return fractal_final
 
