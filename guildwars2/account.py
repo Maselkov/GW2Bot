@@ -357,7 +357,9 @@ class AccountMixin:
             if not item:
                 return 0
             if item["id"] in choice["ids"]:
-                return item.get("count") or 1
+                if "count" not in item:
+                    return 1
+                return item["count"]
             if not choice.get("is_upgrade"):
                 return 0
 
@@ -446,7 +448,7 @@ class AccountMixin:
                 cat_id = cat["id"]
                 try:
                     hint = cat["hint"]
-                except:
+                except KeyError:
                     thanks_anet = {
                         34: "holographic",
                         36: "bluecatmander",
