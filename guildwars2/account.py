@@ -380,6 +380,9 @@ class AccountMixin:
                 count += get_amount_in_slot(item)
             storage_counts[k] = count
         for character in characters:
+            bag_count = 0
+            for bag in character["bags"]:
+                bag_count += get_amount_in_slot(bag)
             bags = [
                 bag["inventory"] for bag in filter(None, character["bags"])
             ]
@@ -390,7 +393,7 @@ class AccountMixin:
             equipment = 0
             for piece in character["equipment"]:
                 equipment += get_amount_in_slot(piece)
-            count = bag_total + equipment
+            count = bag_total + equipment + bag_count
             storage_counts[character["name"]] = count
         seq = [k for k, v in storage_counts.items() if v]
         if not seq:
