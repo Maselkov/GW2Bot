@@ -340,13 +340,17 @@ class AccountMixin:
         try:
             endpoints = [
                 "account/bank", "account/inventory", "account/materials",
-                "characters?page=0&page_size=200"
+                "characters?page=0&page_size=200", "commerce/delivery"
             ]
             doc = await self.fetch_key(user, scopes)
             results = await self.call_multiple(endpoints, key=doc["key"])
             storage_spaces = ("bank", "shared", "material storage")
             storage_spaces = OrderedDict(list(zip(storage_spaces, results)))
             characters = results[3]
+            delivery = []
+            if results[4].get("items"):
+                delivery = results[4]["items"]
+
         except APIError as e:
             return await self.error_handler(ctx, e)
 
@@ -379,6 +383,9 @@ class AccountMixin:
             for item in v:
                 count += get_amount_in_slot(item)
             storage_counts[k] = count
+        storage_counts["tp delivery"] = 0
+        for item in delivery:
+            storage_counts["tp delivery"] += get_amount_in_slot(item)
         for character in characters:
             bags = [
                 bag["inventory"] for bag in filter(None, character["bags"])
