@@ -352,13 +352,14 @@ class AccountMixin:
             return await self.error_handler(ctx, e)
 
         try:
-            doc = await self.fetch_key(user, ["tradingpost"])
-            result = await self.call_api("commerce/delivery", key=doc["key"])
-            delivery = []
-            if result.get("items"):
-                delivery = result["items"]
+            if "tradingpost" in doc["permissions"]:
+                result = await self.call_api(
+                    "commerce/delivery", key=doc["key"])
+                delivery = []
+                if result.get("items"):
+                    delivery = result["items"]
 
-        except APIError as e:
+        except APIError:
             pass
 
         def get_amount_in_slot(item):
@@ -390,9 +391,10 @@ class AccountMixin:
             for item in v:
                 count += get_amount_in_slot(item)
             storage_counts[k] = count
-        storage_counts["tp delivery"] = 0
-        for item in delivery:
-            storage_counts["tp delivery"] += get_amount_in_slot(item)
+        if delivery:
+            storage_counts["tp delivery"] = 0
+            for item in delivery:
+                storage_counts["tp delivery"] += get_amount_in_slot(item)
         for character in characters:
             bags = [
                 bag["inventory"] for bag in filter(None, character["bags"])
