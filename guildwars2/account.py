@@ -379,6 +379,16 @@ class AccountMixin:
             for item in v:
                 count += get_amount_in_slot(item)
             storage_counts[k] = count
+        try:
+            if "tradingpost" in doc["permissions"]:
+                result = await self.call_api(
+                    "commerce/delivery", key=doc["key"])
+                delivery = result.get("items", [])
+                storage_counts["tp delivery"] = 0
+                for item in delivery:
+                    storage_counts["tp delivery"] += get_amount_in_slot(item)
+        except APIError:
+            pass
         for character in characters:
             bag_count = 0
             for bag in character["bags"]:
