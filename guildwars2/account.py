@@ -347,7 +347,6 @@ class AccountMixin:
             storage_spaces = ("bank", "shared", "material storage")
             storage_spaces = OrderedDict(list(zip(storage_spaces, results)))
             characters = results[3]
-
         except APIError as e:
             return await self.error_handler(ctx, e)
 
