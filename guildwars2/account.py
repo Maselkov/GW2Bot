@@ -351,17 +351,6 @@ class AccountMixin:
         except APIError as e:
             return await self.error_handler(ctx, e)
 
-        try:
-            if "tradingpost" in doc["permissions"]:
-                delivery = []
-                result = await self.call_api(
-                    "commerce/delivery", key=doc["key"])
-                if result.get("items"):
-                    delivery = result["items"]
-
-        except APIError:
-            pass
-
         def get_amount_in_slot(item):
             def count_upgrades(slots):
                 return sum(1 for i in slots if i in choice["ids"])
@@ -391,10 +380,16 @@ class AccountMixin:
             for item in v:
                 count += get_amount_in_slot(item)
             storage_counts[k] = count
-        if "tradingpost" in doc["permissions"]:
-            storage_counts["tp delivery"] = 0
-            for item in delivery:
-                storage_counts["tp delivery"] += get_amount_in_slot(item)
+        try:
+            if "tradingpost" in doc["permissions"]:
+                result = await self.call_api(
+                    "commerce/delivery", key=doc["key"])
+                delivery = result.get("items", [])
+                storage_counts["tp delivery"] = 0
+                for item in delivery:
+                    storage_counts["tp delivery"] += get_amount_in_slot(item)
+        except APIError:
+            pass
         for character in characters:
             bags = [
                 bag["inventory"] for bag in filter(None, character["bags"])
