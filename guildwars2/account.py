@@ -6,7 +6,7 @@ import discord
 from discord.ext import commands
 from discord.ext.commands.cooldowns import BucketType
 
-from .exceptions import APIError
+from .exceptions import APIError, APINotFound
 
 
 class AccountMixin:
@@ -295,6 +295,124 @@ class AccountMixin:
             text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
         await ctx.send(
             "{.mention}, here are your Legendary Insights".format(user),
+            embed=embed)
+
+    @commands.command()
+    @commands.cooldown(1, 15, BucketType.user)
+    async def kp(self, ctx):
+        """Shows which raid and fractal encounters you have completed.
+
+        Required permissions: progression
+        """
+        user = ctx.author
+        scopes = ["progression"]
+        if not self.can_embed_links(ctx):
+            return await ctx.send("Need permission to embed links")
+        await ctx.trigger_typing()
+
+        wings = {
+                "Spirit Vale": [
+                    {"name": "Vale Guardian", "type": "single", "id": 2654},
+                    {"name": "Gorseval", "type": "single", "id": 2649},
+                    {"name": "Sabetha", "type": "single", "id": 2659}
+                ],
+                "Salvation Pass": [
+                    {"name": "Slothasor", "type": "single", "id": 2826},
+                    # There is no achievement for the Bandit Trio without
+                    # special conditions, so we can't know it wasn't done.
+                    {"name": "Bandit Trio", "type": "any_or_none", "ids": [2830, 2831]},
+                    {"name": "Matthias", "type": "single", "id": 2836}
+                ],
+                "Stronghold of the Faithful": [
+                    {"name": "Escort", "type": "single", "id": 3024}, 
+                    {"name": "Keep Construct", "type": "single", "id": 3014},
+                    {"name": "Twisted Castle", "type": "single", "id": 3010},
+                    {"name": "Xera", "type": "single", "id": 3017}
+                ],
+                "Bastion of the Penitent": [
+                    {"name": "Cairn", "type": "single", "id": 3349},
+                    {"name": "Cairn CM", "type": "single", "id": 3334},
+                    {"name": "Mursaat Overseer", "type": "single", "id": 3321},
+                    {"name": "Mursaat Overseer CM", "type": "single", "id": 3287},
+                    {"name": "Samarog", "type": "single", "id": 3347},
+                    {"name": "Samarog CM", "type": "single", "id": 3342},
+                    {"name": "Deimos", "type": "single", "id": 3364},
+                    {"name": "Deimos CM", "type": "single", "id": 3292}
+                ],
+                "Hall of Chains": [
+                    {"name": "Soulless Horror", "type": "single", "id": 4004},
+                    {"name": "Soulless Horror CM", "type": "single", "id": 3993},
+                    {"name": "River of Souls", "type": "single", "id": 4010},
+                    {"name": "Statues of Grenth", "type": "all", "ids": [3998, 4036, 4038]},
+                    {"name": "Voice in the Void", "type": "single", "id": 4016},
+                    {"name": "Voice in the Void CM", "type": "single", "id": 3979}
+                ],
+                "Fractals": [
+                    {"name": "Nightmare CM", "type": "single", "id": 3180},
+                    {"name": "Shattered Observatory CM", "type": "single", "id": 3465}
+                ],
+        }
+
+        # Create a list of lists of ids.
+        achievement_ids = [[x["id"]] if x["type"] == "single" else x["ids"]
+                for x in chain.from_iterable(wings.values())]
+        # Flatten it.
+        achievement_ids = [str(x) for x in chain.from_iterable(achievement_ids)]
+
+        try:
+            doc = await self.fetch_key(user, scopes)
+            endpoint = "account/achievements?ids=" + ",".join(achievement_ids)
+            results = await self.call_api(endpoint, user, ["progression"])
+        except APINotFound as e:
+            # Not Found is returned by the API when none of the searched
+            # achievements have been completed yet.
+            results = []
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+
+        def is_killed(boss):
+            # If the achievement is finished, the encounter was completed
+            if boss["type"] == "single":
+                for achievement in results:
+                    if achievement["id"] == boss["id"] and achievement["done"]:
+                        return "+";
+                # The achievement is not in the list or isn't done
+                return "-"
+            # If all achievements were completed, the encounter was completed
+            if boss["type"] == "all":
+                for id in boss["ids"]:
+                    found = False
+                    for achievement in results:
+                        if achievement["id"] == id and achievement["done"]:
+                            found = True
+                            break
+                    if not found:
+                        return "-"
+                return "+"
+            # If any of these achievements are completed, the encounter was
+            # completed, otherwise we don't know.
+            if boss["type"] == "any_or_none":
+                for id in boss["ids"]:
+                    for achievement in results:
+                        if achievement["id"] == id and achievement["done"]:
+                            return "+";
+                return "?"
+
+        embed = discord.Embed(title="Kill Proof", color=self.embed_color)
+        embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
+        for wing in wings:
+            value = ["```diff"]
+            bosses = wings[wing]
+            for boss in bosses:
+                value.append(is_killed(boss) + boss["name"])
+            value.append("```")
+            embed.add_field(name=wing, value="\n".join(value))
+
+        embed.description = "List of encounters that were completed by this player."
+        embed.set_footer(text="Green (+) means completed. Red (-) means not. Gray (?) means unknown.")
+
+        await ctx.send(
+            "{.mention}, here is your kill proof.".format(user),
             embed=embed)
 
     @commands.command()
