@@ -311,14 +311,12 @@ class AccountMixin:
         await ctx.trigger_typing()
 
         areas = self.gamedata["killproofs"]["areas"]
-        areas = OrderedDict(sorted(areas.items(), key=lambda x: x[1]["order"]))
 
         # Create a list of lists of all achievement ids we need to check.
         achievement_ids = [[x["id"]]
                            if x["type"] == "single_achievement" else x["ids"]
                            for x in chain.from_iterable(
-                               [area["encounters"]
-                                for area in areas.values()])]
+                               [area["encounters"] for area in areas])]
         # Flatten it.
         achievement_ids = [
             str(x) for x in chain.from_iterable(achievement_ids)
@@ -366,11 +364,11 @@ class AccountMixin:
         embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
         for area in areas:
             value = ["```diff"]
-            encounters = areas[area]["encounters"]
+            encounters = area["encounters"]
             for encounter in encounters:
                 value.append(is_completed(encounter) + encounter["name"])
             value.append("```")
-            embed.add_field(name=area, value="\n".join(value))
+            embed.add_field(name=area["name"], value="\n".join(value))
 
         embed.description = "List of completed encounters"
         embed.set_footer(text="Green (+) means completed. Red (-) means not. "

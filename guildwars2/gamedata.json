@@ -514,33 +514,34 @@
     }
   },
   "killproofs": {
-    "areas": {
-      "Spirit Vale": {
+    "areas": [
+      {
+        "name": "Spirit Vale",
         "encounters": [
           {"name": "Vale Guardian", "type": "single_achievement", "id": 2654},
           {"name": "Gorseval", "type": "single_achievement", "id": 2649},
           {"name": "Sabetha", "type": "single_achievement", "id": 2659}
-        ],
-        "order": 0
+        ]
       },
-      "Salvation Pass": {
+      {
+        "name": "Salvation Pass",
         "encounters": [
           {"name": "Slothasor", "type": "single_achievement", "id": 2826},
           {"name": "Bandit Trio", "type": "any_achievement_or_none", "ids": [2830, 2831]},
           {"name": "Matthias", "type": "single_achievement", "id": 2836}
-          ],
-        "order": 1
+        ]
       },
-      "Stronghold of the Faithful": {
+      {
+        "name": "Stronghold of the Faithful",
         "encounters": [
           {"name": "Escort", "type": "single_achievement", "id": 3024},
           {"name": "Keep Construct", "type": "single_achievement", "id": 3014},
           {"name": "Twisted Castle", "type": "single_achievement", "id": 3010},
           {"name": "Xera", "type": "single_achievement", "id": 3017}
-        ],
-        "order": 2
+        ]
       },
-      "Bastion of the Penitent": {
+      {
+        "name": "Bastion of the Penitent",
         "encounters": [
           {"name": "Cairn", "type": "single_achievement", "id": 3349},
           {"name": "Cairn CM", "type": "single_achievement", "id": 3334},
@@ -550,10 +551,10 @@
           {"name": "Samarog CM", "type": "single_achievement", "id": 3342},
           {"name": "Deimos", "type": "single_achievement", "id": 3364},
           {"name": "Deimos CM", "type": "single_achievement", "id": 3292}
-        ],
-        "order": 3
+        ]
       },
-      "Hall of Chains": {
+      {
+        "name": "Hall of Chains",
         "encounters": [
           {"name": "Soulless Horror", "type": "single_achievement", "id": 4004},
           {"name": "Soulless Horror CM", "type": "single_achievement", "id": 3993},
@@ -561,17 +562,16 @@
           {"name": "Statues of Grenth", "type": "all_achievements", "ids": [3998, 4036, 4038]},
           {"name": "Voice in the Void", "type": "single_achievement", "id": 4016},
           {"name": "Voice in the Void CM", "type": "single_achievement", "id": 3979}
-        ],
-        "order": 4
+        ]
       },
-      "Fractals": {
+      {
+        "name": "Fractals",
         "encounters": [
           {"name": "Nightmare CM", "type": "single_achievement", "id": 3180},
           {"name": "Shattered Observatory CM", "type": "single_achievement", "id": 3465}
-        ],
-        "order": 5
+        ]
       }
-    }
+    ]
   },
   "cats": {
     "chicken": {
