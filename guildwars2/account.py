@@ -6,7 +6,7 @@ import discord
 from discord.ext import commands
 from discord.ext.commands.cooldowns import BucketType
 
-from .exceptions import APIError
+from .exceptions import APIError, APINotFound
 
 
 class AccountMixin:
@@ -298,6 +298,86 @@ class AccountMixin:
             embed=embed)
 
     @commands.command()
+    @commands.cooldown(1, 15, BucketType.user)
+    async def kp(self, ctx):
+        """Shows which raid and fractal encounters you have completed.
+
+        Required permissions: progression
+        """
+        user = ctx.author
+        scopes = ["progression"]
+        if not self.can_embed_links(ctx):
+            return await ctx.send("Need permission to embed links")
+        await ctx.trigger_typing()
+
+        areas = self.gamedata["killproofs"]["areas"]
+
+        # Create a list of lists of all achievement ids we need to check.
+        achievement_ids = [[x["id"]]
+                           if x["type"] == "single_achievement" else x["ids"]
+                           for x in chain.from_iterable(
+                               [area["encounters"] for area in areas])]
+        # Flatten it.
+        achievement_ids = [
+            str(x) for x in chain.from_iterable(achievement_ids)
+        ]
+
+        try:
+            doc = await self.fetch_key(user, scopes)
+            endpoint = "account/achievements?ids=" + ",".join(achievement_ids)
+            results = await self.call_api(endpoint, key=doc["key"])
+        except APINotFound as e:
+            # Not Found is returned by the API when none of the searched
+            # achievements have been completed yet.
+            results = []
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+
+        def is_completed(encounter):
+            # One achievement has to be completed
+            if encounter["type"] == "single_achievement":
+                _id = encounter["id"]
+                for achievement in results:
+                    if achievement["id"] == _id and achievement["done"]:
+                        return "+"
+                # The achievement is not in the list or isn't done
+                return "-"
+
+            # All achievements have to be completed
+            if encounter["type"] == "all_achievements":
+                for _id in encounter["ids"]:
+                    # The results do not contain achievements with no progress
+                    if not any(a["id"] == _id and a["done"] for a in results):
+                        return "-"
+                return "+"
+
+            # If any of these achievements are completed, the encounter was
+            # completed, otherwise we don't know.
+            if encounter["type"] == "any_achievement_or_none":
+                for _id in encounter["ids"]:
+                    for achievement in results:
+                        if achievement["id"] == _id and achievement["done"]:
+                            return "+"
+                return "?"
+
+        embed = discord.Embed(title="Kill Proof", color=self.embed_color)
+        embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
+        for area in areas:
+            value = ["```diff"]
+            encounters = area["encounters"]
+            for encounter in encounters:
+                value.append(is_completed(encounter) + encounter["name"])
+            value.append("```")
+            embed.add_field(name=area["name"], value="\n".join(value))
+
+        embed.description = "List of completed encounters"
+        embed.set_footer(text="Green (+) means completed. Red (-) means not. "
+                         "Gray (?) means unknown.")
+
+        await ctx.send(
+            "{.mention}, here is your kill proof.".format(user), embed=embed)
+
+    @commands.command()
     @commands.cooldown(1, 10, BucketType.user)
     async def bosses(self, ctx):
         """Shows your raid progression for the week
@@ -379,7 +459,20 @@ class AccountMixin:
             for item in v:
                 count += get_amount_in_slot(item)
             storage_counts[k] = count
+        try:
+            if "tradingpost" in doc["permissions"]:
+                result = await self.call_api(
+                    "commerce/delivery", key=doc["key"])
+                delivery = result.get("items", [])
+                storage_counts["tp delivery"] = 0
+                for item in delivery:
+                    storage_counts["tp delivery"] += get_amount_in_slot(item)
+        except APIError:
+            pass
         for character in characters:
+            bag_count = 0
+            for bag in character["bags"]:
+                bag_count += get_amount_in_slot(bag)
             bags = [
                 bag["inventory"] for bag in filter(None, character["bags"])
             ]
@@ -390,7 +483,7 @@ class AccountMixin:
             equipment = 0
             for piece in character["equipment"]:
                 equipment += get_amount_in_slot(piece)
-            count = bag_total + equipment
+            count = bag_total + equipment + bag_count
             storage_counts[character["name"]] = count
         seq = [k for k, v in storage_counts.items() if v]
         if not seq:

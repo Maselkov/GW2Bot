@@ -116,14 +116,15 @@ class CharactersMixin:
         """
 
         def handle_duplicates(upgrades):
-            formatted_list = []
-            for x in upgrades:
-                if upgrades.count(x) != 1:
-                    formatted_list.append(x + " x" + str(upgrades.count(x)))
-                    upgrades[:] = [i for i in upgrades if i != x]
-                else:
-                    formatted_list.append(x)
-            return formatted_list
+            result = []
+            already_occured = []
+            for u in upgrades:
+                if u in already_occured:
+                    continue
+                already_occured.append(u)
+                count = upgrades.count(u)
+                result.append(u + " x{}".format(count) if count != 1 else u)
+            return result
 
         def item_name(item, item_type):
             level = "" if item["level"] == 80 else " (Level {})".format(
