@@ -314,8 +314,12 @@ class AccountMixin:
         areas = OrderedDict(sorted(areas.items(), key=lambda x: x[1]["order"]))
 
         # Create a list of lists of all achievement ids we need to check.
-        achievement_ids = [[x["id"]] if x["type"] == "single_achievement" else x["ids"]
-                for x in chain.from_iterable([area["encounters"] for area in areas.values()])]
+        achievement_ids = [
+                [x["id"]] if x["type"] == "single_achievement" else x["ids"]
+                for x in chain.from_iterable(
+                    [area["encounters"] for area in areas.values()]
+                )
+            ]
         # Flatten it.
         achievement_ids = [str(x) for x in chain.from_iterable(achievement_ids)]
 
@@ -330,50 +334,49 @@ class AccountMixin:
         except APIError as e:
             return await self.error_handler(ctx, e)
 
-        def is_killed(boss):
-            # If the achievement is finished, the encounter was completed
-            if boss["type"] == "single_achievement":
+        def is_completed(encounter):
+            # One achievement has to be completed
+            if encounter["type"] == "single_achievement":
+                _id = encounter["id"]
                 for achievement in results:
-                    if achievement["id"] == boss["id"] and achievement["done"]:
-                        return "+";
+                    if achievement["id"] == _id and achievement["done"]:
+                        return "+"
                 # The achievement is not in the list or isn't done
                 return "-"
-            # If all achievements were completed, the encounter was completed
-            if boss["type"] == "all_achievements":
-                for id in boss["ids"]:
-                    found = False
-                    for achievement in results:
-                        if achievement["id"] == id and achievement["done"]:
-                            found = True
-                            break
-                    if not found:
+
+            # All achievements have to be completed
+            if encounter["type"] == "all_achievements":
+                for _id in encounter["ids"]:
+                    # The results do not contain achievements with no progress
+                    if not any(a["id"] == _id and a["done"] for a in results):
                         return "-"
                 return "+"
+
             # If any of these achievements are completed, the encounter was
             # completed, otherwise we don't know.
-            if boss["type"] == "any_achievement_or_none":
-                for id in boss["ids"]:
+            if encounter["type"] == "any_achievement_or_none":
+                for _id in encounter["ids"]:
                     for achievement in results:
-                        if achievement["id"] == id and achievement["done"]:
-                            return "+";
+                        if achievement["id"] == _id and achievement["done"]:
+                            return "+"
                 return "?"
 
         embed = discord.Embed(title="Kill Proof", color=self.embed_color)
         embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
         for area in areas:
             value = ["```diff"]
-            bosses = areas[area]["encounters"]
-            for boss in bosses:
-                value.append(is_killed(boss) + boss["name"])
+            encounters = areas[area]["encounters"]
+            for encounter in encounters:
+                value.append(is_completed(encounter) + encounter["name"])
             value.append("```")
             embed.add_field(name=area, value="\n".join(value))
 
-        embed.description = "List of encounters that were completed by this player."
-        embed.set_footer(text="Green (+) means completed. Red (-) means not. Gray (?) means unknown.")
+        embed.description = "List of completed encounters"
+        embed.set_footer(text="Green (+) means completed. Red (-) means not. "
+                         "Gray (?) means unknown.")
 
-        await ctx.send(
-            "{.mention}, here is your kill proof.".format(user),
-            embed=embed)
+        await ctx.send("{.mention}, here is your kill proof.".format(user),
+                       embed=embed)
 
     @commands.command()
     @commands.cooldown(1, 10, BucketType.user)
