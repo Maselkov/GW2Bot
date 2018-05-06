@@ -327,7 +327,7 @@ class AccountMixin:
         try:
             doc = await self.fetch_key(user, scopes)
             endpoint = "account/achievements?ids=" + ",".join(achievement_ids)
-            results = await self.call_api(endpoint, user, ["progression"])
+            results = await self.call_api(endpoint, key=doc["key"])
         except APINotFound as e:
             # Not Found is returned by the API when none of the searched
             # achievements have been completed yet.
