@@ -314,14 +314,15 @@ class AccountMixin:
         areas = OrderedDict(sorted(areas.items(), key=lambda x: x[1]["order"]))
 
         # Create a list of lists of all achievement ids we need to check.
-        achievement_ids = [
-                [x["id"]] if x["type"] == "single_achievement" else x["ids"]
-                for x in chain.from_iterable(
-                    [area["encounters"] for area in areas.values()]
-                )
-            ]
+        achievement_ids = [[x["id"]]
+                           if x["type"] == "single_achievement" else x["ids"]
+                           for x in chain.from_iterable(
+                               [area["encounters"]
+                                for area in areas.values()])]
         # Flatten it.
-        achievement_ids = [str(x) for x in chain.from_iterable(achievement_ids)]
+        achievement_ids = [
+            str(x) for x in chain.from_iterable(achievement_ids)
+        ]
 
         try:
             doc = await self.fetch_key(user, scopes)
@@ -375,8 +376,8 @@ class AccountMixin:
         embed.set_footer(text="Green (+) means completed. Red (-) means not. "
                          "Gray (?) means unknown.")
 
-        await ctx.send("{.mention}, here is your kill proof.".format(user),
-                       embed=embed)
+        await ctx.send(
+            "{.mention}, here is your kill proof.".format(user), embed=embed)
 
     @commands.command()
     @commands.cooldown(1, 10, BucketType.user)
