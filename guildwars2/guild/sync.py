@@ -33,15 +33,16 @@ class SyncGuild:
             except AttributeError:
                 # role doesn't exist anymore?
                 pass
-        await self.bot.database.set_guild(ctx.guild, {
-            "sync.ranks": {},
-            "sync.leader": None,
-            "sync.setupdone": False,
-            "sync.on": False,
-            "sync.guildrole": False,
-            "sync.name": None,
-            "sync.gid": None
-        }, self)
+        await self.bot.database.set_guild(
+            ctx.guild, {
+                "sync.ranks": {},
+                "sync.leader": None,
+                "sync.setupdone": False,
+                "sync.on": False,
+                "sync.guildrole": False,
+                "sync.name": None,
+                "sync.gid": None
+            }, self)
 
     @guildsync.command(name="clear")
     async def sync_clear(self, ctx):
@@ -67,9 +68,10 @@ class SyncGuild:
             return
         doc = await self.bot.database.get_guild(ctx.guild, self)
         if not doc:
-            await self.bot.database.set_guild(
-                ctx.guild, {"sync.on": False,
-                            "sync.setupdone": False}, self)
+            await self.bot.database.set_guild(ctx.guild, {
+                "sync.on": False,
+                "sync.setupdone": False
+            }, self)
             doc = await self.bot.database.get_guild(ctx.guild, self)
         enabled = self.sync_enabled(doc)
         if enabled:
@@ -126,24 +128,18 @@ class SyncGuild:
                     color=discord.Color(self.embed_color))
                 roles[rank["id"]] = role.id
             except discord.Forbidden:
-                return await ctx.send(
-                    "Couldn't create role {0}".format(rank["name"]))
-        await self.bot.database.set_guild(ctx.guild, {
-            "sync.ranks":
-            roles,
-            "sync.leader":
-            ctx.author.id,
-            "sync.setupdone":
-            True,
-            "sync.on":
-            True,
-            "sync.guildrole":
-            False,
-            "sync.name":
-            "[{0}]".format(info['tag']),
-            "sync.gid":
-            guild_id
-        }, self)
+                return await ctx.send("Couldn't create role {0}".format(
+                    rank["name"]))
+        await self.bot.database.set_guild(
+            ctx.guild, {
+                "sync.ranks": roles,
+                "sync.leader": ctx.author.id,
+                "sync.setupdone": True,
+                "sync.on": True,
+                "sync.guildrole": False,
+                "sync.name": "[{0}]".format(info['tag']),
+                "sync.gid": guild_id
+            }, self)
         guidelines = (
             "Guild sync requires leader permissions in game\n"
             "Guild sync is tied to your account. If you remove your API key, "
@@ -215,8 +211,8 @@ class SyncGuild:
                         color=discord.Color(self.embed_color))
                     guilddoc["ranks"][guilddoc["name"]] = role.id
                 except discord.Forbidden:
-                    return await ctx.send(
-                        "Couldn't create role {0}".format(guilddoc["name"]))
+                    return await ctx.send("Couldn't create role {0}".format(
+                        guilddoc["name"]))
                 await self.bot.database.set_guild(
                     guild, {"sync.ranks": guilddoc["ranks"]}, self)
             msg = ("Guild role enabled and created. Guild sync needs to "
@@ -383,20 +379,20 @@ class SyncGuild:
                 except APIKeyError:
                     pass
         else:
-            self.log.debug("Unable to obtain member list for {0} server.".
-                           format(guild.name))
+            self.log.debug(
+                "Unable to obtain member list for {0} server.".format(
+                    guild.name))
 
     async def guild_synchronizer(self):
-        cursor = self.bot.database.get_guilds_cursor({
-            "sync.on":
-            True,
-            "sync.setupdone":
-            True
-        }, self)
+        cursor = self.bot.database.get_guilds_cursor(
+            {
+                "sync.on": True,
+                "sync.setupdone": True
+            }, self, batch_size=70)
         async for doc in cursor:
             try:
                 await self.sync_guild_ranks(doc)
-            except:
+            except Exception:
                 pass
             await asyncio.sleep(5)
 
