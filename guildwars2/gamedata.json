@@ -519,7 +519,7 @@
         "name": "Spirit Vale",
         "encounters": [
           {"name": "Vale Guardian", "type": "single_achievement", "id": 2654},
-          {"name": "Gorseval", "type": "single_achievement", "id": 2649},
+          {"name": "Gorseval", "type": "single_achievement", "id": 2667},
           {"name": "Sabetha", "type": "single_achievement", "id": 2659}
         ]
       },
