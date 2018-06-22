@@ -337,6 +337,23 @@ class SyncGuild:
                 try:
                     keydoc = await self.fetch_key(member)
                     name = keydoc["account_name"]
+                    for role in rolelist:
+                        try:
+                            await member.remove_roles(
+                                role, reason="GW2Bot Integration [$guildsync]")
+                        except discord.Forbidden:
+                            self.log.debug("Permissions error when trying to "
+                                           "remove {0} role from {1} "
+                                           "user in {2} server.".format(
+                                               role.name, member.name,
+                                               guild.name))
+                        except discord.HTTPException:
+                            # usually because user doesn't have
+                            # role
+                            pass
+                        except AttributeError:
+                            # role no longer exists - deleted?
+                            pass
                     for gw2user in gw2members:
                         if gw2user["name"] == name:
                             rank = gw2user["rank"]
@@ -345,26 +362,6 @@ class SyncGuild:
                             desiredrole = discord.utils.get(
                                 guild.roles, id=guilddoc["ranks"][rank])
                             if desiredrole not in member.roles:
-                                for role in rolelist:
-                                    try:
-                                        await member.remove_roles(
-                                            role,
-                                            reason=
-                                            "GW2Bot Integration [$guildsync]")
-                                    except discord.Forbidden:
-                                        self.log.debug(
-                                            "Permissions error when trying to "
-                                            "remove {0} role from {1} "
-                                            "user in {2} server.".format(
-                                                role.name, member.name,
-                                                guild.name))
-                                    except discord.HTTPException:
-                                        # usually because user doesn't have
-                                        # role
-                                        pass
-                                    except AttributeError:
-                                        # role no longer exists - deleted?
-                                        pass
                                 await self.add_member_to_role(
                                     desiredrole, member, guild)
                             if guildrole:
