@@ -400,7 +400,7 @@ class AccountMixin:
         await ctx.send(
             "{.mention}, here are your raid bosses:".format(user), embed=embed)
 
-    @commands.command()
+    @commands.command(aliases=["find"])
     @commands.cooldown(1, 5, BucketType.user)
     async def search(self, ctx, *, item):
         """Find items on your account
@@ -514,9 +514,29 @@ class AccountMixin:
         item_doc = await self.fetch_item(choice["ids"][0])
         icon_url = item_doc["icon"]
         data = discord.Embed(description="Search results", color=color)
-        data.add_field(
-            name=choice["name"],
-            value="```ml\n{}\n```".format("\n".join(output)))
+        value = "\n".join(output)
+        if len(value) > 1014:
+            value = ""
+            values = []
+            for line in output:
+                if len(value) + len(line) > 1013:
+                    values.append(value)
+                    value = ""
+                value += line + "\n"
+            if value:
+                values.append(value)
+            data.add_field(
+                name=choice["name"],
+                value="```ml\n{}```".format(values[0]),
+                inline=False)
+            for v in values[1:]:
+                data.add_field(
+                    name=u'\u200b',  # Zero width space
+                    value="```ml\n{}```".format(v),
+                    inline=False)
+        else:
+            data.add_field(
+                name=choice["name"], value="```ml\n{}\n```".format(value))
         data.set_author(name=doc["account_name"], icon_url=user.avatar_url)
         data.set_footer(
             text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
