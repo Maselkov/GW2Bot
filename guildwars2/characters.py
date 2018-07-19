@@ -9,6 +9,48 @@ from discord.ext.commands.cooldowns import BucketType
 from .exceptions import APIError, APINotFound
 
 
+class Character:
+    def __init__(self, cog, data):
+        self.cog = cog
+        self.data = data
+        self.name = data["name"]
+        self.race = data["race"]
+        self.gender = data["gender"].lower()
+        self.profession = data["profession"].lower()
+        self.specializations = data["specializations"]
+        self.color = discord.Color(
+            int(self.cog.gamedata["professions"][self.profession]["color"],
+                16))
+        self.created = datetime.datetime.strptime(data["created"],
+                                                  "%Y-%m-%dT%H:%M:%Sz")
+        self.age = data["age"]
+        self.spec_cache = {}
+
+    async def get_spec_info(self, mode="pve"):
+        async def get_elite_spec():
+            spec = self.specializations[mode][2]
+            if spec:
+                spec = await self.cog.db.specializations.find_one({
+                    "_id":
+                    spec["id"]
+                })
+                if spec is None or not spec["elite"]:
+                    return None
+                return spec["name"]
+            return None
+
+        def get_icon_url(prof_name):
+            base_url = ("https://api.gw2bot.info/"
+                        "resources/professions/{}_icon.png")
+            return base_url.format(prof_name.replace(" ", "_").lower())
+
+        name = await get_elite_spec() or self.profession.title()
+        icon = get_icon_url(name)
+        info = {"name": name, "icon": icon}
+        self.spec_cache[mode] = info
+        return info
+
+
 class CharactersMixin:
     @commands.group()
     async def character(self, ctx):
@@ -84,14 +126,33 @@ class CharactersMixin:
         except discord.Forbidden:
             await ctx.send("Need permission to embed links")
 
-    @character.command(name="list")
+    @character.command(
+        name="list", usage="<sort (name|profession|created|age)>")
     @commands.cooldown(1, 15, BucketType.user)
-    async def character_list(self, ctx):
+    async def character_list(self, ctx, sort="name"):
         """Lists all your characters
 
+        You can specify a sort parameter which can be
+        name, profession, created (date of creation), or age (time played).
+        Defaults to name.
         Required permissions: characters
         """
+
+        def get_sort_key(sort):
+            if sort == "profession":
+                return lambda k: (k.profession, k.name)
+            if sort == "age":
+                return lambda k: (-k.age, k.name)
+            if sort == "created":
+                return lambda k: (-(
+                    datetime.datetime.utcnow() - k.created).total_seconds(),
+                    k.name)
+            return lambda k: k.name
+
         user = ctx.author
+        sort = sort.lower()
+        if sort not in ("profession", "name", "created", "age"):
+            return await self.bot.send_cmd_help(ctx)
         scopes = ["characters", "builds"]
         endpoint = "characters?page=0&page_size=200"
         await ctx.trigger_typing()
@@ -99,12 +160,17 @@ class CharactersMixin:
             results = await self.call_api(endpoint, user, scopes)
         except APIError as e:
             return await self.error_handler(ctx, e)
-        output = ["{.mention}, your characters: ```"]
-        for character in results:
-            profession = await self.get_profession(character)
-            output.append("{} ({})".format(character["name"], profession.name))
+        output = ["{.mention}, your characters, sorted by {}: ```"]
+        characters = (Character(self, c) for c in results)
+        for character in sorted(characters, key=get_sort_key(sort)):
+            spec = await character.get_spec_info()
+            output.append("{} ({})".format(character.name, spec["name"]))
         output.append("```")
-        await ctx.send("\n".join(output).format(user))
+        sort = {
+            "created": "date of creation",
+            "age": "time played"
+        }.get(sort, sort)
+        await ctx.send("\n".join(output).format(user, sort))
 
     @character.command(name="gear")
     @commands.cooldown(1, 10, BucketType.user)
@@ -233,10 +299,10 @@ class CharactersMixin:
             days = age.days
             years = days / 365
             floor = int(days / 365)
-            daystill = 365 - (days -
-                              (365 * floor))  # finds days till next birthday
-            charlist.append(
-                character["name"] + " " + str(floor + 1) + " " + str(daystill))
+            daystill = 365 - (days - (365 * floor)
+                              )  # finds days till next birthday
+            charlist.append(character["name"] + " " + str(floor + 1) + " " +
+                            str(daystill))
         sortedlist = sorted(charlist, key=lambda v: int(v.rsplit(' ', 1)[1]))
         output = "{.mention}, days until each of your characters birthdays:```"
         for character in sortedlist:
@@ -876,7 +942,8 @@ class CharactersMixin:
         Profession = collections.namedtuple("Profession",
                                             ["name", "icon", "color"])
         color = discord.Color(
-            int(self.gamedata["professions"][character["profession"]
+            int(
+                self.gamedata["professions"][character["profession"]
                                              .lower()]["color"], 0))
         name = await get_elite_spec(character) or character["profession"]
         icon = get_icon_url(name)
