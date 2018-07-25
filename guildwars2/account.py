@@ -514,7 +514,9 @@ class AccountMixin:
         item_doc = await self.fetch_item(choice["ids"][0])
         icon_url = item_doc["icon"]
         data = discord.Embed(
-            description="Search results" + (" " * 80) + u'\u200b', color=color)
+            description="Search results".format(item_doc["name"]) + " " * 80 +
+            u'\u200b',
+            color=color)
         value = "\n".join(output)
         if len(value) > 1014:
             value = ""
