@@ -300,7 +300,7 @@ class AccountMixin:
     @commands.command()
     @commands.cooldown(1, 15, BucketType.user)
     async def kp(self, ctx):
-        """Shows which raid and fractal encounters you have completed.
+        """Shows completed raids and fractals
 
         Required permissions: progression
         """
@@ -361,8 +361,10 @@ class AccountMixin:
             value.append("```")
             embed.add_field(name=area["name"], value="\n".join(value))
 
-        embed.description = "List of completed encounters"
-        embed.set_footer(text="Green (+) means completed. Red (-) means not.")
+        embed.description = ("Achievements were checked to find "
+                             "completed encounters.")
+        embed.set_footer(text="Green (+) means completed. Red (-) means not. "
+                         "CM stands for Challenge Mode.")
 
         await ctx.send(
             "{.mention}, here is your kill proof.".format(user), embed=embed)
