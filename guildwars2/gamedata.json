@@ -543,8 +543,8 @@
           },
           {
             "name": "Bandit Trio",
-            "type": "any_achievement_or_none",
-            "ids": [2830, 2831]
+            "type": "single_achievement",
+            "id": 2830
           },
           {
             "name": "Matthias",

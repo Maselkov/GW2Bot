@@ -326,7 +326,7 @@ class AccountMixin:
             doc = await self.fetch_key(user, scopes)
             endpoint = "account/achievements?ids=" + ",".join(achievement_ids)
             results = await self.call_api(endpoint, key=doc["key"])
-        except APINotFound as e:
+        except APINotFound:
             # Not Found is returned by the API when none of the searched
             # achievements have been completed yet.
             results = []
@@ -351,15 +351,6 @@ class AccountMixin:
                         return "-"
                 return "+"
 
-            # If any of these achievements are completed, the encounter was
-            # completed, otherwise we don't know.
-            if encounter["type"] == "any_achievement_or_none":
-                for _id in encounter["ids"]:
-                    for achievement in results:
-                        if achievement["id"] == _id and achievement["done"]:
-                            return "+"
-                return "?"
-
         embed = discord.Embed(title="Kill Proof", color=self.embed_color)
         embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
         for area in areas:
@@ -371,8 +362,7 @@ class AccountMixin:
             embed.add_field(name=area["name"], value="\n".join(value))
 
         embed.description = "List of completed encounters"
-        embed.set_footer(text="Green (+) means completed. Red (-) means not. "
-                         "Gray (?) means unknown.")
+        embed.set_footer(text="Green (+) means completed. Red (-) means not.")
 
         await ctx.send(
             "{.mention}, here is your kill proof.".format(user), embed=embed)
