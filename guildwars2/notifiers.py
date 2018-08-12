@@ -13,7 +13,7 @@ from .exceptions import APIError
 
 
 class NotiifiersMixin:
-    @commands.group()
+    @commands.group(case_insensitive=True)
     @commands.guild_only()
     @commands.has_permissions(manage_guild=True)
     async def dailynotifier(self, ctx):
@@ -138,7 +138,7 @@ class NotiifiersMixin:
                                           self)
         await ctx.send("Autopinning for daily notifs enabled")
 
-    @commands.group()
+    @commands.group(case_insensitive=True)
     @commands.guild_only()
     @commands.has_permissions(manage_guild=True)
     async def newsfeed(self, ctx):
@@ -187,7 +187,7 @@ class NotiifiersMixin:
             msg = ("Newsfeed disabled")
         await ctx.send(msg)
 
-    @commands.group()
+    @commands.group(case_insensitive=True)
     @commands.guild_only()
     @commands.has_permissions(manage_guild=True)
     async def updatenotifier(self, ctx):
@@ -267,7 +267,7 @@ class NotiifiersMixin:
             guild, {"updates.mention": mention_type}, self)
         await ctx.send("Mention type set")
 
-    @commands.group()
+    @commands.group(case_insensitive=True)
     @commands.guild_only()
     @commands.has_permissions(manage_guild=True)
     async def bossnotifier(self, ctx):
@@ -628,7 +628,7 @@ class NotiifiersMixin:
     async def gem_tracker(self):
         name = self.__class__.__name__
         cost = await self.get_gem_price()
-        cost_coins = self.gold_to_coins(cost)
+        cost_coins = self.gold_to_coins(None, cost)
         cursor = self.bot.database.get_users_cursor({
             "gemtrack": {
                 "$ne": None
@@ -711,10 +711,10 @@ class NotiifiersMixin:
                     pass
 
     async def forced_account_names(self):
-        cursor = self.bot.database.get_guilds_cursor({
-            "force_account_names":
-            True
-        }, self)
+        cursor = self.bot.database.get_guilds_cursor(
+            {
+                "force_account_names": True
+            }, self)
         async for doc in cursor:
             try:
                 guild = self.bot.get_guild(doc["_id"])

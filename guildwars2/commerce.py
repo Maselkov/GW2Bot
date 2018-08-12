@@ -8,7 +8,7 @@ from .exceptions import APIBadRequest, APIError, APINotFound
 
 
 class CommerceMixin:
-    @commands.group()
+    @commands.group(case_insensitive=True)
     async def tp(self, ctx):
         """Commands related to tradingpost"""
         if ctx.invoked_subcommand is None:
@@ -36,12 +36,14 @@ class CommerceMixin:
                 "{0.mention}, Please us either 'sells' or 'buys' as parameter".
                 format(user))
         data = discord.Embed(
-            description='Current ' + state, colour=self.embed_color)
+            description='Current ' + state,
+            colour=await self.get_embed_color(ctx))
         data.set_author(
             name='Transaction overview of {0}'.format(doc["account_name"]))
-        data.set_thumbnail(url=("https://wiki.guildwars2.com/"
-                                "images/thumb/d/df/Black-Lion-Logo.png/"
-                                "300px-Black-Lion-Logo.png"))
+        data.set_thumbnail(
+            url=("https://wiki.guildwars2.com/"
+                 "images/thumb/d/df/Black-Lion-Logo.png/"
+                 "300px-Black-Lion-Logo.png"))
         data.set_footer(text="Black Lion Trading Company")
         results = results[:20]  # Only display 20 most recent transactions
         item_id = ""
@@ -81,13 +83,13 @@ class CommerceMixin:
             if quantity == 1:
                 total = ""
             else:
-                total = " - Total: " + self.gold_to_coins(quantity * price)
+                total = " - Total: " + self.gold_to_coins(
+                    ctx, quantity * price)
             data.add_field(
                 name=item_name,
                 value="{} x {}{}\nMax. offer: {} {}".format(
-                    quantity,
-                    self.gold_to_coins(price), total,
-                    self.gold_to_coins(max_price), undercuts),
+                    quantity, self.gold_to_coins(ctx, price), total,
+                    self.gold_to_coins(ctx, max_price), undercuts),
                 inline=False)
 
         try:
@@ -120,13 +122,12 @@ class CommerceMixin:
         level = str(choice["level"])
         rarity = choice["rarity"]
         itemtype = self.gamedata["items"]["types"][choice["type"]].lower()
-        description = "A level {} {} {}".format(level,
-                                                rarity.lower(),
+        description = "A level {} {} {}".format(level, rarity.lower(),
                                                 itemtype.lower())
         if buyprice != 0:
-            buyprice = self.gold_to_coins(buyprice)
+            buyprice = self.gold_to_coins(ctx, buyprice)
         if sellprice != 0:
-            sellprice = self.gold_to_coins(sellprice)
+            sellprice = self.gold_to_coins(ctx, sellprice)
         if buyprice == 0:
             buyprice = 'No buy orders'
         if sellprice == 0:
@@ -160,7 +161,8 @@ class CommerceMixin:
         except APIError as e:
             return await self.error_handler(ctx, e)
         data = discord.Embed(
-            description='Current deliveries', colour=self.embed_color)
+            description='Current deliveries',
+            colour=await self.get_embed_color(ctx))
         data.set_author(
             name='Delivery overview of {0}'.format(doc["account_name"]))
         data.set_thumbnail(url="https://wiki.guildwars2.com/"
@@ -175,7 +177,7 @@ class CommerceMixin:
         if coins == 0:
             gold = "Currently no coins for pickup."
         else:
-            gold = self.gold_to_coins(coins)
+            gold = self.gold_to_coins(ctx, coins)
         data.add_field(name="Coins", value=gold, inline=False)
         counter = 0
         if len(items) != 0:
@@ -202,18 +204,22 @@ class CommerceMixin:
         except discord.HTTPException:
             await ctx.send("Need permission to embed links")
 
-    def gold_to_coins(self, money):
+    def gold_to_coins(self, ctx, money):
         gold, remainder = divmod(money, 10000)
         silver, copper = divmod(remainder, 100)
-        gold = "{} gold".format(gold) if gold else ""
-        silver = "{} silver".format(silver) if silver else ""
-        copper = "{} copper".format(copper) if copper else ""
-        return ", ".join(filter(None, [gold, silver, copper]))
+        kwargs = {"fallback": True, "fallback_fmt": " {} "}
+        gold = "{}{}".format(gold, self.get_emoji(ctx, "gold",
+                                                  **kwargs)) if gold else ""
+        silver = "{}{}".format(silver, self.get_emoji(
+            ctx, "silver", **kwargs)) if silver else ""
+        copper = "{}{}".format(copper, self.get_emoji(
+            ctx, "copper", **kwargs)) if copper else ""
+        return "".join(filter(None, [gold, silver, copper]))
 
     def rarity_to_color(self, rarity):
         return int(self.gamedata["items"]["rarity_colors"][rarity], 0)
 
-    @commands.group()
+    @commands.group(case_insensitive=True)
     async def gem(self, ctx):
         """Commands related to gems"""
         if ctx.invoked_subcommand is None:
@@ -233,16 +239,16 @@ class CommerceMixin:
         except APIError as e:
             return await self.error_handler(ctx, e)
         data = discord.Embed(
-            title="Currency exchange", colour=self.embed_color)
+            title="Currency exchange", colour=await self.get_embed_color(ctx))
         data.add_field(
             name="{} gems would cost you".format(quantity),
-            value=self.gold_to_coins(gem_price),
+            value=self.gold_to_coins(ctx, gem_price),
             inline=False)
         data.set_thumbnail(url="https://render.guildwars2.com/file/220061640EC"
                            "A41C0577758030357221B4ECCE62C/502065.png")
         data.add_field(
             name="{} gems could buy you".format(quantity),
-            value=self.gold_to_coins(coin_price),
+            value=self.gold_to_coins(ctx, coin_price),
             inline=False)
         try:
             await ctx.send(embed=data)
@@ -260,16 +266,26 @@ class CommerceMixin:
         results = await self.call_api(endpoint)
         return results["quantity"]
 
-    @gem.command(name="track")
-    async def gem_track(self, ctx, gold: int):
+    @gem.command(name="track", usage="<gold>")
+    async def gem_track(self, ctx, gold: int = 0):
         """Receive a notification when cost of 400 gems drops below given cost
 
         For example, if you set cost to 100, you will get a notification when
         price of 400 gems drops below 100 gold
         """
+        user = ctx.author
+        if not gold:
+            doc = await self.bot.database.get(user, self)
+            current = doc.get("gemtrack")
+            if current:
+                return await ctx.send(
+                    "You'll currently be notified if "
+                    "price of 400 gems drops below **{}**".format(
+                        current // 10000))
+            else:
+                return await self.send_cmd_help(ctx)
         if not 0 <= gold <= 500:
             return await ctx.send("Invalid value")
-        user = ctx.author
         price = gold * 10000
         try:
             await user.send("You will be notified when price of 400 gems "
@@ -278,5 +294,5 @@ class CommerceMixin:
             return await ctx.send("Couldn't send a DM to you. Either you have "
                                   "me blocked, or disabled DMs in this "
                                   "server. Aborting.")
-        await self.bot.database.set_user(user, {"gemtrack": price}, self)
+        await self.bot.database.set(user, {"gemtrack": price}, self)
         await ctx.send("Successfully set")

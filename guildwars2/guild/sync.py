@@ -10,7 +10,7 @@ from ..exceptions import APIError, APIForbidden, APIKeyError, APINotFound
 class SyncGuild:
     @commands.guild_only()
     @commands.has_permissions(administrator=True)
-    @commands.group(name="guildsync")
+    @commands.group(name="guildsync", case_insensitive=True)
     async def guildsync(self, ctx):
         """In game guild rank to discord roles synchronization commands
         This grou= allows you to set up a link between your ingame roster and discord.

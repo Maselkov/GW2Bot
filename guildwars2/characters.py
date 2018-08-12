@@ -7,6 +7,7 @@ from discord.ext import commands
 from discord.ext.commands.cooldowns import BucketType
 
 from .exceptions import APIError, APINotFound
+from .utils.chat import embed_list_lines, zero_width_space
 
 
 class Character:
@@ -17,6 +18,7 @@ class Character:
         self.race = data["race"]
         self.gender = data["gender"].lower()
         self.profession = data["profession"].lower()
+        self.level = data["level"]
         self.specializations = data["specializations"]
         self.color = discord.Color(
             int(self.cog.gamedata["professions"][self.profession]["color"],
@@ -52,7 +54,17 @@ class Character:
 
 
 class CharactersMixin:
-    @commands.group()
+    @staticmethod
+    def format_age(age, *, short=False):
+        hours, seconds = divmod(age, 3600)
+        minutes = round(seconds / 60)
+        h_str = "h" if short else " hours"
+        m_str = "m" if short else " minutes"
+        if hours:
+            return "{}{} {}{}".format(hours, h_str, minutes, m_str)
+        return "{}{}".format(minutes, m_str)
+
+    @commands.group(case_insensitive=True)
     async def character(self, ctx):
         """Character related commands"""
         if ctx.invoked_subcommand is None:
@@ -67,16 +79,6 @@ class CharactersMixin:
         Required permissions: characters
         """
 
-        def format_age(age):
-            hours, remainder = divmod(int(age), 3600)
-            minutes, seconds = divmod(remainder, 60)
-            days, hours = divmod(hours, 24)
-            if days:
-                fmt = '{d} days, {h} hours, {m} minutes, and {s} seconds'
-            else:
-                fmt = '{h} hours, {m} minutes, and {s} seconds'
-            return fmt.format(d=days, h=hours, m=minutes, s=seconds)
-
         await ctx.trigger_typing()
         character = character.title()
         endpoint = "characters/" + character.replace(" ", "%20")
@@ -87,7 +89,7 @@ class CharactersMixin:
             return await ctx.send("Invalid character name")
         except APIError as e:
             return await self.error_handler(ctx, e)
-        age = format_age(results["age"])
+        age = self.format_age(results["age"])
         created = results["created"].split("T", 1)[0]
         deaths = results["deaths"]
         deathsperhour = round(deaths / (results["age"] / 3600), 1)
@@ -128,7 +130,7 @@ class CharactersMixin:
 
     @character.command(
         name="list", usage="<sort (name|profession|created|age)>")
-    @commands.cooldown(1, 15, BucketType.user)
+    @commands.cooldown(1, 5, BucketType.user)
     async def character_list(self, ctx, sort="name"):
         """Lists all your characters
 
@@ -138,7 +140,11 @@ class CharactersMixin:
         Required permissions: characters
         """
 
-        def get_sort_key(sort):
+        sort = sort.lower()
+        if sort not in ("profession", "name", "created", "age"):
+            return await self.bot.send_cmd_help(ctx)
+
+        def get_sort_key():
             if sort == "profession":
                 return lambda k: (k.profession, k.name)
             if sort == "age":
@@ -149,28 +155,43 @@ class CharactersMixin:
                     k.name)
             return lambda k: k.name
 
+        def extra_info(char):
+            if sort == "age":
+                return ": " + self.format_age(char.age, short=True)
+            if sort == "created":
+                return ": " + char.created.strftime("%Y-%m-%d")
+            is_80 = char.level == 80
+            return "" + (" (Level {})".format(char.level) if not is_80 else "")
+
         user = ctx.author
-        sort = sort.lower()
-        if sort not in ("profession", "name", "created", "age"):
-            return await self.bot.send_cmd_help(ctx)
         scopes = ["characters", "builds"]
-        endpoint = "characters?page=0&page_size=200"
         await ctx.trigger_typing()
         try:
-            results = await self.call_api(endpoint, user, scopes)
+            doc = await self.fetch_key(user, scopes)
+            characters = await self.get_all_characters(user)
         except APIError as e:
             return await self.error_handler(ctx, e)
-        output = ["{.mention}, your characters, sorted by {}: ```"]
-        characters = (Character(self, c) for c in results)
-        for character in sorted(characters, key=get_sort_key(sort)):
+        embed = discord.Embed(
+            title="Your characters", colour=await self.get_embed_color(ctx))
+        embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
+        output = []
+        for character in sorted(characters, key=get_sort_key()):
             spec = await character.get_spec_info()
-            output.append("{} ({})".format(character.name, spec["name"]))
-        output.append("```")
+            output.append("{}**{}**{}".format(
+                self.get_emoji(
+                    ctx, spec["name"], fallback=True,
+                    fallback_fmt="**({})** "), character.name,
+                extra_info(character)))
         sort = {
             "created": "date of creation",
             "age": "time played"
         }.get(sort, sort)
-        await ctx.send("\n".join(output).format(user, sort))
+        embed = embed_list_lines(embed, output, "List")
+        embed.description = "Sorted by " + sort
+        embed.set_footer(text="You can use age|created|profession to "
+                         "display more information! E.g. {}character list age".
+                         format(ctx.prefix))
+        await ctx.send("{.mention}".format(user), embed=embed)
 
     @character.command(name="gear")
     @commands.cooldown(1, 10, BucketType.user)
@@ -264,7 +285,7 @@ class CharactersMixin:
                 infusion = handle_duplicates(gear[piece]["infusions"])
                 msg = "\n".join(upgrade + infusion)
                 if not msg:
-                    msg = u'\u200b'
+                    msg = zero_width_space
                 data.add_field(
                     name="{} {} {}".format(statname, rarity, itemname),
                     value=msg,
@@ -284,52 +305,49 @@ class CharactersMixin:
 
         Required permissions: characters
         """
+
+        def suffix(year):
+            if year == 1:
+                return 'st'
+            if year == 2:
+                return 'nd'
+            if year == 3:
+                return 'rd'
+            return "th"
+
         user = ctx.message.author
-        endpoint = "characters?page=0&page_size=200"
         await ctx.trigger_typing()
         try:
-            results = await self.call_api(endpoint, user, ["characters"])
+            doc = await self.fetch_key(user, ["characters"])
+            characters = await self.get_all_characters(user)
         except APIError as e:
             return await self.error_handler(ctx, e)
-        charlist = []
-        for character in results:
-            created = character["created"].split("T", 1)[0]
-            dt = datetime.datetime.strptime(created, "%Y-%m-%d")
-            age = datetime.datetime.utcnow() - dt
+        fields = {}
+        for character in characters:
+            age = datetime.datetime.utcnow() - character.created
             days = age.days
-            years = days / 365
-            floor = int(days / 365)
-            daystill = 365 - (days - (365 * floor)
-                              )  # finds days till next birthday
-            charlist.append(character["name"] + " " + str(floor + 1) + " " +
-                            str(daystill))
-        sortedlist = sorted(charlist, key=lambda v: int(v.rsplit(' ', 1)[1]))
-        output = "{.mention}, days until each of your characters birthdays:```"
-        for character in sortedlist:
-            name = character.rsplit(' ', 2)[0]
-            days = character.rsplit(' ', 1)[1]
-            years = character.rsplit(' ', 2)[1]
-            if years == "1":
-                suffix = 'st'
-            elif years == "2":
-                suffix = 'nd'
-            elif years == "3":
-                suffix = 'rd'
-            else:
-                suffix = 'th'
-            output += "\n{} {} days until {}{} birthday".format(
-                name, days, years, suffix)
-            if len(output) > 1900 and '*' not in output:
-                output += '*'
-        output += "```"
-        if '*' not in output:
-            await ctx.send(output.format(user))
-        else:
-            first, second = output.split('*')
-            first += "```"
-            second = "```" + second
-            await ctx.send(first.format(user))
-            await ctx.send(second)
+            floor = days // 365
+            # finds days till next birthday
+            days_left = 365 - (days - (365 * floor))
+            next_bd = floor + 1
+            fields.setdefault(next_bd, [])
+            spec = await character.get_spec_info()
+            fields[next_bd].append(("{} {}".format(
+                self.get_emoji(ctx, spec["name"]), character.name), days_left))
+        msg = "{.mention}, here are your upcoming birthdays:".format(user)
+        embed = discord.Embed(
+            title="Days until...", colour=await self.get_embed_color(ctx))
+        embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
+        for k, v in sorted(fields.items(), key=lambda k: k[0]):
+            value = "\n".join([
+                "{}: **{}**".format(*line)
+                for line in sorted(v, key=lambda l: l[1], reverse=True)
+            ])
+            embed.add_field(
+                name="{}{} Birthday".format(k, suffix(k)),
+                value=value,
+                inline=False)
+        await ctx.send(msg, embed=embed)
 
     @character.command(name="attributes")
     @commands.cooldown(1, 10, BucketType.user)
@@ -795,7 +813,8 @@ class CharactersMixin:
         except APIError as e:
             return await self.error_handler(ctx, e)
         data = discord.Embed(
-            description='Crafting overview', colour=self.embed_color)
+            description='Crafting overview',
+            colour=await self.get_embed_color(ctx))
         data.set_author(
             name=doc["account_name"], icon_url=ctx.author.avatar_url)
         counter = 0
@@ -812,7 +831,7 @@ class CharactersMixin:
         except discord.HTTPException:
             await ctx.send("Need permission to embed links")
 
-    @commands.group()
+    @commands.group(case_insensitive=True)
     async def sab(self, ctx):
         """Super Adventure Box commands"""
         if ctx.invoked_subcommand is None:
@@ -890,6 +909,11 @@ class CharactersMixin:
         await ctx.send("You have unlocked all zones on "
                        "this character! Congratulations!")
 
+    async def get_all_characters(self, user, scopes=None):
+        endpoint = "characters?page=0&page_size=200"
+        results = await self.call_api(endpoint, user, scopes)
+        return [Character(self, c) for c in results]
+
     async def get_character(self, ctx, character):
         character = character.title()
         endpoint = "characters/" + character.replace(" ", "%20")
@@ -948,3 +972,7 @@ class CharactersMixin:
         name = await get_elite_spec(character) or character["profession"]
         icon = get_icon_url(name)
         return Profession(name, icon, color)
+
+    def get_profession_icon(self, prof_name):
+        url = ("https://api.gw2bot.info/" "resources/professions/{}_icon.png")
+        return url.format(prof_name.replace(" ", "_").lower())

@@ -6,7 +6,7 @@ from .exceptions import APIError
 
 
 class PvpMixin:
-    @commands.group()
+    @commands.group(case_insensitive=True)
     async def pvp(self, ctx):
         """PvP related commands.
         """
@@ -45,7 +45,7 @@ class PvpMixin:
         except APIError as e:
             await self.error_handler(ctx, e)
             return
-        data = discord.Embed(olour=self.embed_color)
+        data = discord.Embed(colour=await self.get_embed_color(ctx))
         data.add_field(name="Rank", value=rank, inline=False)
         data.add_field(name="Total games played", value=totalgamesplayed)
         data.add_field(name="Total wins", value=totalwins)
@@ -64,7 +64,7 @@ class PvpMixin:
 
     @pvp.command(name="professions")
     @commands.cooldown(1, 5, BucketType.user)
-    async def pvp_professions(self, ctx, *, profession: str=None):
+    async def pvp_professions(self, ctx, *, profession: str = None):
         """Information about your pvp profession stats.
         If no profession is given, defaults to general profession stats.
         Example! $pvp professions mesmer
@@ -107,7 +107,8 @@ class PvpMixin:
             lowestwinrategames = professionsformat[lowestestwinrate][
                 "winratio"]
             data = discord.Embed(
-                description="Professions", color=self.embed_color)
+                description="Professions",
+                color=await self.get_embed_color(ctx))
             data.set_thumbnail(url=icon)
             data.add_field(
                 name="Most played profession",
