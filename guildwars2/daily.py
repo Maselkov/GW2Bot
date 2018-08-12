@@ -1,33 +1,33 @@
 import datetime
+import re
 
+import discord
 from discord.ext import commands
 from discord.ext.commands.cooldowns import BucketType
-import discord
-import re
 
 
 class DailyMixin:
-    @commands.group(aliases=["d"])
+    @commands.group(aliases=["d"], case_insensitive=True)
     async def daily(self, ctx):
         """Commands showing daily things"""
         if ctx.invoked_subcommand is None:
             await self.bot.send_cmd_help(ctx)
 
-    @daily.command(name="pve", aliases=["e", "E", "PVE"])
+    @daily.command(name="pve", aliases=["e"])
     @commands.cooldown(1, 2, BucketType.user)
     async def daily_pve(self, ctx):
         """Show today's PvE dailies"""
-        embed = await self.daily_embed(["pve"])
+        embed = await self.daily_embed(["pve"], ctx=ctx)
         try:
             await ctx.send(embed=embed)
         except discord.Forbidden:
             await ctx.send("Need permission to embed links")
 
-    @daily.command(name="wvw", aliases=["w", "WVW", "W"])
+    @daily.command(name="wvw", aliases=["w"])
     @commands.cooldown(1, 2, BucketType.user)
     async def daily_wvw(self, ctx):
         """Show today's WvW dailies"""
-        embed = await self.daily_embed(["wvw"])
+        embed = await self.daily_embed(["wvw"], ctx=ctx)
         embed.set_thumbnail(
             url="https://render.guildwars2.com/file/"
             "2BBA251A24A2C1A0A305D561580449AF5B55F54F/338457.png")
@@ -36,11 +36,11 @@ class DailyMixin:
         except discord.Forbidden:
             await ctx.send("Need permission to embed links")
 
-    @daily.command(name="pvp", aliases=["p", "P", "PVP"])
+    @daily.command(name="pvp", aliases=["p"])
     @commands.cooldown(1, 2, BucketType.user)
     async def daily_pvp(self, ctx):
         """Show today's PvP dailies"""
-        embed = await self.daily_embed(["pvp"])
+        embed = await self.daily_embed(["pvp"], ctx=ctx)
         try:
             embed.set_thumbnail(
                 url="https://render.guildwars2.com/file/"
@@ -49,11 +49,11 @@ class DailyMixin:
         except discord.Forbidden:
             await ctx.send("Need permission to embed links")
 
-    @daily.command(name="fractals", aliases=["f", "F", "Fractals"])
+    @daily.command(name="fractals", aliases=["f"])
     @commands.cooldown(1, 2, BucketType.user)
     async def daily_fractals(self, ctx):
         """Show today's fractal dailies"""
-        embed = await self.daily_embed(["fractals"])
+        embed = await self.daily_embed(["fractals"], ctx=ctx)
         try:
             embed.set_thumbnail(
                 url="https://render.guildwars2.com/file/"
@@ -66,7 +66,7 @@ class DailyMixin:
     @commands.cooldown(1, 2, BucketType.user)
     async def daily_psna(self, ctx):
         """Show today's Pact Supply Network Agent locations"""
-        embed = await self.daily_embed(["psna"])
+        embed = await self.daily_embed(["psna"], ctx=ctx)
         embed.set_thumbnail(
             url="https://wiki.guildwars2.com/images/1/14/Daily_Achievement.png"
         )
@@ -75,12 +75,12 @@ class DailyMixin:
         except discord.Forbidden:
             await ctx.send("Need permission to embed links")
 
-    @daily.command(name="all", aliases=["A", "a"])
+    @daily.command(name="all", aliases=["a"])
     @commands.cooldown(1, 2, BucketType.user)
     async def daily_all(self, ctx):
         """Show today's all dailies"""
         embed = await self.daily_embed(
-            ["psna", "pve", "pvp", "wvw", "fractals"])
+            ["psna", "pve", "pvp", "wvw", "fractals"], ctx=ctx)
         embed.set_thumbnail(
             url="https://wiki.guildwars2.com/images/1/14/Daily_Achievement.png"
         )
@@ -89,10 +89,14 @@ class DailyMixin:
         except discord.Forbidden:
             await ctx.send("Need permission to embed links")
 
-    async def daily_embed(self, categories, *, doc=None):
+    async def daily_embed(self, categories, *, doc=None, ctx=None):
         if not doc:
             doc = await self.bot.database.get_cog_config(self)
-        embed = discord.Embed(title="Dailies", color=self.embed_color)
+        if ctx:
+            color = await self.get_embed_color(ctx)
+        else:
+            color = self.embed_color
+        embed = discord.Embed(title="Dailies", color=color)
         dailies = doc["cache"]["dailies"]
         for category in categories:
             if category == "psna" and datetime.datetime.utcnow().hour >= 8:
@@ -106,6 +110,8 @@ class DailyMixin:
                 category = "psna in 8 hours"
             value = re.sub(r"(?:Daily|Tier 4|PvP|WvW) ", "", value)
             embed.add_field(name=category.upper(), value=value, inline=False)
+        embed.set_footer(
+            text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
         return embed
 
     def get_fractals(self, fractals):
@@ -122,9 +128,8 @@ class DailyMixin:
         for level in sorted(daily_recs, key=int):
             for k, v in fractals_data.items():
                 if int(level) in v:
-                    fractal_final.append(
-                        "Recommended - {} {}".format(
-                            level, k))
+                    fractal_final.append("Recommended - {} {}".format(
+                        level, k))
         return fractal_final
 
     def get_psna(self, *, offset_days=0):

@@ -6,7 +6,7 @@ from .exceptions import APIError, APIKeyError
 
 
 class WvwMixin:
-    @commands.group()
+    @commands.group(case_insensitive=True)
     async def wvw(self, ctx):
         """Commands related to WVW"""
         if ctx.invoked_subcommand is None:
