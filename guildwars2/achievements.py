@@ -47,8 +47,10 @@ class AchievementsMixin:
             color=await self.get_embed_color(ctx))
         if "icon" in ach:
             data.set_thumbnail(url=ach["icon"])
-        data.add_field(
-            name="Requirement", value=ach["requirement"], inline=False)
+        requirement = ach.get("requirement")
+        if requirement:
+            data.add_field(
+                name="Requirement", value=ach["requirement"], inline=False)
         tiers = ach["tiers"]
         repeated = res["repeated"] if "repeated" in res else 0
         max_prog = len(tiers)
