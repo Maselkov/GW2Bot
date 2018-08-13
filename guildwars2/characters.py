@@ -341,7 +341,7 @@ class CharactersMixin:
         for k, v in sorted(fields.items(), key=lambda k: k[0]):
             value = "\n".join([
                 "{}: **{}**".format(*line)
-                for line in sorted(v, key=lambda l: l[1], reverse=True)
+                for line in sorted(v, key=lambda l: l[1])
             ])
             embed.add_field(
                 name="{}{} Birthday".format(k, suffix(k)),
