@@ -13,8 +13,8 @@ class WalletMixin:
         if ctx.invoked_subcommand is None:
             try:
                 length = len(ctx.prefix) + len(ctx.invoked_with)
-                if length != ctx.message.content.length:
-                    arg = ctx.message.content[length:]
+                if length != len(ctx.message.content):
+                    arg = ctx.message.content[length + 1:]
                     return await ctx.invoke(self.wallet_currency, currency=arg)
             except:
                 pass
