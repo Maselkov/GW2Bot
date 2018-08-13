@@ -6,7 +6,7 @@ from discord.ext import commands
 class GuildManageMixin:
     @commands.guild_only()
     @commands.has_permissions(manage_guild=True)
-    @commands.group(name="server")
+    @commands.group(name="server", case_insensitive=True)
     async def guild_manage(self, ctx):
         """Commands for server management"""
         if ctx.invoked_subcommand is None:

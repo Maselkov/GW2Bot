@@ -9,7 +9,7 @@ from ..exceptions import APIError, APIForbidden, APINotFound
 
 
 class GeneralGuild:
-    @commands.group()
+    @commands.group(case_insensitive=True)
     async def guild(self, ctx):
         """Guild related commands."""
         if ctx.invoked_subcommand is None:
@@ -41,7 +41,7 @@ class GeneralGuild:
             return await self.error_handler(ctx, e)
         data = discord.Embed(
             description='General Info about {0}'.format(guild_name),
-            colour=self.embed_color)
+            colour=await self.get_embed_color(ctx))
         data.set_author(name="{} [{}]".format(results["name"], results["tag"]))
         data.add_field(name='Influence', value=results["influence"])
         data.add_field(name='Aetherium', value=results["aetherium"])
@@ -91,7 +91,7 @@ class GeneralGuild:
                 "use this command")
         except APIError as e:
             return await self.error_handler(ctx, e)
-        data = discord.Embed(description="Members", colour=self.embed_color)
+        data = discord.Embed(description="Members", colour=await self.get_embed_color(ctx))
         data.set_author(name=guild_name.title())
         counter = 0
         order_id = 1
@@ -140,7 +140,7 @@ class GeneralGuild:
                 "use this command")
         except APIError as e:
             return await self.error_handler(ctx, e)
-        data = discord.Embed(description="Treasury", colour=self.embed_color)
+        data = discord.Embed(description="Treasury", colour=await self.get_embed_color(ctx))
         data.set_author(name=guild_name.title())
         counter = 0
         item_counter = 0
@@ -204,7 +204,7 @@ class GeneralGuild:
 
         data = discord.Embed(
             description="{0} Log".format(state.capitalize()),
-            colour=self.embed_color)
+            colour=await self.get_embed_color(ctx))
         data.set_author(name=guild_name.title())
         counter = 0
         for entry in log:

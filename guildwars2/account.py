@@ -7,6 +7,7 @@ from discord.ext import commands
 from discord.ext.commands.cooldowns import BucketType
 
 from .exceptions import APIError, APINotFound
+from .utils.chat import embed_list_lines
 
 
 class AccountMixin:
@@ -27,7 +28,7 @@ class AccountMixin:
         accountname = doc["account_name"]
         created = results["created"].split("T", 1)[0]
         hascommander = "Yes" if results["commander"] else "No"
-        data = discord.Embed(colour=self.embed_color)
+        data = discord.Embed(colour=await self.get_embed_color(ctx))
         data.add_field(name="Created account on", value=created)
         # Add world name to account info
         wid = results["world"]
@@ -61,7 +62,21 @@ class AccountMixin:
                 return await self.error_handler(ctx, e)
             pvprank = pvp["pvp_rank"] + pvp["pvp_rank_rollovers"]
             data.add_field(name="PVP rank", value=pvprank)
-        data.set_author(name=accountname)
+        if "characters" in doc["permissions"]:
+            try:
+                characters = await self.get_all_characters(user)
+                total_played = 0
+                for character in characters:
+                    total_played += character.age
+                data.add_field(
+                    name="Total time played",
+                    value=self.format_age(total_played),
+                    inline=False)
+            except APIError as e:
+                return await self.error_handler(ctx, e)
+        data.set_author(name=accountname, icon_url=user.avatar_url)
+        data.set_footer(
+            text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
         try:
             await ctx.send(embed=data)
         except discord.Forbidden:
@@ -309,9 +324,7 @@ class AccountMixin:
         if not self.can_embed_links(ctx):
             return await ctx.send("Need permission to embed links")
         await ctx.trigger_typing()
-
         areas = self.gamedata["killproofs"]["areas"]
-
         # Create a list of lists of all achievement ids we need to check.
         achievement_ids = [[x["id"]]
                            if x["type"] == "single_achievement" else x["ids"]
@@ -339,19 +352,19 @@ class AccountMixin:
                 _id = encounter["id"]
                 for achievement in results:
                     if achievement["id"] == _id and achievement["done"]:
-                        return "+"
+                        return "+✔"
                 # The achievement is not in the list or isn't done
-                return "-"
-
+                return "-✖"
             # All achievements have to be completed
             if encounter["type"] == "all_achievements":
                 for _id in encounter["ids"]:
                     # The results do not contain achievements with no progress
                     if not any(a["id"] == _id and a["done"] for a in results):
-                        return "-"
-                return "+"
+                        return "-✖"
+                return "+✔"
 
-        embed = discord.Embed(title="Kill Proof", color=self.embed_color)
+        embed = discord.Embed(
+            title="Kill Proof", color=await self.get_embed_color(ctx))
         embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
         for area in areas:
             value = ["```diff"]
@@ -385,7 +398,7 @@ class AccountMixin:
         except APIError as e:
             return await self.error_handler(ctx, e)
         raids = await self.get_raids()
-        embed = self.boss_embed(raids, results)
+        embed = await self.boss_embed(ctx, raids, results)
         embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
         if not self.can_embed_links(ctx):
             return await ctx.send("Need permission to embed links")
@@ -547,45 +560,30 @@ class AccountMixin:
         user = ctx.message.author
         endpoint = "account/home/cats"
         try:
-            results = await self.call_api(endpoint, user, ["progression"])
+            doc = await self.fetch_key(user, ["progression"])
+            results = await self.call_api(endpoint, key=doc["key"])
         except APIError as e:
             return await self.error_handler(ctx, e)
-        else:
-            listofcats = []
-            for cat in results:
-                cat_id = cat["id"]
-                try:
-                    hint = cat["hint"]
-                except KeyError:
-                    thanks_anet = {
-                        34: "holographic",
-                        36: "bluecatmander",
-                        37: "yellowcatmander"
-                    }
-                    hint = thanks_anet.get(cat_id)
-                listofcats.append(hint)
-            catslist = list(set(list(self.gamedata["cats"])) ^ set(listofcats))
-            if not catslist:
-                await ctx.send(
-                    ":cat: Congratulations {0.mention}, "
-                    "you've collected all the cats :cat:. Here's another: "
-                    ":cat2:".format(user))
-            else:
-                formattedlist = []
-                output = (":cat: {0.mention}, you haven't collected the "
-                          "following cats yet: :cat:\n```")
-                catslist.sort(
-                    key=lambda val: self.gamedata["cats"][val]["order"])
-                for cat in catslist:
-                    formattedlist.append(self.gamedata["cats"][cat]["name"])
-                for x in formattedlist:
-                    output += "\n" + x
-                output += "```"
-                await ctx.send(output.format(user))
+        owned_cats = [cat["id"] for cat in results]
+        lines = []
+        for cat in self.gamedata["cats"]:
+            if cat["id"] not in owned_cats:
+                lines.append(cat["guide"])
+        if not lines:
+            return await ctx.send("You have collected all the "
+                                  "cats! Congratulations! :cat2:")
+        embed = discord.Embed(color=await self.get_embed_color(ctx))
+        embed = embed_list_lines(embed, lines,
+                                 "Cats you haven't collected yet")
+        embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
+        embed.set_footer(
+            text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
+        await ctx.send(
+            "{.mention}, here are your cats:".format(user), embed=embed)
 
-    def boss_embed(self, raids, results):
+    async def boss_embed(self, ctx, raids, results):
         def is_killed(boss):
-            return "+" if boss["id"] in results else "-"
+            return "+✔" if boss["id"] in results else "-✖"
 
         def readable_id(_id):
             _id = _id.split("_")
@@ -595,7 +593,8 @@ class AccountMixin:
             ])
 
         not_completed = []
-        embed = discord.Embed(title="Bosses", color=self.embed_color)
+        embed = discord.Embed(
+            title="Bosses", color=await self.get_embed_color(ctx))
         for raid in raids:
             for wing in raid["wings"]:
                 wing_done = True

@@ -7,15 +7,52 @@ UTC_TZ = datetime.timezone.utc
 
 
 class EventsMixin:
-    @commands.command(aliases=["eventtimer", "eventtimers"])
+    @commands.group(case_insensitive=True, aliases=["hotet"])
     async def et(self, ctx):
-        """The event timer. Shows upcoming world bosses."""
+        """The event timer"""
+        # Help formatter preview
+        if ctx.invoked_subcommand is None:
+            msg = ("**{0}et bosses | b**: Upcoming bosses\n"
+                   "**{0}et hot | h**: Event timer for HoT maps and Dry top\n"
+                   "**{0}et pof | p**: Event timer for PoF and LS4 maps\n"
+                   "**{0}et day | d** Current day/night".format(ctx.prefix))
+            embed = discord.Embed(
+                title="Event Timer help",
+                description=msg,
+                color=await self.get_embed_color(ctx))
+            embed.set_footer(
+                text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
+            info = None
+            if ctx.invoked_with.lower() == "hotet":
+                info = ("**{0}hotet** has evolved into **{0}et**, use "
+                        "**{0}et h** to access the old functionality").format(
+                            ctx.prefix)
+            try:
+                await ctx.send(info, embed=embed)
+            except:
+                await self.bot.send_cmd_help(ctx)
+
+    @et.command(name="hot", aliases=["h"])
+    async def et_hot(self, ctx):
+        """Event timer for HoT maps and Dry Top"""
+        await ctx.send(embed=await self.timer_embed(ctx, "hot"))
+
+    @et.command(name="pof", aliases=["p"])
+    async def et_pof(self, ctx):
+        """Event timer for PoF and LS4 maps"""
+        await ctx.send(embed=await self.timer_embed(ctx, "pof"))
+
+    @et.command(name="day", aliases=["d"])
+    async def et_day(self, ctx):
+        """Current day/night cycle"""
+        await ctx.send(embed=await self.timer_embed(ctx, "day"))
+
+    @et.command(name="bosses", aliases=["b"])
+    async def et_bosses(self, ctx):
+        """Upcoming world bosses"""
         tz = await self.get_timezone(ctx.guild)
         embed = self.schedule_embed(timezone=tz)
-        try:
-            await ctx.send(embed=embed)
-        except:
-            await ctx.send("Need permission to embed links")
+        await ctx.send(embed=embed)
 
     def generate_schedule(self):
         time = datetime.datetime(1, 1, 1)
@@ -25,8 +62,8 @@ class EventsMixin:
         counter = 0
         while counter < 12:
             for boss in normal:
-                increment = datetime.timedelta(
-                    hours=boss["interval"] * counter)
+                increment = datetime.timedelta(hours=boss["interval"] *
+                                               counter)
                 time = (datetime.datetime(
                     1, 1, 1, *boss["start_time"], tzinfo=UTC_TZ) + increment)
                 if time.day != 1:
@@ -93,7 +130,9 @@ class EventsMixin:
                                        self.format_timedelta(boss["diff"])),
                 value=value,
                 inline=False)
-        data.set_footer(text="Timezone: {}".format(timezone.tzname(None)))
+        data.set_footer(
+            text="Timezone: {}".format(timezone.tzname(None)),
+            icon_url=self.bot.user.avatar_url)
         return data
 
     def format_timedelta(self, td):
@@ -104,47 +143,46 @@ class EventsMixin:
         else:
             return "{} minutes".format(minutes)
 
-    @commands.command(aliases=["hottimer", "hottimers"])
-    async def hotet(self, ctx):
-        """The event timer. Shows current progression of hot maps."""
+    async def timer_embed(self, ctx, group):
         time = datetime.datetime.utcnow()
-        position = int(
-            (60 * time.hour + time.minute) %
-            120)  # this gets the minutes elapsed in the current 2 hour window
-        maps = self.gamedata["event_timers"]["maps"]
-        output = ""
-        for hotmap in maps:
-            overlap = 0
-            output = output + "#" + hotmap["name"] + "\n"
-            for phases in hotmap[
-                    "phases"]:  # loops through phases to find current phase
-                if position < phases["end"]:
-                    output = (
-                        output + "Current phase is " + phases["name"] + ".\n")
-                    nextphase = position + 1 + (phases["end"] - position)
-                    if nextphase > 120:
-                        overlap = 120 - position
-                        nextphase = nextphase - 120
+        position = (
+            60 * time.hour + time.minute
+        ) % 120  # this gets the minutes elapsed in the current 2 hour window
+        maps = self.gamedata["event_timers"][group]
+        title = {
+            "hot": "HoT Event Timer",
+            "pof": "PoF Event Timer",
+            "day": "Day/Night cycle"
+        }.get(group)
+        embed = discord.Embed(
+            title=title, color=await self.get_embed_color(ctx))
+        for location in maps:
+            duration_so_far = 0
+            current_phase = None
+            index = 0
+            phases = location["phases"]
+            for i, phase in enumerate(phases):
+                if position < duration_so_far:
                     break
-            for phases in hotmap[
-                    "phases"]:  # loops through phases to find next phase
-                if nextphase < phases["end"]:
-                    if overlap == 0:
-                        nextstart = phases["end"] - phases["duration"]
-                        timetostart = nextstart - position
-                        name = phases["name"]
-                    # dry top event starts at the 2 hour reset
-                    elif overlap > 0 and hotmap["name"] == "Dry Top":
-                        timetostart = 120 - position
-                        name = phases["name"]
-                    else:
-                        timetostart = phases["end"] + overlap
-                        name = phases["nextname"]
-                    output = output + "Next phase is " + name + " in " + str(
-                        timetostart) + " minutes.\n"
-                    break
-            output = output + "\n"
-        await ctx.send("```markdown\n" + output + "```")
+                current_phase = phase["name"]
+                index = i
+                duration_so_far += phase["duration"]
+            index += 1
+            if index == len(phases):
+                if phases[0]["name"] == phases[index - 1]["name"]:
+                    index = 1
+                    duration_so_far += phases[0]["duration"]
+                else:
+                    index = 0
+            next_phase = phases[index]["name"]
+            time_until = duration_so_far - position
+            value = ("Current phase: **{}**"
+                     "\nNext phase: **{}** in **{}** minutes".format(
+                         current_phase, next_phase, time_until))
+            embed.add_field(name=location["name"], value=value, inline=False)
+        embed.set_footer(
+            text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
+        return embed
 
     async def get_timezone(self, guild):
         if not guild:
