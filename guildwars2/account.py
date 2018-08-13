@@ -315,7 +315,7 @@ class AccountMixin:
     @commands.command()
     @commands.cooldown(1, 15, BucketType.user)
     async def kp(self, ctx):
-        """Shows which raid and fractal encounters you have completed.
+        """Shows completed raids and fractals
 
         Required permissions: progression
         """
@@ -339,7 +339,7 @@ class AccountMixin:
             doc = await self.fetch_key(user, scopes)
             endpoint = "account/achievements?ids=" + ",".join(achievement_ids)
             results = await self.call_api(endpoint, key=doc["key"])
-        except APINotFound as e:
+        except APINotFound:
             # Not Found is returned by the API when none of the searched
             # achievements have been completed yet.
             results = []
@@ -363,15 +363,6 @@ class AccountMixin:
                         return "-✖"
                 return "+✔"
 
-            # If any of these achievements are completed, the encounter was
-            # completed, otherwise we don't know.
-            if encounter["type"] == "any_achievement_or_none":
-                for _id in encounter["ids"]:
-                    for achievement in results:
-                        if achievement["id"] == _id and achievement["done"]:
-                            return "+✔"
-                return "?"
-
         embed = discord.Embed(
             title="Kill Proof", color=await self.get_embed_color(ctx))
         embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
@@ -383,9 +374,10 @@ class AccountMixin:
             value.append("```")
             embed.add_field(name=area["name"], value="\n".join(value))
 
-        embed.description = "List of completed encounters"
+        embed.description = ("Achievements were checked to find "
+                             "completed encounters.")
         embed.set_footer(text="Green (+) means completed. Red (-) means not. "
-                         "Gray (?) means unknown.")
+                         "CM stands for Challenge Mode.")
 
         await ctx.send(
             "{.mention}, here is your kill proof.".format(user), embed=embed)
