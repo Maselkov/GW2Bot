@@ -46,7 +46,7 @@ class WalletMixin:
                 count = self.gold_to_coins(ctx, item["value"])
                 break
             elif item["id"] == currency_id:
-                count = item["value"]
+                count = "{:,}".format(item["value"])
                 break
         embed.add_field(name="Amount in wallet", value=count, inline=False)
         embed.set_thumbnail(url=choice["icon"])
