@@ -344,7 +344,9 @@ class NotiifiersMixin:
 
         def patchnotes_embed(embed, notes):
             notes = "\n".join(html.unescape(notes).splitlines())
-            notes = re.sub('#{1,5} ', '**', notes)
+            # Don't sub #### as those are made to a new header
+            notes = re.sub('#{1,3} ', '**', notes)
+            notes = re.sub('#{5} ', '**', notes)
             notes = re.sub('(\*{2}.*)', r'\1**', notes)
             notes = re.sub('\*{4}', '**', notes)
             headers = re.findall('#{4}.*', notes, re.MULTILINE)
