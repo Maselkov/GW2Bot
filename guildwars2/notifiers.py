@@ -344,13 +344,19 @@ class NotiifiersMixin:
 
         def patchnotes_embed(embed, notes):
             notes = "\n".join(html.unescape(notes).splitlines())
-            # Don't sub #### as those are made to a new header
-            notes = re.sub('^#{1,3} ', '**', notes)
-            notes = re.sub('#{5} ', '**', notes)
-            notes = re.sub('(\*{2}.*)', r'\1**', notes)
-            notes = re.sub('\*{4}', '**', notes)
-            headers = re.findall('#{4}.*', notes, re.MULTILINE)
-            values = re.split('#{4}.*', notes)
+            lines = notes.splitlines()
+            notes_sub = ""
+            for line in lines:
+                # Don't sub #### as those are made to a new header
+                line = re.sub('^#{1,3} ', '**', line)
+                line = re.sub('#{5} ', '**', line)
+                line = re.sub('(\*{2}.*)', r'\1**', line)
+                line = re.sub('\*{4}', '**', line)
+                line = re.sub('&quot;(.*)&quot;', r'*\1*', line)
+                notes_sub += "{}\n".format(line)
+
+            headers = re.findall('#{4}.*', notes_sub, re.MULTILINE)
+            values = re.split('#{4}.*', notes_sub)
             counter = 0
             if headers:
                 for header in headers:
@@ -359,7 +365,7 @@ class NotiifiersMixin:
                     values[counter] = re.sub("\n\n", "\n", values[counter])
                     embed.add_field(name=header, value=values[counter])
             else:
-                embed.description = notes
+                embed.description = notes_sub
             return embed
 
         base_url = "https://en-forum.guildwars2.com"
