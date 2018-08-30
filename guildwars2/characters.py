@@ -339,14 +339,12 @@ class CharactersMixin:
             title="Days until...", colour=await self.get_embed_color(ctx))
         embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
         for k, v in sorted(fields.items(), key=lambda k: k[0]):
-            value = "\n".join([
+            lines = [
                 "{}: **{}**".format(*line)
-                for line in sorted(v, key=lambda l: l[1], reverse=True)
-            ])
-            embed.add_field(
-                name="{}{} Birthday".format(k, suffix(k)),
-                value=value,
-                inline=False)
+                for line in sorted(v, key=lambda l: l[1])
+            ]
+            embed = embed_list_lines(embed, lines, "{}{} Birthday".format(
+                k, suffix(k)))
         await ctx.send(msg, embed=embed)
 
     @character.command(name="attributes")

@@ -213,7 +213,7 @@ class SkillsMixin:
                 })
                 continue
             if fact_type == "ResourceCost":
-                fields.append({"field": text, "text": str(fact["value"])})
+                fields.append({"field": text, "value": str(fact["value"])})
                 continue
             if fact_type == "BuffConversion":
                 fields.append({

@@ -35,6 +35,7 @@ class GuildWars2(AccountMixin, AchievementsMixin, ApiMixin, CharactersMixin,
     """Guild Wars 2 commands"""
 
     def __init__(self, bot):
+
         self.bot = bot
         self.db = self.bot.database.db.gw2
         with open(
@@ -97,9 +98,7 @@ class GuildWars2(AccountMixin, AchievementsMixin, ApiMixin, CharactersMixin,
             "embed_color": 1,
             "_id": 0
         })
-        if not doc:
-            return self.embed_color
-        if doc["embed_color"]:
+        if doc and doc["embed_color"]:
             return int(doc["embed_color"], 16)
         return self.embed_color
 

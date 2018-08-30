@@ -207,11 +207,16 @@ class NotiifiersMixin:
         doc = await self.bot.database.get_guild(guild, self)
         enabled = doc["updates"].get("on", False)
         if enabled:
-            msg = (
-                "I will now automatically send update notifications to "
-                "{.mention}. **WARNING** these notifications include `@here` "
-                "mention. Take away bot's permissions to mention everyone "
-                "if you don't want it.".format(channel))
+            mention = doc["updates"].get("mention", "here")
+            if mention == "none":
+                suffix = ""
+            else:
+                suffix = (" **WARNING** Currently bot will "
+                          "mention `@{}`. Use `{}updatenotifier "
+                          "mention` to change that".format(
+                              mention, ctx.prefix))
+            msg = ("I will now automatically send update notifications to "
+                   "{.mention}.".format(channel) + suffix)
         else:
             msg = ("Channel set to {.mention}. In order to receive "
                    "update notifications, you still need to enable it using "
@@ -229,12 +234,17 @@ class NotiifiersMixin:
             if channel:
                 channel = guild.get_channel(channel)
                 if channel:  # Channel can be none now
+                    mention = doc["updates"].get("mention", "here")
+                    if mention == "none":
+                        suffix = ""
+                    else:
+                        suffix = (" **WARNING** Currently bot will "
+                                  "mention `@{}`. Use `{}updatenotifier "
+                                  "mention` to change that".format(
+                                      mention, ctx.prefix))
                     msg = (
                         "I will now automatically send update notifications "
-                        "to {.mention}. **WARNING** these notifications "
-                        "include `@here` mention. Take away bot's permissions "
-                        "to mention everyone if you don't "
-                        "want it.".format(channel))
+                        "to {.mention}".format(channel) + suffix)
                 else:  # TODO change it, ugly
                     msg = (
                         "Update notifier toggled on. In order to reeceive "

@@ -13,8 +13,8 @@ class WalletMixin:
         if ctx.invoked_subcommand is None:
             try:
                 length = len(ctx.prefix) + len(ctx.invoked_with)
-                if length != ctx.message.content.length:
-                    arg = ctx.message.content[length:]
+                if length != len(ctx.message.content):
+                    arg = ctx.message.content[length + 1:]
                     return await ctx.invoke(self.wallet_currency, currency=arg)
             except:
                 pass
@@ -46,7 +46,7 @@ class WalletMixin:
                 count = self.gold_to_coins(ctx, item["value"])
                 break
             elif item["id"] == currency_id:
-                count = item["value"]
+                count = "{:,}".format(item["value"])
                 break
         embed.add_field(name="Amount in wallet", value=count, inline=False)
         embed.set_thumbnail(url=choice["icon"])
