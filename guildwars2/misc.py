@@ -11,14 +11,29 @@ from discord.ext import commands
 class MiscMixin:
     @commands.command(aliases=["gw2wiki"])
     async def wiki(self, ctx, *, search):
-        """Search the Guild wars 2 wiki"""
+        """Search the Guild wars 2 wiki, append a language to search localized
+        
+        Available languages: en, de, fr, es
+        No language defaults to en
+        """
         if len(search) > 300:
             await ctx.send("Search too long")
             return
-        wiki = "https://wiki.guildwars2.com"
+        wiki = {"en": "https://wiki.guildwars2.com",
+            "de": "https://wiki-de.guildwars2.com",
+            "fr": "https://wiki-fr.guildwars2.com",
+            "es": "https://wiki-es.guildwars2.com"}
+        searchurl = {"en": "{}/index.php?title=Special%3ASearch&search={}",
+               "de": "{}/index.php?search={}&title=Spezial%3ASuche&",
+               "fr": "{}/index.php?search={}&title=Spécial%3ARecherche",
+               "es": "{}/index.php?title=Especial%3ABuscar&search={}"}
+        lang = search.split(" ")[-1]
+        if lang in wiki:
+            search = search[:-3]
+        else:
+            lang = "en"
         search = search.replace(" ", "+")
-        url = ("{}/index.php?title=Special%3ASearch&"
-               "Search&search={}".format(wiki, search))
+        url = (searchurl[lang].format(wiki[lang], search))
         async with self.session.get(url) as r:
             if r.history:
                 embed = await self.search_results_embed(
@@ -37,109 +52,7 @@ class MiscMixin:
                     await ctx.send("No results")
                     return
         embed = await self.search_results_embed(
-            ctx, "Wiki", posts, base_url=wiki)
-        try:
-            await ctx.send(embed=embed)
-        except discord.Forbidden:
-            await ctx.send("Need permission to embed links")
-    
-    @commands.command(aliases=["gw2wikide"])
-    async def wikide(self, ctx, *, search):
-        """Durchsuche das deutsche Guild Wars 2 Wiki"""
-        if len(search) > 300:
-            await ctx.send("Search too long")
-            return
-        wiki = "https://wiki-de.guildwars2.com"
-        search = search.replace(" ", "+")
-        url = ("{}/index.php?search={}&title=Spezial%3ASuche&".format(
-            wiki, search))
-        async with self.session.get(url) as r:
-            if r.history:
-                embed = await self.search_results_embed(
-                    ctx, "Wiki-de", exact_match=r)
-                try:
-                    await ctx.send(embed=embed)
-                except discord.Forbidden:
-                    await ctx.send("Need permission to embed links")
-                return
-            else:
-                results = await r.text()
-                soup = BeautifulSoup(results, 'html.parser')
-                posts = soup.find_all(
-                    "div", {"class": "mw-search-result-heading"})[:5]
-                if not posts:
-                    await ctx.send("No results")
-                    return
-        embed = await self.search_results_embed(
-            ctx, "Wiki-de", posts, base_url=wiki)
-        try:
-            await ctx.send(embed=embed)
-        except discord.Forbidden:
-            await ctx.send("Need permission to embed links")
-    
-    @commands.command(aliases=["gw2wikifr"])
-    async def wikifr(self, ctx, *, search):
-        """Cherche le wiki francais de Guild Wars 2"""
-        if len(search) > 300:
-            await ctx.send("Search too long")
-            return
-        wiki = "https://wiki-fr.guildwars2.com"
-        search = search.replace(" ", "+")
-        url = ("{}/index.php?search={}&title=Spécial%3ARecherche".format(
-            wiki, search))
-        async with self.session.get(url) as r:
-            if r.history:
-                embed = await self.search_results_embed(
-                    ctx, "Wiki-fr", exact_match=r)
-                try:
-                    await ctx.send(embed=embed)
-                except discord.Forbidden:
-                    await ctx.send("Need permission to embed links")
-                return
-            else:
-                results = await r.text()
-                soup = BeautifulSoup(results, 'html.parser')
-                posts = soup.find_all(
-                    "div", {"class": "mw-search-result-heading"})[:5]
-                if not posts:
-                    await ctx.send("No results")
-                    return
-        embed = await self.search_results_embed(
-            ctx, "Wiki-fr", posts, base_url=wiki)
-        try:
-            await ctx.send(embed=embed)
-        except discord.Forbidden:
-            await ctx.send("Need permission to embed links")
-    
-    @commands.command(aliases=["gw2wikies"])
-    async def wikies(self, ctx, *, search):
-        """Search the spanish Guild wars 2 wiki"""
-        if len(search) > 300:
-            await ctx.send("Search too long")
-            return
-        wiki = "https://wiki-es.guildwars2.com"
-        search = search.replace(" ", "+")
-        url = ("{}/index.php?title=Especial%3ABuscar&search={}".format(
-            wiki, search))
-        async with self.session.get(url) as r:
-            if r.history:
-                embed = await self.search_results_embed(
-                    ctx, "Wiki-es", exact_match=r)
-                try:
-                    await ctx.send(embed=embed)
-                except discord.Forbidden:
-                    await ctx.send("Need permission to embed links")
-                return
-            else:
-                results = await r.text()
-                soup = BeautifulSoup(results, 'html.parser')
-                posts = soup.find_all(
-                    "div", {"class": "mw-search-result-heading"})[:5]
-                if not posts:
-                    await ctx.send("No results")
-                    return
-        embed = await self.search_results_embed(
-            ctx, "Wiki-es", posts, base_url=wiki)
+            ctx, "Wiki", posts, base_url=wiki[lang])
         try:
             await ctx.send(embed=embed)
         except discord.Forbidden:
