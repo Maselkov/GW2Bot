@@ -19,7 +19,7 @@ class Character:
         self.gender = data["gender"].lower()
         self.profession = data["profession"].lower()
         self.level = data["level"]
-        self.specializations = data["specializations"]
+        self.specializations = data.get("specializations")
         self.color = discord.Color(
             int(self.cog.gamedata["professions"][self.profession]["color"],
                 16))
@@ -30,6 +30,8 @@ class Character:
 
     async def get_spec_info(self, mode="pve"):
         async def get_elite_spec():
+            if not self.specializations:
+                return self.profession.title()
             spec = self.specializations[mode][2]
             if spec:
                 spec = await self.cog.db.specializations.find_one({
@@ -37,16 +39,16 @@ class Character:
                     spec["id"]
                 })
                 if spec is None or not spec["elite"]:
-                    return None
+                    return self.profession.title()
                 return spec["name"]
-            return None
+            return self.profession.title()
 
         def get_icon_url(prof_name):
             base_url = ("https://api.gw2bot.info/"
                         "resources/professions/{}_icon.png")
             return base_url.format(prof_name.replace(" ", "_").lower())
 
-        name = await get_elite_spec() or self.profession.title()
+        name = await get_elite_spec()
         icon = get_icon_url(name)
         info = {"name": name, "icon": icon}
         self.spec_cache[mode] = info
