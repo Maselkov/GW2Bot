@@ -42,6 +42,108 @@ class MiscMixin:
             await ctx.send(embed=embed)
         except discord.Forbidden:
             await ctx.send("Need permission to embed links")
+    
+    @commands.command(aliases=["gw2wikide"])
+    async def wikide(self, ctx, *, search):
+        """Durchsuche das deutsche Guild Wars 2 Wiki"""
+        if len(search) > 300:
+            await ctx.send("Search too long")
+            return
+        wiki = "https://wiki-de.guildwars2.com"
+        search = search.replace(" ", "+")
+        url = ("{}/index.php?search={}&title=Spezial%3ASuche&".format(
+            wiki, search))
+        async with self.session.get(url) as r:
+            if r.history:
+                embed = await self.search_results_embed(
+                    ctx, "Wiki-de", exact_match=r)
+                try:
+                    await ctx.send(embed=embed)
+                except discord.Forbidden:
+                    await ctx.send("Need permission to embed links")
+                return
+            else:
+                results = await r.text()
+                soup = BeautifulSoup(results, 'html.parser')
+                posts = soup.find_all(
+                    "div", {"class": "mw-search-result-heading"})[:5]
+                if not posts:
+                    await ctx.send("No results")
+                    return
+        embed = await self.search_results_embed(
+            ctx, "Wiki-de", posts, base_url=wiki)
+        try:
+            await ctx.send(embed=embed)
+        except discord.Forbidden:
+            await ctx.send("Need permission to embed links")
+    
+    @commands.command(aliases=["gw2wikifr"])
+    async def wikifr(self, ctx, *, search):
+        """Cherche le wiki francais de Guild Wars 2"""
+        if len(search) > 300:
+            await ctx.send("Search too long")
+            return
+        wiki = "https://wiki-fr.guildwars2.com"
+        search = search.replace(" ", "+")
+        url = ("{}/index.php?search={}&title=Spécial%3ARecherche".format(
+            wiki, search))
+        async with self.session.get(url) as r:
+            if r.history:
+                embed = await self.search_results_embed(
+                    ctx, "Wiki-fr", exact_match=r)
+                try:
+                    await ctx.send(embed=embed)
+                except discord.Forbidden:
+                    await ctx.send("Need permission to embed links")
+                return
+            else:
+                results = await r.text()
+                soup = BeautifulSoup(results, 'html.parser')
+                posts = soup.find_all(
+                    "div", {"class": "mw-search-result-heading"})[:5]
+                if not posts:
+                    await ctx.send("No results")
+                    return
+        embed = await self.search_results_embed(
+            ctx, "Wiki-fr", posts, base_url=wiki)
+        try:
+            await ctx.send(embed=embed)
+        except discord.Forbidden:
+            await ctx.send("Need permission to embed links")
+    
+    @commands.command(aliases=["gw2wikies"])
+    async def wikies(self, ctx, *, search):
+        """Search the spanish Guild wars 2 wiki"""
+        if len(search) > 300:
+            await ctx.send("Search too long")
+            return
+        wiki = "https://wiki-es.guildwars2.com"
+        search = search.replace(" ", "+")
+        url = ("{}/index.php?title=Especial%3ABuscar&search={}".format(
+            wiki, search))
+        async with self.session.get(url) as r:
+            if r.history:
+                embed = await self.search_results_embed(
+                    ctx, "Wiki-es", exact_match=r)
+                try:
+                    await ctx.send(embed=embed)
+                except discord.Forbidden:
+                    await ctx.send("Need permission to embed links")
+                return
+            else:
+                results = await r.text()
+                soup = BeautifulSoup(results, 'html.parser')
+                posts = soup.find_all(
+                    "div", {"class": "mw-search-result-heading"})[:5]
+                if not posts:
+                    await ctx.send("No results")
+                    return
+        embed = await self.search_results_embed(
+            ctx, "Wiki-es", posts, base_url=wiki)
+        try:
+            await ctx.send(embed=embed)
+        except discord.Forbidden:
+            await ctx.send("Need permission to embed links")
 
     @commands.command(hidden=True)
     async def dulfy(self, ctx, *, search):
