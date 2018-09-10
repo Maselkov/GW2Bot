@@ -11,10 +11,22 @@ from discord.ext import commands
 class MiscMixin:
     @commands.command(aliases=["gw2wiki"])
     async def wiki(self, ctx, *, search):
-        """Search the Guild wars 2 wiki, append a language to search localized
+        """Search the Guild wars 2 wiki
         
-        Available languages: en, de, fr, es
-        No language defaults to en
+        Append a 2-character language tag to search in the localized wikis
+        Available languages:
+        en
+        de
+        fr
+        es
+        
+        Defaults to en
+
+        Examples:
+        Search for Lion's Arch:
+        $wiki Lion's Arch
+        Search it in the german wiki:
+        $wiki Löwenstein de
         """
         if len(search) > 300:
             await ctx.send("Search too long")
