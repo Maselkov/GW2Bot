@@ -13,7 +13,7 @@ class SyncGuild:
     @commands.group(name="guildsync", case_insensitive=True)
     async def guildsync(self, ctx):
         """In game guild rank to discord roles synchronization commands
-        This grou= allows you to set up a link between your ingame roster and discord.
+        This group allows you to set up a link between your ingame roster and discord.
         When enabled, new roles will be created for each of your ingame ranks,
         and ingame members are periodically synced to have the
         correct role in discord."""
