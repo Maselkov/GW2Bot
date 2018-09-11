@@ -11,14 +11,41 @@ from discord.ext import commands
 class MiscMixin:
     @commands.command(aliases=["gw2wiki"])
     async def wiki(self, ctx, *, search):
-        """Search the Guild wars 2 wiki"""
+        """Search the Guild wars 2 wiki
+        
+        Append a 2-character language tag to search in the localized wikis
+        Available languages:
+        en
+        de
+        fr
+        es
+        
+        Defaults to en
+
+        Examples:
+        Search for Lion's Arch:
+        $wiki Lion's Arch
+        Search it in the german wiki:
+        $wiki Löwenstein de
+        """
         if len(search) > 300:
             await ctx.send("Search too long")
             return
-        wiki = "https://wiki.guildwars2.com"
+        wiki = {"en": "https://wiki.guildwars2.com",
+            "de": "https://wiki-de.guildwars2.com",
+            "fr": "https://wiki-fr.guildwars2.com",
+            "es": "https://wiki-es.guildwars2.com"}
+        search_url = {"en": "{}/index.php?title=Special%3ASearch&search={}",
+            "de": "{}/index.php?search={}&title=Spezial%3ASuche&",
+            "fr": "{}/index.php?search={}&title=Spécial%3ARecherche",
+            "es": "{}/index.php?title=Especial%3ABuscar&search={}"}
+        lang = search.split(" ")[-1].lower()
+        if lang in wiki:
+            search = search[:-3]
+        else:
+            lang = "en"
         search = search.replace(" ", "+")
-        url = ("{}/index.php?title=Special%3ASearch&"
-               "Search&search={}".format(wiki, search))
+        url = (search_url[lang].format(wiki[lang], search))
         async with self.session.get(url) as r:
             if r.history:
                 embed = await self.search_results_embed(
@@ -37,7 +64,7 @@ class MiscMixin:
                     await ctx.send("No results")
                     return
         embed = await self.search_results_embed(
-            ctx, "Wiki", posts, base_url=wiki)
+            ctx, "Wiki", posts, base_url=wiki[lang])
         try:
             await ctx.send(embed=embed)
         except discord.Forbidden:
