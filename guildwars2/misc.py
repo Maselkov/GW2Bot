@@ -35,17 +35,17 @@ class MiscMixin:
             "de": "https://wiki-de.guildwars2.com",
             "fr": "https://wiki-fr.guildwars2.com",
             "es": "https://wiki-es.guildwars2.com"}
-        searchurl = {"en": "{}/index.php?title=Special%3ASearch&search={}",
+        search_url = {"en": "{}/index.php?title=Special%3ASearch&search={}",
             "de": "{}/index.php?search={}&title=Spezial%3ASuche&",
             "fr": "{}/index.php?search={}&title=Spécial%3ARecherche",
             "es": "{}/index.php?title=Especial%3ABuscar&search={}"}
-        lang = search.split(" ")[-1]
+        lang = search.split(" ")[-1].lower()
         if lang in wiki:
             search = search[:-3]
         else:
             lang = "en"
         search = search.replace(" ", "+")
-        url = (searchurl[lang].format(wiki[lang], search))
+        url = (search_url[lang].format(wiki[lang], search))
         async with self.session.get(url) as r:
             if r.history:
                 embed = await self.search_results_embed(
