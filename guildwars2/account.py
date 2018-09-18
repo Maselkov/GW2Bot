@@ -84,7 +84,7 @@ class AccountMixin:
     @commands.command(aliases=["ld"])
     @commands.cooldown(1, 10, BucketType.user)
     async def li(self, ctx):
-        """Shows how many Legendary Insights you have earned
+        """Shows how many Legendary Insights and Divinations you have earned
 
         Required permissions: inventories, characters
         """
@@ -92,22 +92,30 @@ class AccountMixin:
         scopes = ["inventories", "characters"]
         if not self.can_embed_links(ctx):
             return await ctx.send("Need permission to embed links")
-        await ctx.trigger_typing()
+        ids = self.gamedata["raid_trophies"]
+        ids_li = ids["insights"]
+        ids_ld = ids["divinations"]
+        id_legendary_insight = ids_li["legendary_insight"]
+        id_legendary_divination = ids_ld["legendary_divination"]
+        id_gift_of_prowess = ids_li["gift_of_prowess"]
+        id_envoy_insignia = ids_li["envoy_insignia"]
+        ids_refined_envoy_armor = list(ids_li["refined_envoy_armor"].values())
+        ids_perfected_envoy_armor = list(
+            ids_li["perfected_envoy_armor"].values())
+        all_ids = [
+            id_legendary_divination, id_legendary_insight, id_gift_of_prowess,
+            id_envoy_insignia
+        ]
+        all_ids += ids_perfected_envoy_armor + ids_refined_envoy_armor
         try:
             doc = await self.fetch_key(user, scopes)
+            await ctx.trigger_typing()
+            search_results = await self.find_items_in_account(
+                ctx, all_ids, doc=doc)
         except APIError as e:
             return await self.error_handler(ctx, e)
-        ids = self.gamedata.get("insights")
-        id_legendary_insight = ids["legendary_insight"]
-        id_gift_of_prowess = ids["gift_of_prowess"]
-        id_envoy_insignia = ids["envoy_insignia"]
-        ids_refined_envoy_armor = list(ids["refined_envoy_armor"].values())
-        ids_perfected_envoy_armor = list(ids["perfected_envoy_armor"].values())
-        all_ids = [id_legendary_insight, id_gift_of_prowess, id_envoy_insignia]
-        all_ids += ids_perfected_envoy_armor + ids_refined_envoy_armor
-        search_results = await self.find_items_in_account(
-            ctx, all_ids, doc=doc)
-        sum_li = sum(search_results[id_legendary_insight].values())
+        sum_li_on_hand = sum(search_results[id_legendary_insight].values())
+        sum_ld_on_hand = sum(search_results[id_legendary_divination].values())
         sum_prowess = sum(search_results[id_gift_of_prowess].values())
         sum_insignia = sum(search_results[id_envoy_insignia].values())
         li_prowess = sum_prowess * 25
@@ -124,47 +132,49 @@ class AccountMixin:
             min(sum_perfect_armor, 6) + sum_refined_armor - 6, 0) * 25
         li_perfect_armor = min(sum_perfect_armor, 6) * 25 + max(
             sum_perfect_armor - 6, 0) * 50
-        crafted_li = (
+        sum_crafted = (
             li_prowess + li_insignia + li_perfect_armor + li_refined_armor)
-        total_li = sum_li + crafted_li
-        embed = discord.Embed()
-        embed.title = "{0} Legendary Insights Earned".format(total_li)
+        total_li = sum_li_on_hand + sum_crafted
+        total_ld = sum_ld_on_hand
+        total_trophies = total_li + total_ld
+        embed = discord.Embed(
+            title="{} Legendary Insights and Divinations earned"
+            "".format(total_trophies),
+            description="{} on hand, {} used in crafting".format(
+                sum_li_on_hand, sum_crafted),
+            color=0x4C139D)
         embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
-        embed.set_thumbnail(url="https://render.guildwars2.com/file"
-                            "/6D33B7387BAF2E2CC9B5D37D1D1B01246AB6FA22"
-                            "/1302744.png")
-        embed.colour = 0x4C139D
-        embed.description = "{1} on hand, {2} used in crafting".format(
-            total_li, sum_li, crafted_li)
-        if sum_perfect_armor:
+        embed.set_thumbnail(
+            url="https://api.gw2bot.info/resources/icons/ldli.png")
+        if total_li:
+            value = ["On hand - **{}**".format(sum_li_on_hand)]
+            if sum_perfect_armor:
+                value.append("{} Perfected Envoy Armor Pieces - **{}**".format(
+                    sum_perfect_armor, li_perfect_armor))
+            if sum_refined_armor:
+                value.append("{} Refined Envoy Armor Pieces - **{}**".format(
+                    sum_refined_armor, li_refined_armor))
+            if sum_prowess:
+                value.append("{} Gifts of Prowess - **{}**".format(
+                    sum_prowess, li_prowess))
+            if sum_insignia:
+                value.append("{} Envoy Insignia - **{}**".format(
+                    sum_insignia, li_insignia))
             embed.add_field(
-                name="{0} Perfected Envoy Armor Pieces".format(
-                    sum_perfect_armor),
-                value="Representing {0} Legendary Insights".format(
-                    li_perfect_armor),
+                name="{} Legendary Insights".format(total_li),
+                value="\n".join(value),
                 inline=False)
-        if sum_refined_armor:
+        if total_ld:
+            value = ["On hand - **{}**".format(sum_ld_on_hand)]
             embed.add_field(
-                name="{0} Refined Envoy Armor Pieces".format(
-                    sum_refined_armor),
-                value="Representing {0} Legendary Insights".format(
-                    li_refined_armor),
-                inline=False)
-        if sum_prowess:
-            embed.add_field(
-                name="{0} Gifts of Prowess".format(sum_prowess),
-                value="Representing {0} Legendary Insights".format(li_prowess),
-                inline=False)
-        if sum_insignia:
-            embed.add_field(
-                name="{0} Envoy Insignia".format(sum_insignia),
-                value="Representing {0} Legendary Insights".format(
-                    li_insignia),
+                name="{} Legendary Divinations".format(total_ld),
+                value="\n".join(value),
                 inline=False)
         embed.set_footer(
             text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
         await ctx.send(
-            "{.mention}, here are your Legendary Insights".format(user),
+            "{.mention}, here are your Legendary Insights and Divinations".
+            format(user),
             embed=embed)
 
     @commands.command()
@@ -280,8 +290,11 @@ class AccountMixin:
             ctx.command.reset_cooldown(ctx)
             return
         await ctx.trigger_typing()
-        search_results = await self.find_items_in_account(
-            ctx, choice["ids"], flatten=True)
+        try:
+            search_results = await self.find_items_in_account(
+                ctx, choice["ids"], flatten=True)
+        except APIError as e:
+            return await self.error_handler(ctx, e)
         seq = [k for k, v in search_results.items() if v]
         if not seq:
             return await ctx.send("Sorry, not found on your account. "
@@ -433,17 +446,14 @@ class AccountMixin:
                                     doc=None,
                                     flatten=False):
         user = ctx.author
-        try:
-            if not doc:
-                doc = await self.fetch_key(user, ["inventories", "characters"])
-            endpoints = [
-                "account/bank", "account/inventory", "account/materials",
-                "characters?page=0&page_size=200"
-            ]
-            results = await self.call_multiple(endpoints, key=doc["key"])
-            bank, shared, materials, characters = results
-        except APIError as e:
-            return await self.error_handler(ctx, e)
+        if not doc:
+            doc = await self.fetch_key(user, ["inventories", "characters"])
+        endpoints = [
+            "account/bank", "account/inventory", "account/materials",
+            "characters?page=0&page_size=200"
+        ]
+        results = await self.call_multiple(endpoints, key=doc["key"])
+        bank, shared, materials, characters = results
         spaces = {
             "bank": bank,
             "shared": shared,
