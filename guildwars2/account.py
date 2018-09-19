@@ -145,7 +145,7 @@ class AccountMixin:
             color=0x4C139D)
         embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
         embed.set_thumbnail(
-            url="https://api.gw2bot.info/resources/icons/ldli.png")
+            url="https://api.gw2bot.info/resources/icons/lild.png")
         if total_li:
             value = ["On hand - **{}**".format(sum_li_on_hand)]
             if sum_perfect_armor:
