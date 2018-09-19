@@ -682,6 +682,40 @@
         ]
       },
       {
+        "name": "Mythwright Gambit",
+        "encounters": [{
+            "name": "Conjured Amalgamate",
+            "type": "single_achievement",
+            "id": 4423
+          },
+          {
+            "name": "Conjured Amalgamate CM",
+            "type": "single_achievement",
+            "id": 4416
+          },
+          {
+            "name": "Largos Twins",
+            "type": "single_achievement",
+            "id": 4364
+          },
+          {
+            "name": "Largos Twins CM",
+            "type": "single_achievement",
+            "id": 4429
+          },
+          {
+            "name": "Qadim",
+            "type": "single_achievement",
+            "id": 4396
+          },
+          {
+            "name": "Qadim CM",
+            "type": "single_achievement",
+            "id": 4355
+          }
+        ]
+      },
+      {
         "name": "Fractals",
         "encounters": [{
             "name": "Nightmare CM",
