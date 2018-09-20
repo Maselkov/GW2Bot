@@ -132,6 +132,7 @@ class AccountMixin:
             min(sum_perfect_armor, 6) + sum_refined_armor - 6, 0) * 25
         li_perfect_armor = min(sum_perfect_armor, 6) * 25 + max(
             sum_perfect_armor - 6, 0) * 50
+        sum_on_hand = sum_ld_on_hand + sum_li_on_hand
         sum_crafted = (
             li_prowess + li_insignia + li_perfect_armor + li_refined_armor)
         total_li = sum_li_on_hand + sum_crafted
@@ -141,7 +142,7 @@ class AccountMixin:
             title="{} Legendary Insights and Divinations earned"
             "".format(total_trophies),
             description="{} on hand, {} used in crafting".format(
-                sum_li_on_hand, sum_crafted),
+                sum_on_hand, sum_crafted),
             color=0x4C139D)
         embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
         embed.set_thumbnail(
