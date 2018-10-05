@@ -3,7 +3,6 @@ import datetime
 import json
 import logging
 
-import aiohttp
 import discord
 
 from .account import AccountMixin
@@ -42,7 +41,7 @@ class GuildWars2(AccountMixin, AchievementsMixin, ApiMixin, CharactersMixin,
                 "cogs/guildwars2/gamedata.json", encoding="utf-8",
                 mode="r") as f:
             self.gamedata = json.load(f)
-        self.session = aiohttp.ClientSession(loop=self.bot.loop)
+        self.session = bot.session
         self.boss_schedule = self.generate_schedule()
         self.embed_color = 0xc12d2b
         self.log = logging.getLogger(__name__)
@@ -54,7 +53,6 @@ class GuildWars2(AccountMixin, AchievementsMixin, ApiMixin, CharactersMixin,
         for task in self.tasks:
             task.cancel()
         self.tasks = []
-        self.session.close()
 
     async def error_handler(self, ctx, exc):
         user = ctx.author
