@@ -2,6 +2,7 @@ import asyncio
 import datetime
 import html
 import re
+import unicodedata
 import xml.etree.ElementTree as et
 
 import discord
@@ -185,6 +186,17 @@ class NotiifiersMixin:
                        "`newsfeed channel <channel>`.".format(channel))
         else:
             msg = ("Newsfeed disabled")
+        await ctx.send(msg)
+
+    @newsfeed.command(name="filter")
+    async def newsfeed_filter(self, ctx, on_off: bool):
+        """Toggle filtering livestream schedule/community showcase"""
+        guild = ctx.guild
+        await self.bot.database.set_guild(guild, {"news.filter": on_off}, self)
+        if on_off:
+            msg = "Newsfeed community post filter enabled"
+        else:
+            msg = "Newsfeed community post filter disabled"
         await ctx.send(msg)
 
     @commands.group(case_insensitive=True)
@@ -440,7 +452,7 @@ class NotiifiersMixin:
         description = "[Click here]({0})\n{1}".format(item["link"],
                                                       soup.get_text())
         data = discord.Embed(
-            title="{0}".format(item["title"]),
+            title=unicodedata.normalize("NFKD", item["title"]),
             description=description,
             color=0xc12d2b)
         return data
@@ -562,24 +574,33 @@ class NotiifiersMixin:
             return
 
     async def send_news(self, embeds):
-        try:
-            name = self.__class__.__name__
-            cursor = self.bot.database.get_guilds_cursor({
+        cursor = self.bot.database.iter(
+            "guilds",
+            {
                 "news.on": True,
                 "news.channel": {
                     "$ne": None
                 }
-            }, self)
-            async for doc in cursor:
-                try:
-                    guild = doc["cogs"][name]["news"]
-                    channel = self.bot.get_channel(guild["channel"])
-                    for embed in embeds:
-                        await channel.send(embed=embed)
-                except:
-                    pass
-        except Exception as e:
-            self.log.exception("Exception sending daily notifs: ", exc_info=e)
+            },
+            self,
+            subdocs=["news"],
+        )
+        to_filter = ["the arenanet streaming schedule", "community showcase"]
+        filtered = [
+            embed.title for embed in embeds
+            if any(f in embed.title.lower() for f in to_filter)
+        ]
+        async for doc in cursor:
+            try:
+                channel = self.bot.get_channel(doc["channel"])
+                filter_on = doc.get("filter", True)
+                for embed in embeds:
+                    if filter_on:
+                        if embed.title in filtered:
+                            continue
+                    await channel.send(embed=embed)
+            except Exception as e:
+                self.log.exception(e)
 
     async def send_update_notifs(self):
         try:
