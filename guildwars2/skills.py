@@ -16,12 +16,9 @@ class SkillsMixin:
         """Information about a given skill"""
         if not skill:
             return await self.send_cmd_help(ctx)
-        cursor = self.db.skills.find({
-            "name": prepare_search(skill),
-            "professions": {
-                "$ne": None
-            }
-        })
+        query = {"name": prepare_search(skill), "professions": {"$ne": None}}
+        count = await self.db.skills.count_documents(query)
+        cursor = self.db.skills.find(query)
 
         def remove_duplicates(items):
             unique_items = []
@@ -34,7 +31,7 @@ class SkillsMixin:
             return unique_items
 
         choice = await self.selection_menu(
-            ctx, cursor, filter_callable=remove_duplicates)
+            ctx, cursor, count, filter_callable=remove_duplicates)
         if not choice:
             return
         data = await self.skill_embed(choice, ctx)
@@ -49,10 +46,13 @@ class SkillsMixin:
         """Information about a given trait"""
         if not trait:
             return await self.send_cmd_help(ctx)
-        cursor = self.db.traits.find({
+        query = {
             "name": prepare_search(trait),
-        })
-        choice = await self.selection_menu(ctx, cursor)
+        }
+        count = await self.db.traits.count_documents(query)
+        cursor = self.db.traits.find(query)
+
+        choice = await self.selection_menu(ctx, cursor, count)
         if not choice:
             return
         data = await self.skill_embed(choice, ctx)

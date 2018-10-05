@@ -32,8 +32,11 @@ class WalletMixin:
         currency = currency.lower()
         if currency == "gold":
             currency = "coin"
-        cursor = self.db.currencies.find({"name": prepare_search(currency)})
-        choice = await self.selection_menu(ctx, cursor)
+        query = {"name": prepare_search(currency)}
+        count = await self.db.currencies.count_documents(query)
+        cursor = self.db.currencies.find(query)
+
+        choice = await self.selection_menu(ctx, cursor, count)
         if not choice:
             return
         embed = discord.Embed(

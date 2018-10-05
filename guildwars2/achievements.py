@@ -16,10 +16,12 @@ class AchievementsMixin:
     async def achievementinfo(self, ctx, *, achievement):
         """Display achievement information and your completion status"""
         user = ctx.author
-        cursor = self.db.achievements.find({
+        query = {
             "name": prepare_search(achievement)
-        })
-        choice = await self.selection_menu(ctx, cursor)
+        }
+        count = await self.db.achievements.count_documents(query)
+        cursor = self.db.achievements.find(query)
+        choice = await self.selection_menu(ctx, cursor, count)
         if not choice:
             return
         try:

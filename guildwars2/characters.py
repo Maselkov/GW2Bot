@@ -134,7 +134,7 @@ class CharactersMixin:
         name="list", usage="<sort (name|profession|created|age)>")
     @commands.cooldown(1, 5, BucketType.user)
     async def character_list(self, ctx, sort="name"):
-        """Lists all your characters
+        """Lists all your characters, with extra info (age|created|profession)
 
         You can specify a sort parameter which can be
         name, profession, created (date of creation), or age (time played).

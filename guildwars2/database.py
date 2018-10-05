@@ -28,27 +28,13 @@ class DatabaseMixin:
 
     @database.command(name="statistics")
     async def db_stats(self, ctx):
-        """Some statistics
-        """
-        cursor = self.bot.database.get_users_cursor({
-            "key": {
+        """Some statistics   """
+        result = await self.bot.database.users.count_documents({
+            "cogs.GuildWars2.key": {
                 "$ne": None
             }
         }, self)
-        result = await cursor.count()
         await ctx.send("{} registered users".format(result))
-        cursor_updates = self.bot.database.get_guilds_cursor({
-            "updates.on": True
-        })
-        cursor_daily = self.bot.database.get_guilds_cursor({"daily.on": True})
-        cursor_news = self.bot.database.get_guilds_cursor({"news.on": True})
-        result_updates = await cursor_updates.count()
-        result_daily = await cursor_daily.count()
-        result_news = await cursor_news.count()
-        await ctx.send("{} guilds for update notifs\n{} guilds for daily "
-                       "notifs\n{} guilds for news "
-                       "feed".format(result_updates, result_daily,
-                                     result_news))
 
     async def get_title(self, title_id):
         try:
@@ -194,9 +180,9 @@ class DatabaseMixin:
         await self.bot.change_presence(
             activity=discord.Game(name="Rebuilding API cache"),
             status=discord.Status.dnd)
-        endpoints = [["items"], ["achievements"], ["itemstats", True],
-                     ["titles", True], ["recipes"], ["skins"],
-                     ["currencies", True], ["skills", True],
+        endpoints = [["items"], ["achievements"], ["itemstats", True], [
+            "titles", True
+        ], ["recipes"], ["skins"], ["currencies", True], ["skills", True],
                      ["specializations", True], ["traits", True],
                      ["worlds", True], ["minis", True]]
         for e in endpoints:
@@ -254,19 +240,14 @@ class DatabaseMixin:
 
         item_sanitized = re.escape(item)
         search = re.compile(item_sanitized + ".*", re.IGNORECASE)
-        cursor = self.db[database].find({
-            "name": search,
-            "flags": {
-                "$nin": flags
-            },
-            **filters
-        })
-        number = await cursor.count()
+        query = {"name": search, "flags": {"$nin": flags}, **filters}
+        number = await self.db[database].count_documents(query)
         if not number:
             await destination.send(
                 "Your search gave me no results, sorry. Check for "
                 "typos.\nAlways use singular forms, e.g. Legendary Insight")
             return None
+        cursor = self.db[database].find()
         if number > 25:
             await destination.send("Your search gave me {} item results. "
                                    "Try exact match "
@@ -280,14 +261,9 @@ class DatabaseMixin:
                 return
             exact_match = "^" + item_sanitized + "$"
             search = re.compile(exact_match, re.IGNORECASE)
-            cursor = self.db[database].find({
-                "name": search,
-                "flags": {
-                    "$nin": flags
-                },
-                **filters
-            })
-            number = await cursor.count()
+            query["name"] = search
+            number = await self.db[database].count_documents(query)
+            cursor = self.db[database].find()
             if not number:
                 await destination.send(
                     "Your search gave me no results, sorry. Check for "
@@ -351,13 +327,17 @@ class DatabaseMixin:
 
         return choice
 
-    async def selection_menu(self, ctx, cursor, *, filter_callable=None):
+    async def selection_menu(self,
+                             ctx,
+                             cursor,
+                             number,
+                             *,
+                             filter_callable=None):
         # TODO implement fields
 
         def check(m):
             return m.channel == ctx.channel and m.author == ctx.author
 
-        number = await cursor.count()
         if not number:
             await ctx.send(
                 "Your search gave me no results, sorry. Check for "
