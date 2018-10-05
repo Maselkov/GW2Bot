@@ -5,6 +5,7 @@ import time
 
 import discord
 from discord.ext import commands
+from pymongo import ReplaceOne
 from pymongo.errors import BulkWriteError
 
 from .exceptions import APIKeyError
@@ -155,12 +156,15 @@ class DatabaseMixin:
 
     async def cache_endpoint(self, endpoint, all_at_once=False):
         async def bulk_write(item_group):
-            bulk = self.db[endpoint].initialize_unordered_bulk_op()
+            requests = []
             for item in itemgroup:
                 item["_id"] = item.pop("id")
-                bulk.find({"_id": item["_id"]}).upsert().replace_one(item)
+                requests.append(
+                    ReplaceOne({
+                        "_id": item["_id"]
+                    }, item, upsert=True))
             try:
-                await bulk.execute()
+                await self.db[endpoint].bulk_write(requests)
             except BulkWriteError as e:
                 self.log.exception(
                     "BWE while caching {}".format(endpoint), exc_info=e)
@@ -190,9 +194,9 @@ class DatabaseMixin:
         await self.bot.change_presence(
             activity=discord.Game(name="Rebuilding API cache"),
             status=discord.Status.dnd)
-        endpoints = [["items"], ["achievements"], ["itemstats", True], [
-            "titles", True
-        ], ["recipes"], ["skins"], ["currencies", True], ["skills", True],
+        endpoints = [["items"], ["achievements"], ["itemstats", True],
+                     ["titles", True], ["recipes"], ["skins"],
+                     ["currencies", True], ["skills", True],
                      ["specializations", True], ["traits", True],
                      ["worlds", True], ["minis", True]]
         for e in endpoints:
