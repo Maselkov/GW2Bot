@@ -218,7 +218,7 @@ class KeyMixin:
         doc = await self.bot.database.get(ctx.author, self)
         keys = doc.get("keys", [])
         key = doc.get("key", {})
-        if not key and not keys:
+        if not keys:
             return await ctx.send(
                 "You need to add additional API keys first using {0}key "
                 "add first.".format(ctx.prefix))
