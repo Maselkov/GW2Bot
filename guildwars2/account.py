@@ -1,6 +1,6 @@
 from collections import OrderedDict, defaultdict
 from itertools import chain
-
+import re
 import discord
 from discord.ext import commands
 from discord.ext.commands.cooldowns import BucketType
@@ -73,6 +73,19 @@ class AccountMixin:
                     inline=False)
             except APIError as e:
                 return await self.error_handler(ctx, e)
+        if "access" in results:
+            access = results["access"]
+            if len(access) > 1:
+                to_delete = ["PlayForFree", "GuildWars2"]
+                for d in to_delete:
+                    if d in access:
+                        access.remove(d)
+
+            def format_name(name):
+                return " ".join(re.findall('[A-Z\d][^A-Z\d]*', name))
+
+            access = "\n".join([format_name(e) for e in access])
+            data.add_field(name="Expansion access", value=access)
         data.set_author(name=accountname, icon_url=user.avatar_url)
         data.set_footer(
             text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
@@ -192,10 +205,11 @@ class AccountMixin:
         await ctx.trigger_typing()
         areas = self.gamedata["killproofs"]["areas"]
         # Create a list of lists of all achievement ids we need to check.
-        achievement_ids = [[x["id"]]
-                           if x["type"] == "single_achievement" else x["ids"]
-                           for x in chain.from_iterable(
-                               [area["encounters"] for area in areas])]
+        achievement_ids = [
+            [x["id"]] if x["type"] == "single_achievement" else x["ids"]
+            for x in chain.from_iterable(
+                [area["encounters"] for area in areas])
+        ]
         # Flatten it.
         achievement_ids = [
             str(x) for x in chain.from_iterable(achievement_ids)
