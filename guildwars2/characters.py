@@ -340,7 +340,7 @@ class CharactersMixin:
         embed = discord.Embed(
             title="Days until...", colour=await self.get_embed_color(ctx))
         embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
-        for k, v in sorted(fields.items(), key=lambda k: k[0]):
+        for k, v in sorted(fields.items(), reverse=True, key=lambda k: k[0]):
             lines = [
                 "{}: **{}**".format(*line)
                 for line in sorted(v, key=lambda l: l[1])
