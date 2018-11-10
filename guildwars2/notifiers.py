@@ -665,27 +665,22 @@ class NotiifiersMixin:
             await self.rebuild_database()
 
     async def gem_tracker(self):
-        name = self.__class__.__name__
         cost = await self.get_gem_price()
         cost_coins = self.gold_to_coins(None, cost)
-        cursor = self.bot.database.get_users_cursor({
-            "gemtrack": {
-                "$ne": None
-            }
-        }, self)
+        cursor = self.bot.database.iter("users", {"gemtrack": {
+            "$ne": None
+        }}, self)
         async for doc in cursor:
             try:
-                user_price = doc["cogs"][name]["gemtrack"]
-                if cost < user_price:
-                    user = await self.bot.get_user_info(doc["_id"])
-                    user_price = self.gold_to_coins(user_price)
+                if cost < doc["gemtrack"]:
+                    user = doc["_obj"]
+                    user_price = self.gold_to_coins(None, doc["gemtrack"])
                     msg = ("Hey, {.mention}! You asked to be notified "
                            "when 400 gems were cheaper than {}. Guess "
                            "what? They're now only "
                            "{}!".format(user, user_price, cost_coins))
                     await user.send(msg)
-                    await self.bot.database.set_user(user, {"gemtrack": None},
-                                                     self)
+                    await self.bot.database.set(user, {"gemtrack": None}, self)
             except:
                 pass
 
