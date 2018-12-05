@@ -474,6 +474,7 @@ class AccountMixin:
             "shared": shared,
             "material storage": materials
         }
+        print(item_ids)
         counts = {item_id: defaultdict(int) for item_id in item_ids}
 
         def amounts_in_space(space, name):
@@ -523,8 +524,9 @@ class AccountMixin:
         except APIError:
             pass
         if flatten:
-            flattened = {}
-            for v in counts.values():
-                flattened.update(v)
+            flattened = defaultdict(int)
+            for count_dict in counts.values():
+                for k, v in count_dict.items():
+                    flattened[k] += v
             return flattened
         return counts
