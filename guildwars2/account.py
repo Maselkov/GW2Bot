@@ -474,7 +474,6 @@ class AccountMixin:
             "shared": shared,
             "material storage": materials
         }
-        print(item_ids)
         counts = {item_id: defaultdict(int) for item_id in item_ids}
 
         def amounts_in_space(space, name):
