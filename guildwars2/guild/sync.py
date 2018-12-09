@@ -37,7 +37,7 @@ class SyncGuild:
         await self.bot.database.set_guild(
             ctx.guild, {
                 "sync.ranks": {},
-                "sync.leader": None,
+                "sync.leader_key": None,
                 "sync.setupdone": False,
                 "sync.on": False,
                 "sync.guildrole": False,
@@ -132,10 +132,11 @@ class SyncGuild:
             except discord.Forbidden:
                 return await ctx.send("Couldn't create role {0}".format(
                     rank["name"]))
+        leader_key_doc = await self.fetch_key(ctx.author)
         await self.bot.database.set_guild(
             ctx.guild, {
                 "sync.ranks": roles,
-                "sync.leader": ctx.author.id,
+                "sync.leader_key": leader_key_doc["key"],
                 "sync.setupdone": True,
                 "sync.on": True,
                 "sync.guildrole": False,
@@ -144,8 +145,9 @@ class SyncGuild:
             }, self)
         guidelines = (
             "Guild sync requires leader permissions in game\n"
-            "Guild sync is tied to your account. If you remove your API key, "
-            "guild sync will break\n"
+            "Guild sync is tied to the API key you currently have active, if you change your active "
+            "key with key switch this will not change the key used by guild sync.\n"
+            "Run this command again if you need to change the API key used by guild sync.\n"
             "**Always ensure that GW2Bot is above the synced roles, or the "
             "bot won't be able to assign them**\n"
             "You can modify and change permissions of the roles created by "
@@ -275,7 +277,7 @@ class SyncGuild:
         scopes = ["guilds"]
         try:
             endpoint = "guild/{}/members".format(guild_id)
-            results = await self.call_api(endpoint, leader, scopes)
+            results = await self.call_api(endpoint=endpoint, key=leader, scopes=scopes)
             return results
         except Exception as e:
             return None
@@ -312,9 +314,29 @@ class SyncGuild:
         gid = guild_doc["gid"]
         endpoint = "guild/{0}/ranks".format(gid)
         # Discord user ID of the guild leader (their key is used for API calls)
-        lid = guild_doc["leader"]
+        try:
+            leader_key = guild_doc["leader_key"]
+        # Legacy user that has their discord id saved in the guild doc rather than API key
+        except KeyError:
+            lid = guild_doc["leader"]
+            leader = await self.bot.get_user_info(lid)
+            try:
+                leader_key_doc = await self.fetch_key(leader)
+            except APIKeyError:
+                # User removed their key
+                await self.bot.database.set_guild(
+                    guild, {
+                        "sync.setupdone": False
+                    }
+                )
+                return
+            # Get their API key and save it to the doc
+            leader_key = leader_key_doc["key"]
+            await self.bot.database.set_guild(
+                guild, {
+                    "sync.leader_key": leader_key
+                }, self)
         scopes = ["guilds"]
-        leader = await self.bot.get_user_info(lid)
         # Array to hold discord roles that the server currently has
         current_ranks = []
         # Array to hold discord roles that the server currently has that match up with a in-game rank
@@ -328,7 +350,7 @@ class SyncGuild:
                 return
         # Collect ranks from API
         try:
-            ranks = await self.call_api(endpoint, leader, scopes)
+            ranks = await self.call_api(endpoint=endpoint, key=leader_key, scopes=scopes)
         except APIError:
             return
         # Add guild role to ranks dict from API
@@ -375,7 +397,7 @@ class SyncGuild:
         guild_doc["ranks"] = new_saved
         await self.bot.database.set_guild(guild, {"sync.ranks": new_saved},
                                           self)
-        gw2members = await self.getmembers(leader, gid)
+        gw2members = await self.getmembers(leader_key, gid)
         # Array to hold a role list from the roles we now have in the new dict
         role_list = []
         if guildrole:
@@ -389,48 +411,41 @@ class SyncGuild:
             # Iterate through discord's member list
             for member in guild.members:
                 rank = None
-                try:
-                    # Check if they are in the guild
-                    key_doc = await self.fetch_key(member)
-                    if not await self.check_membership(key_doc, gw2members):
-                        # If they have a key attached but aren't in the guild, remove any guild sync roles from them
-                        if guildrole:
-                            role_list.append(guildrole)
-                        await self.remove_sync_roles(member, role_list)
-                        if purge:
-                            membership_duration = (datetime.datetime.utcnow() - member.joined_at).total_seconds()
-                            if len(member.roles) <= 1 and membership_duration > 172800:
-                                await member.guild.kick(user=member, reason="GW2Bot Integration Guildsync Purge")
-                    else:
-                        name = key_doc["account_name"]
-                        # Find the name of their rank in-game
-                        for gw2user in gw2members:
-                            if gw2user["name"] == name:
-                                rank = gw2user["rank"]
-                        if rank:
-                            # Find the id of that rank in the guild_doc and get the discord role
-                            try:
-                                desired_role = discord.utils.get(member.guild.roles, id=guild_doc["ranks"][rank])
-                                # If they don't have that role add it and remove other roles.
-                                if desired_role not in member.roles:
-                                    await self.remove_sync_roles(member, role_list)
-                                    await self.add_member_to_role(
-                                        desired_role, member, guild)
-                                # If they don't have the guild role, and guild role is enabled, add it
-                                if guildrole:
-                                    if guildrole not in member.roles:
-                                        await self.add_member_to_role(
-                                            guildrole, member, guild)
-                            except Exception as e:
-                                self.log.debug(
-                                    "Couldn't get the role object for {0} user "
-                                    "in {1} server {2}.".format(
-                                        member.name, guild.name, e))
-                except APIKeyError:
+                if not await self.check_membership(member, gw2members):
+                    # If they have a key attached but aren't in the guild, remove any guild sync roles from them
+                    if guildrole:
+                        role_list.append(guildrole)
+                    await self.remove_sync_roles(member, role_list)
                     if purge:
                         membership_duration = (datetime.datetime.utcnow() - member.joined_at).total_seconds()
                         if len(member.roles) <= 1 and membership_duration > 172800:
                             await member.guild.kick(user=member, reason="GW2Bot Integration Guildsync Purge")
+                else:
+                    key_doc = await self.fetch_key(member)
+                    name = key_doc["account_name"]
+                    # Find the name of their rank in-game
+                    for gw2user in gw2members:
+                        if gw2user["name"] == name:
+                            rank = gw2user["rank"]
+                    if rank:
+                        # Find the id of that rank in the guild_doc and get the discord role
+                        try:
+                            desired_role = discord.utils.get(member.guild.roles, id=guild_doc["ranks"][rank])
+                            # If they don't have that role add it and remove other roles.
+                            if desired_role not in member.roles:
+                                await self.remove_sync_roles(member, role_list)
+                                await self.add_member_to_role(
+                                    desired_role, member, guild)
+                            # If they don't have the guild role, and guild role is enabled, add it
+                            if guildrole:
+                                if guildrole not in member.roles:
+                                    await self.add_member_to_role(
+                                        guildrole, member, guild)
+                        except Exception as e:
+                            self.log.debug(
+                                "Couldn't get the role object for {0} user "
+                                "in {1} server {2}.".format(
+                                    member.name, guild.name, e))
         else:
             self.log.debug(
                 "Unable to obtain member list for {0} server.".format(
@@ -456,11 +471,21 @@ class SyncGuild:
             enabled = False
         return enabled
 
-    async def check_membership(self, keydoc, member_list):
-        name = keydoc["account_name"]
-        for user in member_list:
-            if user["name"] == name:
-                return True
+    async def check_membership(self, member, member_list):
+        member_doc = await self.bot.database.get(member, self)
+        try:
+            keys = member_doc["keys"]
+        except KeyError:
+            keys = []
+            try:
+                keys[0] = await self.fetch_key(member)
+            except APIKeyError:
+                return False
+        for key in keys:
+            name = key["account_name"]
+            for user in member_list:
+                if user["name"] == name:
+                    return True
         return False
 
     async def remove_sync_roles(self, member, role_list):
