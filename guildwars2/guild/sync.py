@@ -336,6 +336,8 @@ class SyncGuild:
                 rank = None
                 try:
                     keydoc = await self.fetch_key(member)
+                    if not await self.check_membership(keydoc, gw2members):
+                        await self.remove_sync_roles(member, rolelist)
                     name = keydoc["account_name"]
                     for gw2user in gw2members:
                         if gw2user["name"] == name:
@@ -345,26 +347,7 @@ class SyncGuild:
                             desiredrole = discord.utils.get(
                                 guild.roles, id=guilddoc["ranks"][rank])
                             if desiredrole not in member.roles:
-                                for role in rolelist:
-                                    try:
-                                        await member.remove_roles(
-                                            role,
-                                            reason=
-                                            "GW2Bot Integration [$guildsync]")
-                                    except discord.Forbidden:
-                                        self.log.debug(
-                                            "Permissions error when trying to "
-                                            "remove {0} role from {1} "
-                                            "user in {2} server.".format(
-                                                role.name, member.name,
-                                                guild.name))
-                                    except discord.HTTPException:
-                                        # usually because user doesn't have
-                                        # role
-                                        pass
-                                    except AttributeError:
-                                        # role no longer exists - deleted?
-                                        pass
+                                await self.remove_sync_roles(member, rolelist)
                                 await self.add_member_to_role(
                                     desiredrole, member, guild)
                             if guildrole:
@@ -402,3 +385,29 @@ class SyncGuild:
         except KeyError:
             enabled = False
         return enabled
+
+    async def check_membership(self, keydoc, member_list):
+        name = keydoc["account_name"]
+        for user in member_list:
+            if user["name"] == name:
+                return True
+        return False
+
+    async def remove_sync_roles(self, member, role_list):
+        for role in role_list:
+            try:
+                await member.remove_roles(
+                    role,
+                    reason=
+                    "GW2Bot Integration [$guildsync]")
+            except discord.Forbidden:
+                self.log.debug(
+                    "Permissions error when trying to "
+                    "remove {0} role from {1} "
+                    "user in {2} server.".format(
+                        role.name, member.name,
+                        member.guild))
+            except discord.HTTPException:
+                # usually because user doesn't have
+                # role
+                pass
