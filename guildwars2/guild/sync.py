@@ -406,7 +406,7 @@ class SyncGuild:
                     "remove {0} role from {1} "
                     "user in {2} server.".format(
                         role.name, member.name,
-                        member.guild))
+                        member.guild.name))
             except discord.HTTPException:
                 # usually because user doesn't have
                 # role
