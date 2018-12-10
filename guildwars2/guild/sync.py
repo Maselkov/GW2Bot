@@ -186,8 +186,9 @@ class SyncGuild:
 
     @guildsync.command(name="purge")
     async def sync_purge(self, ctx, on_off: bool):
-        """Toggles removal of members that are not in the attached guild sync guild. Members without any other role
-        that have been in the server for longer than 48 hours are removed during guild syncs when this is enabled."""
+        """Toggles kicking of users that are not in the linked GW2 guild.
+        Discord users not in the guildsync GW2 guild are kicked if this is enabled unless they have any other
+        non-guildsync role or have been in the server for less than 48 hours."""
         doc = await self.bot.database.get_guild(ctx.guild, self)
         enabled = self.sync_enabled(doc)
         if not enabled:
