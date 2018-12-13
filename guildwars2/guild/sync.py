@@ -480,7 +480,7 @@ class SyncGuild:
             keys = []
             try:
                 keys[0] = await self.fetch_key(member)
-            except APIKeyError:
+            except (APIKeyError, IndexError):
                 return False
         for key in keys:
             name = key["account_name"]
