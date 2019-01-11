@@ -388,6 +388,7 @@ class AccountMixin:
                 for u in item["infusions"]:
                     if u == infusion:
                         inf_count += 1
+        await ctx.send(inf_count)
         return inf_count
 
     @commands.command()
