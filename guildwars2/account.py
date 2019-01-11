@@ -335,7 +335,7 @@ class AccountMixin:
                         char_names.append(character.name)
                     if k in char_names:
                         slotted_inf = await self.collect_infusions(ctx, k.title(), choice["ids"][0])
-                        if slotted_inf == 0
+                        if slotted_inf == 0:
                             inf = ""
                         else:
                             inf = "[{}]".format(slotted_inf)
