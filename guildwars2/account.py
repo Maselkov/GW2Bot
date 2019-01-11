@@ -327,8 +327,22 @@ class AccountMixin:
             sorted(search_results.items(), key=lambda kv: kv[1], reverse=True))
         for k, v in storage_counts.items():
             if v:
-                total += v
-                output.append("{} {} | {}".format(k.upper(),
+                if "infusion" in choice["name"].lower():
+                    total += v
+                    characters = await self.get_all_characters(user)
+                    char_names = []
+                    for character in characters:
+                        char_names.append(character.name)
+                    if k in char_names:
+                        slotted_inf = await self.collect_infusions(ctx, k.title(), choice["ids"][0])
+                        output.append("{} {} | {} [{}]".format(k.upper(),
+                                                         " " * (longest - len(k)), v, slotted_inf))
+                    else:
+                        output.append("{} {} | {}".format(k.upper(),
+                                                  " " * (longest - len(k)), v))
+                else:
+                    total += v
+                    output.append("{} {} | {}".format(k.upper(),
                                                   " " * (longest - len(k)), v))
         output.append("--------{}------".format("-" * (longest - 10)))
         output.append("TOTAL:{}{}".format(" " * (longest - 2), total))
@@ -371,9 +385,8 @@ class AccountMixin:
         data.set_thumbnail(url=icon_url)
         await ctx.send(message, embed=data)
 
-    @commands.command()
     async def collect_infusions(self, ctx, character: str, infusion):
-        "Returns slotted infusions of character"
+        "Returns slotted infusion count of character"
         character.title()
         inf_count = 0
         try:
@@ -388,7 +401,6 @@ class AccountMixin:
                 for u in item["infusions"]:
                     if u == infusion:
                         inf_count += 1
-        await ctx.send(inf_count)
         return inf_count
 
     @commands.command()
