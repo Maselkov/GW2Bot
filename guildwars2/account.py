@@ -372,6 +372,25 @@ class AccountMixin:
         await ctx.send(message, embed=data)
 
     @commands.command()
+    async def collect_infusions(self, ctx, character: str, infusion):
+        "Returns slotted infusions of character"
+        character.title()
+        inf_count = 0
+        try:
+            results = await self.get_character(ctx, character)
+        except APINotFound:
+            return await ctx.send("Invalid character name")
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+        eq = results["equipment"]
+        for item in eq:
+            if "infusions" in item:
+                for u in item["infusions"]:
+                    if u == infusion:
+                        inf_count += 1
+        return inf_count
+
+    @commands.command()
     @commands.cooldown(1, 10, BucketType.user)
     async def cats(self, ctx):
         """Displays the cats you haven't unlocked yet
