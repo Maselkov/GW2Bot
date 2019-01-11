@@ -102,7 +102,6 @@
     ],
     "Uncategorized": [
       2,
-      12,
       36,
       44,
       62,
@@ -114,7 +113,6 @@
       31,
       57,
       66,
-      78,
       85
     ],
     "Molten Furnace": [
@@ -127,7 +125,6 @@
     "Snowblind": [
       3,
       27,
-      37,
       51,
       68,
       86,
@@ -195,7 +192,6 @@
       13,
       30,
       38,
-      54,
       63,
       88,
       98
@@ -223,7 +219,14 @@
       33,
       67,
       84
+    ],
+    "Siren's Reef": [
+      12,
+      37,
+      54,
+      78
     ]
+
   },
   "event_timers": {
     "bosses": {
@@ -326,148 +329,169 @@
         }
       ]
     },
-    "maps": [{
-        "name": "Verdant Brink",
+      "hot": [{
+          "name": "Verdant Brink",
+          "phases": [{
+              "name": "Night",
+              "duration": 10
+            },
+            {
+              "name": "Night Bosses",
+              "duration": 20
+            },
+            {
+              "name": "Daytime",
+              "duration": 75
+            },
+            {
+              "name": "Night",
+              "duration": 15
+            }
+          ]
+        },
+        {
+          "name": "Auric Basin",
+          "phases": [{
+              "name": "Activate the Pillars",
+              "duration": 45
+            },
+            {
+              "name": "Challenges",
+              "duration": 15
+            },
+            {
+              "name": "Octovine",
+              "duration": 20
+            },
+            {
+              "name": "Reset",
+              "duration": 10
+            },
+            {
+              "name": "Activate the Pillars",
+              "duration": 30
+            }
+          ]
+        },
+        {
+          "name": "Tangled Depths",
+          "phases": [{
+              "name": "Help the Outposts",
+              "duration": 25
+            },
+            {
+              "name": "Gerent Preparation",
+              "duration": 5
+            },
+            {
+              "name": "Chak Gerent",
+              "duration": 20
+            },
+            {
+              "name": "Help the Outposts",
+              "duration": 70
+            }
+          ]
+        },
+
+        {
+          "name": "Dragon's Stand",
+          "phases": [{
+              "name": "Assault",
+              "duration": 90
+            },
+            {
+              "name": "Start",
+              "duration": 0
+            },
+            {
+              "name": "Assault",
+              "duration": 30
+            }
+          ]
+        },
+
+        {
+          "name": "Dry Top",
+          "phases": [{
+              "name": "Crash Site",
+              "duration": 40
+            },
+            {
+              "name": "Sandstorm",
+              "duration": 20
+            },
+            {
+              "name": "Crash Site",
+              "duration": 40
+            },
+            {
+              "name": "Sandstorm",
+              "duration": 20
+            }
+          ]
+        }
+      ],
+      "pof": [{
+        "name": "Crystal Oasis",
+        "phases": [{
+            "name": "Nothing",
+            "duration": 5
+          },
+          {
+            "name": "Rounds 1-3",
+            "duration": 16
+          },
+          {
+            "name": "Pinata",
+            "duration": 9
+          },
+          {
+            "name": "Nothing",
+            "duration": 90
+          }
+        ]
+      }, {
+        "name": "Domain of Istan",
+        "phases": [{
+            "name": "Palawadan",
+            "duration": 15
+          },
+          {
+            "name": "Nothing",
+            "duration": 90
+          },
+          {
+            "name": "Palawadan",
+            "duration": 15
+          }
+        ]
+      }],
+      "day": [{
+        "name": "Day/night cycle",
         "phases": [{
             "name": "Night",
-            "duration": 10,
-            "end": 10,
-            "color": "0x84C147",
-            "nextname": "Night Bosses"
+            "duration": 25
           },
           {
-            "name": "Night Bosses",
-            "duration": 20,
-            "end": 30,
-            "color": "0x6DAC2F"
+            "name": "Dawn",
+            "duration": 5
           },
           {
-            "name": "Daytime",
-            "duration": 75,
-            "end": 105,
-            "color": "0xC4E2A5"
+            "name": "Day",
+            "duration": 70
+          },
+          {
+            "name": "Dusk",
+            "duration": 5
           },
           {
             "name": "Night",
-            "duration": 15,
-            "end": 120,
-            "color": "0x84C147"
+            "duration": 15
           }
         ]
-      },
-      {
-        "name": "Auric Basin",
-        "phases": [{
-            "name": "Activate the Pillars",
-            "duration": 45,
-            "end": 45,
-            "color": "0xFFE37F",
-            "nextname": "Challenges"
-          },
-          {
-            "name": "Challenges",
-            "duration": 15,
-            "end": 60,
-            "color": "0xFFD53D"
-          },
-          {
-            "name": "Octovine",
-            "duration": 20,
-            "end": 80,
-            "color": "0xEAB700"
-          },
-          {
-            "name": "Reset",
-            "duration": 10,
-            "end": 90,
-            "color": "0xFFF1C1"
-          },
-          {
-            "name": "Active the Pillars",
-            "duration": 30,
-            "end": 120,
-            "color": "0xFFE37F"
-          }
-        ]
-      },
-      {
-        "name": "Tangled Depths",
-        "phases": [{
-            "name": "Help the Outposts",
-            "duration": 25,
-            "end": 25,
-            "color": "0xFFD7D7",
-            "nextname": "Gerent Preparation"
-          },
-          {
-            "name": "Gerent Preparation",
-            "duration": 5,
-            "end": 30,
-            "color": "0xffbdbd"
-          },
-          {
-            "name": "Chak Gerent",
-            "duration": 20,
-            "end": 50,
-            "color": "0xf99"
-          },
-          {
-            "name": "Help the Outposts",
-            "duration": 70,
-            "end": 120,
-            "color": "0xFFD7D7"
-          }
-        ]
-      },
+      }]
 
-      {
-        "name": "Dragon's Stand",
-        "phases": [{
-            "name": "Assault Start",
-            "duration": 90,
-            "end": 90,
-            "color": "0xDFDDF7",
-            "nextname": "Assault Start"
-          },
-          {
-            "name": "Assault Start",
-            "duration": 30,
-            "end": 120,
-            "color": "0xc8c5e5"
-          }
-        ]
-      },
-
-      {
-        "name": "Dry Top",
-        "phases": [{
-            "name": "Crash Site",
-            "duration": 40,
-            "end": 40,
-            "color": "0xFCFADC",
-            "nextname": "Crash Site"
-          },
-          {
-            "name": "Sandstorm",
-            "duration": 20,
-            "end": 60,
-            "color": "0xDED98A"
-          },
-          {
-            "name": "Crash Site",
-            "duration": 40,
-            "end": 100,
-            "color": "0xFCFADC"
-          },
-          {
-            "name": "Sandstorm",
-            "duration": 20,
-            "end": 120,
-            "color": "0xDED98A"
-          }
-        ]
-      }
-    ]
   },
   "insights": {
     "legendary_insight": 77302,
@@ -543,8 +567,8 @@
           },
           {
             "name": "Bandit Trio",
-            "type": "any_achievement_or_none",
-            "ids": [2830, 2831]
+            "type": "single_achievement",
+            "id": 2830
           },
           {
             "name": "Matthias",
@@ -671,148 +695,112 @@
       }
     ]
   },
-  "cats": {
-    "chicken": {
-      "name": "Slab of Poultry Meat - WP: [&BPoAAAA=]",
-      "order": 0
-    },
-    "grilled_chicken": {
-      "name": "Grilled Poultry - WP: [&BDEEAAA=]",
-      "order": 1
-    },
-    "spicy_flank": {
-      "name": "Spicy Flank Steak - WP: [&BBAEAAA=]",
-      "order": 2
-    },
-    "spicier_flank": {
-      "name": "Spicier Flank Steak - WP: [&BNMAAAA=]",
-      "order": 3
-    },
-    "fire_flank": {
-      "name": "Plate of Fire Flank Steak - WP: [&BCoDAAA=]",
-      "order": 4
-    },
-    "prickley_pear_sorbet": {
-      "name": "Bowl of Prickly Pear Sorbet - WP: [&BIAHAAA=]",
-      "order": 5
-    },
-    "ginger_lime_icecream": {
-      "name": "Bowl of Ginger-Lime Ice Cream - WP: [&BHoHAAA=]",
-      "order": 6
-    },
-    "saffron_mango_icecream": {
-      "name": "Bowl of Saffron-Mango Ice Cream WP: [&BH8HAAA=]",
-      "order": 7
-    },
-    "peach_raspberry_icecream": {
-      "name": "Bowl of Peach Raspberry Swirl Ice Cream WP: [&BKwHAAA=]",
-      "order": 8
-    },
-    "chicken_day": {
-      "name": "Daytime - Slab of Poultry Meat WP: [&BLwEAAA=]",
-      "order": 9
-    },
-    "chicken_night": {
-      "name": "Nighttime - Slab of Poultry Meat WP: [&BLwEAAA=]",
-      "order": 10
-    },
-    "warrior": {
-      "name": "Warrior - Cheeseburger WP: [&BO8AAAA=]",
-      "order": 11
-    },
-    "mesmer": {
-      "name": "Mesmer - Mystery Tonic WP: [&BO8AAAA=]",
-      "order": 12
-    },
-    "ranger": {
-      "name": "Ranger - Healing Seed Pod WP: [&BDQBAAA=]",
-      "order": 13
-    },
-    "guardian": {
-      "name": "Guardian - Bowl of Curry Mussel Soup WP: [&BEAAAAA=]",
-      "order": 14
-    },
-    "elementalist": {
-      "name": "Elementalist - Slice of Rainbow Cake WP: [&BDQBAAA=]",
-      "order": 15
-    },
-    "engineer": {
-      "name": "Engineer - Flask of Pumpkin Oil WP: [&BIABAAA=]",
-      "order": 16
-    },
-    "revenant": {
-      "name": "Revenant - 39 Carrots - PvP Lobby",
-      "order": 17
-    },
-    "thief": {
-      "name": "Thief - Harpy Feathers - WP: [&BIABAAA=]",
-      "order": 18
-    },
-    "necromancer": {
-      "name": "Necromancer - Grumble Cake - WP: [&BHQBAAA=]",
-      "order": 19
-    },
-    "lava_skritt": {
-      "name": "Fire Flank Steak + Carry Injured Skritt WP: [&BFUJAAA=]",
-      "order": 20
-    },
-    "ghost_peppers": {
-      "name": "3 Ghost Peppers: [&BHgJAAA=]",
-      "order": 21
-    },
-    "halloween": {
-      "name": "Frog in a Jar - Feline Familiar from Enchanted Broom",
-      "order": 22
-    },
-    "snow_leopard": {
-      "name": "Use Koda's Flame to unfreeze - WP: [&BH0JAAA=]",
-      "order": 23
-    },
-    "frozen": {
-      "name": "Super-Hot Poultry and Leek Soup - WP: [&BDcEAAA=]",
-      "order": 24
-    },
-    "ice": {
-      "name": "Super-Hot Poultry and Winter Vegetable Soup - WP: [&BIcDAAA=]",
-      "order": 25
-    },
-    "freezer": {
-      "name": "Super-Hot Lemongrass Poultry Soup - WP: [&BLgEAAA=]",
-      "order": 26
-    },
-    "cold": {
-      "name": "Super-Hot Saffron-Scented Poultry Soup - WP: [&BLwEAAA=]",
-      "order": 27
-    },
-    "cadeucus": {
-      "name": "Bowl of Bloodstone Bisque - At the end of LS3E4 Head of the Snake",
-      "order": 28
-    },
-    "ghost": {
-      "name": "Strawberry Ghost - Also need ghost effect on player - WP: [&BK8JAAA=]",
-      "order": 29
-    },
-    "sab": {
-      "name": "SAB World 2 Zone 2 - Bring piranha to cat on top of gong room",
-      "order": 30
-    },
-    "simon": {
-      "name": "Shattered Observatory side room - [&AgF+NQEA][&AgHoHAEA][&AgEYwQAA][&AgGxHQEA][&AgFPPwEA]",
-      "order": 31
-    },
-    "bluecatmander": {
-      "name": "Gift of Battle - Blue Alpine Borderland Cat Room",
-      "order": 32
-    },
-    "yellowcatmander": {
-      "name": "Can of Spicy Meat Chili - Desert Borderland Quaggan Room",
-      "order": 33
-    },
-    "holographic": {
-      "name": "Holographic Cat - Purchased from Holomancer Netto (next to [&BLgEAAA=]) for 1g",
-      "order": 34
-    }
-  },
+  "cats": [{
+    "id": 1,
+    "guide": "Slab of Poultry Meat - WP: [&BPoAAAA=]"
+  }, {
+    "id": 2,
+    "guide": "Grilled Poultry - WP: [&BDEEAAA=]"
+  }, {
+    "id": 3,
+    "guide": "Spicy Flank Steak - WP: [&BBAEAAA=]"
+  }, {
+    "id": 4,
+    "guide": "Spicier Flank Steak - WP: [&BNMAAAA=]"
+  }, {
+    "id": 5,
+    "guide": "Plate of Fire Flank Steak - WP: [&BCoDAAA=]"
+  }, {
+    "id": 6,
+    "guide": "Bowl of Prickly Pear Sorbet - WP: [&BIAHAAA=]"
+  }, {
+    "id": 7,
+    "guide": "Bowl of Ginger-Lime Ice Cream - WP: [&BHoHAAA=]"
+  }, {
+    "id": 8,
+    "guide": "Bowl of Saffron-Mango Ice Cream WP: [&BH8HAAA=]"
+  }, {
+    "id": 9,
+    "guide": "Bowl of Peach Raspberry Swirl Ice Cream WP: [&BKwHAAA=]"
+  }, {
+    "id": 10,
+    "guide": "Daytime - Slab of Poultry Meat WP: [&BLwEAAA=]"
+  }, {
+    "id": 11,
+    "guide": "Nighttime - Slab of Poultry Meat WP: [&BLwEAAA=]"
+  }, {
+    "id": 12,
+    "guide": "Warrior - Cheeseburger WP: [&BO8AAAA=]"
+  }, {
+    "id": 13,
+    "guide": "Mesmer - Mystery Tonic WP: [&BO8AAAA=]"
+  }, {
+    "id": 14,
+    "guide": "Ranger - Healing Seed Pod WP: [&BDQBAAA=]"
+  }, {
+    "id": 15,
+    "guide": "Guardian - Bowl of Curry Mussel Soup WP: [&BEAAAAA=]"
+  }, {
+    "id": 16,
+    "guide": "Elementalist - Slice of Rainbow Cake WP: [&BDQBAAA=]"
+  }, {
+    "id": 17,
+    "guide": "Engineer - Flask of Pumpkin Oil WP: [&BIABAAA=]"
+  }, {
+    "id": 18,
+    "guide": "Revenant - 39 Carrots - PvP Lobby"
+  }, {
+    "id": 19,
+    "guide": "Thief - Harpy Feathers - WP: [&BIABAAA=]"
+  }, {
+    "id": 20,
+    "guide": "Necromancer - Grumble Cake - WP: [&BHQBAAA=]"
+  }, {
+    "id": 21,
+    "guide": "Fire Flank Steak + Carry Injured Skritt WP: [&BFUJAAA=]"
+  }, {
+    "id": 22,
+    "guide": "3 Ghost Peppers: [&BHgJAAA=]"
+  }, {
+    "id": 23,
+    "guide": "Frog in a Jar - Feline Familiar from Enchanted Broom"
+  }, {
+    "id": 24,
+    "guide": "Use Koda's Flame to unfreeze - WP: [&BH0JAAA=]"
+  }, {
+    "id": 25,
+    "guide": "Super-Hot Poultry and Leek Soup - WP: [&BDcEAAA=]"
+  }, {
+    "id": 26,
+    "guide": "Super-Hot Poultry and Winter Vegetable Soup - WP: [&BIcDAAA=]"
+  }, {
+    "id": 27,
+    "guide": "Super-Hot Lemongrass Poultry Soup - WP: [&BLgEAAA=]"
+  }, {
+    "id": 28,
+    "guide": "Super-Hot Saffron-Scented Poultry Soup - WP: [&BLwEAAA=]"
+  }, {
+    "id": 29,
+    "guide": "Bowl of Bloodstone Bisque - At the end of LS3E4 Head of the Snake"
+  }, {
+    "id": 32,
+    "guide": "Strawberry Ghost - Also need ghost effect on player - WP: [&BK8JAAA=]"
+  }, {
+    "id": 33,
+    "guide": "SAB World 2 Zone 2 - Bring piranha to cat on top of gong room"
+  }, {
+    "id": 35,
+    "guide": "Shattered Observatory side room - [&AgF+NQEA][&AgHoHAEA][&AgEYwQAA][&AgGxHQEA][&AgFPPwEA]"
+  }, {
+    "id": 34,
+    "guide": "Gift of Battle - Blue Alpine Borderland Cat Room"
+  }, {
+    "id": 36,
+    "guide": "Can of Spicy Meat Chili - Desert Borderland Quaggan Room"
+  }, {
+    "id": 37,
+    "guide": "Holographic Cat - Purchased from Holomancer Netto (next to [&BLgEAAA=]) for 1g"
+  }],
   "sab": {
     "unlocks": [
       "chain_stick", "slingshot", "whip", "mini_bomb", "candle", "torch",

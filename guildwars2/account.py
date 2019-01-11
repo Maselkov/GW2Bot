@@ -1,12 +1,12 @@
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 from itertools import chain
-from operator import itemgetter
-
+import re
 import discord
 from discord.ext import commands
 from discord.ext.commands.cooldowns import BucketType
 
 from .exceptions import APIError, APINotFound
+from .utils.chat import embed_list_lines
 
 
 class AccountMixin:
@@ -27,7 +27,7 @@ class AccountMixin:
         accountname = doc["account_name"]
         created = results["created"].split("T", 1)[0]
         hascommander = "Yes" if results["commander"] else "No"
-        data = discord.Embed(colour=self.embed_color)
+        data = discord.Embed(colour=await self.get_embed_color(ctx))
         data.add_field(name="Created account on", value=created)
         # Add world name to account info
         wid = results["world"]
@@ -61,16 +61,43 @@ class AccountMixin:
                 return await self.error_handler(ctx, e)
             pvprank = pvp["pvp_rank"] + pvp["pvp_rank_rollovers"]
             data.add_field(name="PVP rank", value=pvprank)
-        data.set_author(name=accountname)
+        if "characters" in doc["permissions"]:
+            try:
+                characters = await self.get_all_characters(user)
+                total_played = 0
+                for character in characters:
+                    total_played += character.age
+                data.add_field(
+                    name="Total time played",
+                    value=self.format_age(total_played),
+                    inline=False)
+            except APIError as e:
+                return await self.error_handler(ctx, e)
+        if "access" in results:
+            access = results["access"]
+            if len(access) > 1:
+                to_delete = ["PlayForFree", "GuildWars2"]
+                for d in to_delete:
+                    if d in access:
+                        access.remove(d)
+
+            def format_name(name):
+                return " ".join(re.findall('[A-Z\d][^A-Z\d]*', name))
+
+            access = "\n".join([format_name(e) for e in access])
+            data.add_field(name="Expansion access", value=access)
+        data.set_author(name=accountname, icon_url=user.avatar_url)
+        data.set_footer(
+            text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
         try:
             await ctx.send(embed=data)
         except discord.Forbidden:
             await ctx.send("Need permission to embed links")
 
-    @commands.command()
-    @commands.cooldown(1, 15, BucketType.user)
+    @commands.command(aliases=["ld"])
+    @commands.cooldown(1, 10, BucketType.user)
     async def li(self, ctx):
-        """Shows how many Legendary Insights you have earned
+        """Shows how many Legendary Insights and Divinations you have earned
 
         Required permissions: inventories, characters
         """
@@ -78,229 +105,96 @@ class AccountMixin:
         scopes = ["inventories", "characters"]
         if not self.can_embed_links(ctx):
             return await ctx.send("Need permission to embed links")
-        await ctx.trigger_typing()
+        ids = self.gamedata["raid_trophies"]
+        ids_li = ids["insights"]
+        ids_ld = ids["divinations"]
+        id_legendary_insight = ids_li["legendary_insight"]
+        id_legendary_divination = ids_ld["legendary_divination"]
+        id_gift_of_prowess = ids_li["gift_of_prowess"]
+        id_envoy_insignia = ids_li["envoy_insignia"]
+        ids_refined_envoy_armor = list(ids_li["refined_envoy_armor"].values())
+        ids_perfected_envoy_armor = list(
+            ids_li["perfected_envoy_armor"].values())
+        all_ids = [
+            id_legendary_divination, id_legendary_insight, id_gift_of_prowess,
+            id_envoy_insignia
+        ]
+        all_ids += ids_perfected_envoy_armor + ids_refined_envoy_armor
         try:
             doc = await self.fetch_key(user, scopes)
-            endpoints = [
-                "account/bank", "account/materials", "account/inventory",
-                "characters?page=0&page_size=200"
-            ]
-            results = await self.call_multiple(endpoints, key=doc["key"])
-            bank, materials, shared, characters = results
+            await ctx.trigger_typing()
+            search_results = await self.find_items_in_account(
+                ctx, all_ids, doc=doc)
         except APIError as e:
             return await self.error_handler(ctx, e)
-        # Items to look for
-        ids = self.gamedata.get("insights")
-        id_legendary_insight = ids.get("legendary_insight")
-        id_gift_of_prowess = ids.get("gift_of_prowess")
-        id_envoy_insignia = ids.get("envoy_insignia")
-        ids_refined_envoy_armor = set(ids.get("refined_envoy_armor").values())
-        ids_perfected_envoy_armor = set(
-            ids.get("perfected_envoy_armor").values())
-
-        # Filter empty slots and uninteresting items out of the inventories.
-        #
-        # All inventories are converted to lists as they are used multiple
-        # times. If they stay as generators, the first scan on each wil
-        # exhaust them, resulting in empty results for later scans (this was
-        # was really hard to track down, since the scans are also
-        # generators, so the order of access to an inventory is not immediately
-        # obvious in the code).
-        __pre_filter = ids_perfected_envoy_armor.union(
-            {id_legendary_insight, id_gift_of_prowess, id_envoy_insignia},
-            ids_refined_envoy_armor)
-
-        # If an item slot is empty, or the item is not interesting,
-        # filter it out.
-        def pre_filter(a, b=__pre_filter):
-            return a is not None and a["id"] in b
-
-        inv_bank = list(filter(pre_filter, bank))
-        del bank  # We don't need these anymore, free them.
-
-        inv_materials = list(filter(pre_filter, materials))
-        del materials
-
-        inv_shared = list(filter(pre_filter, shared))
-        del shared
-
-        # Bags have multiple inventories for each character, so:
-        # Step 5: Discard the empty and uninteresting
-        inv_bags = list(
-            filter(
-                pre_filter,
-                # Step 4: Flatten!
-                chain.from_iterable(
-                    # Step 3: Flatten.
-                    chain.from_iterable(
-                        # Step 2: Get inventories from each existing bag
-                        (
-                            map(itemgetter("inventory"), filter(None, bags))
-                            for bags in
-                            # Step 1: Get all bags
-                            map(itemgetter("bags"), characters))))))
-        # Now we have a simple list of items in all bags on all characters.
-
-        # Step 3: Discard empty and uninteresting
-        equipped = list(
-            filter(
-                pre_filter,
-                # Step 2: Flatten
-                chain.from_iterable(
-                    # Step 1: get all character equipment
-                    map(itemgetter("equipment"), characters))))
-        del characters
-
-        # Like the bags, we now have a simple list of character gear
-
-        # Filter out items that don't match the ones we want.
-        # Step 1: Define a test function for filter(). The id is passed in with
-        # an optional argument to avoid any potential issues with scope.
-        def li_scan(a, b=id_legendary_insight):
-            return a["id"] == b
-
-        # Step 2: Filter out all items we don't care about
-        # Step 3: Extract the `count` field.
-        li_bank = map(itemgetter("count"), filter(li_scan, inv_bank))
-        li_materials = map(itemgetter("count"), filter(li_scan, inv_materials))
-        li_shared = map(itemgetter("count"), filter(li_scan, inv_shared))
-        li_bags = map(itemgetter("count"), filter(li_scan, inv_bags))
-
-        def prowess_scan(a, b=id_gift_of_prowess):
-            return a["id"] == b
-
-        prowess_bank = map(itemgetter("count"), filter(prowess_scan, inv_bank))
-        prowess_shared = map(
-            itemgetter("count"), filter(prowess_scan, inv_shared))
-        prowess_bags = map(itemgetter("count"), filter(prowess_scan, inv_bags))
-
-        def insignia_scan(a, b=id_envoy_insignia):
-            return a["id"] == b
-
-        insignia_bank = map(
-            itemgetter("count"), filter(insignia_scan, inv_bank))
-        insignia_shared = map(
-            itemgetter("count"), filter(insignia_scan, inv_shared))
-        insignia_bags = map(
-            itemgetter("count"), filter(insignia_scan, inv_bags))
-
-        # This one is slightly different: since we are matching against a set
-        # of ids, we use `in` instead of a simple comparison.
-        perfect_armor_scan = (
-            lambda a, b=ids_perfected_envoy_armor: a["id"] in b)
-        perfect_armor_bank = map(
-            itemgetter("count"), filter(perfect_armor_scan, inv_bank))
-        perfect_armor_shared = map(
-            itemgetter("count"), filter(perfect_armor_scan, inv_shared))
-        perfect_armor_bags = map(
-            itemgetter("count"), filter(perfect_armor_scan, inv_bags))
-        # immediately converting this to a list because we'll need the length
-        # later and that would exhaust the generator, resulting in surprises if
-        # it's used more later.
-        perfect_armor_equipped = list(filter(perfect_armor_scan, equipped))
-
-        # Repeat for Refined Armor
-        def refined_armor_scan(a, b=ids_refined_envoy_armor):
-            return a["id"] in b
-
-        refined_armor_bank = map(
-            itemgetter("count"), filter(refined_armor_scan, inv_bank))
-        refined_armor_shared = map(
-            itemgetter("count"), filter(refined_armor_scan, inv_shared))
-        refined_armor_bags = map(
-            itemgetter("count"), filter(refined_armor_scan, inv_bags))
-        refined_armor_equipped = list(filter(refined_armor_scan, equipped))
-
-        # Now that we have all the items we are interested in, it's time to
-        # count them! Easy enough to just `sum` the `chain`.
-        sum_li = sum(chain(li_bank, li_materials, li_bags, li_shared))
-        sum_prowess = sum(chain(prowess_bank, prowess_shared, prowess_bags))
-        sum_insignia = sum(
-            chain(insignia_bank, insignia_shared, insignia_bags))
-        # Armor is a little different. The ones in inventory have a count like
-        # the other items, but the ones equipped don't, so we can just take the
-        # length of the list there.
-        sum_refined_armor = sum(
-            chain(refined_armor_bank, refined_armor_shared,
-                  refined_armor_bags)) + len(refined_armor_equipped)
-        sum_perfect_armor = sum(
-            chain(perfect_armor_bank, perfect_armor_shared,
-                  perfect_armor_bags)) + len(perfect_armor_equipped)
-
-        # LI is fine, but the others are composed of 25 or 50 LIs.
+        sum_li_on_hand = sum(search_results[id_legendary_insight].values())
+        sum_ld_on_hand = sum(search_results[id_legendary_divination].values())
+        sum_prowess = sum(search_results[id_gift_of_prowess].values())
+        sum_insignia = sum(search_results[id_envoy_insignia].values())
         li_prowess = sum_prowess * 25
         li_insignia = sum_insignia * 25
-        # Refined Envoy Armor. First set is free!
-        # But, keeping track of it is troublesome. What we do is add up to 6
-        # perfected armor pieces to this (the ones that used the free set), but
-        # not more (`min()`).
-        # Then, subtract 6 for the free set. If one full set of perfected armor
-        # has been crafted, then we have just the count of refined armor. This
-        # is exactly what we want, because the free set is now being counted by
-        # `li_perfect_armor`.
+        sum_perfect_armor = 0
+        for k, v in search_results.items():
+            if k in ids_perfected_envoy_armor:
+                sum_perfect_armor += sum(v.values())
+        sum_refined_armor = 0
+        for k, v in search_results.items():
+            if k in ids_refined_envoy_armor:
+                sum_refined_armor += sum(v.values())
         li_refined_armor = max(
             min(sum_perfect_armor, 6) + sum_refined_armor - 6, 0) * 25
-        # Perfected Envoy Armor. First set is half off!
         li_perfect_armor = min(sum_perfect_armor, 6) * 25 + max(
             sum_perfect_armor - 6, 0) * 50
-        # Stagger the calculation for detail later.
-        crafted_li = (
+        sum_on_hand = sum_ld_on_hand + sum_li_on_hand
+        sum_crafted = (
             li_prowess + li_insignia + li_perfect_armor + li_refined_armor)
-        total_li = sum_li + crafted_li
-
-        # Construct an embed object for better formatting of our data
-        embed = discord.Embed()
-        # Right up front, the information everyone wants:
-        embed.title = "{0} Legendary Insights Earned".format(total_li)
-        # Identify the user that asked
+        total_li = sum_li_on_hand + sum_crafted
+        total_ld = sum_ld_on_hand
+        total_trophies = total_li + total_ld
+        embed = discord.Embed(
+            title="{} Legendary Insights and Divinations earned"
+            "".format(total_trophies),
+            description="{} on hand, {} used in crafting".format(
+                sum_on_hand, sum_crafted),
+            color=0x4C139D)
         embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
-        # LI icon as thumbnail looks pretty cool.
-        embed.set_thumbnail(url="https://render.guildwars2.com/file"
-                            "/6D33B7387BAF2E2CC9B5D37D1D1B01246AB6FA22"
-                            "/1302744.png")
-        # Legendary color!
-        embed.colour = 0x4C139D
-        # Quick breakdown. No detail on WHERE all those LI are.
-        # That's for $search
-        embed.description = "{1} on hand, {2} used in crafting".format(
-            total_li, sum_li, crafted_li)
-        # Save space by skipping empty sections
-        if sum_perfect_armor:
+        embed.set_thumbnail(
+            url="https://api.gw2bot.info/resources/icons/lild.png")
+        if total_li:
+            value = ["On hand - **{}**".format(sum_li_on_hand)]
+            if sum_perfect_armor:
+                value.append("{} Perfected Envoy Armor Pieces - **{}**".format(
+                    sum_perfect_armor, li_perfect_armor))
+            if sum_refined_armor:
+                value.append("{} Refined Envoy Armor Pieces - **{}**".format(
+                    sum_refined_armor, li_refined_armor))
+            if sum_prowess:
+                value.append("{} Gifts of Prowess - **{}**".format(
+                    sum_prowess, li_prowess))
+            if sum_insignia:
+                value.append("{} Envoy Insignia - **{}**".format(
+                    sum_insignia, li_insignia))
             embed.add_field(
-                name="{0} Perfected Envoy Armor Pieces".format(
-                    sum_perfect_armor),
-                value="Representing {0} Legendary Insights".format(
-                    li_perfect_armor),
+                name="{} Legendary Insights".format(total_li),
+                value="\n".join(value),
                 inline=False)
-        if sum_refined_armor:
+        if total_ld:
+            value = ["On hand - **{}**".format(sum_ld_on_hand)]
             embed.add_field(
-                name="{0} Refined Envoy Armor Pieces".format(
-                    sum_refined_armor),
-                value="Representing {0} Legendary Insights".format(
-                    li_refined_armor),
+                name="{} Legendary Divinations".format(total_ld),
+                value="\n".join(value),
                 inline=False)
-        if sum_prowess:
-            embed.add_field(
-                name="{0} Gifts of Prowess".format(sum_prowess),
-                value="Representing {0} Legendary Insights".format(li_prowess),
-                inline=False)
-        if sum_insignia:
-            embed.add_field(
-                name="{0} Envoy Insignia".format(sum_insignia),
-                value="Representing {0} Legendary Insights".format(
-                    li_insignia),
-                inline=False)
-        # Identify the bot
         embed.set_footer(
             text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
         await ctx.send(
-            "{.mention}, here are your Legendary Insights".format(user),
+            "{.mention}, here are your Legendary Insights and Divinations".
+            format(user),
             embed=embed)
 
     @commands.command()
     @commands.cooldown(1, 15, BucketType.user)
     async def kp(self, ctx):
-        """Shows which raid and fractal encounters you have completed.
+        """Shows completed raids and fractals
 
         Required permissions: progression
         """
@@ -309,14 +203,13 @@ class AccountMixin:
         if not self.can_embed_links(ctx):
             return await ctx.send("Need permission to embed links")
         await ctx.trigger_typing()
-
         areas = self.gamedata["killproofs"]["areas"]
-
         # Create a list of lists of all achievement ids we need to check.
-        achievement_ids = [[x["id"]]
-                           if x["type"] == "single_achievement" else x["ids"]
-                           for x in chain.from_iterable(
-                               [area["encounters"] for area in areas])]
+        achievement_ids = [
+            [x["id"]] if x["type"] == "single_achievement" else x["ids"]
+            for x in chain.from_iterable(
+                [area["encounters"] for area in areas])
+        ]
         # Flatten it.
         achievement_ids = [
             str(x) for x in chain.from_iterable(achievement_ids)
@@ -326,7 +219,7 @@ class AccountMixin:
             doc = await self.fetch_key(user, scopes)
             endpoint = "account/achievements?ids=" + ",".join(achievement_ids)
             results = await self.call_api(endpoint, key=doc["key"])
-        except APINotFound as e:
+        except APINotFound:
             # Not Found is returned by the API when none of the searched
             # achievements have been completed yet.
             results = []
@@ -339,28 +232,19 @@ class AccountMixin:
                 _id = encounter["id"]
                 for achievement in results:
                     if achievement["id"] == _id and achievement["done"]:
-                        return "+"
+                        return "+✔"
                 # The achievement is not in the list or isn't done
-                return "-"
-
+                return "-✖"
             # All achievements have to be completed
             if encounter["type"] == "all_achievements":
                 for _id in encounter["ids"]:
                     # The results do not contain achievements with no progress
                     if not any(a["id"] == _id and a["done"] for a in results):
-                        return "-"
-                return "+"
+                        return "-✖"
+                return "+✔"
 
-            # If any of these achievements are completed, the encounter was
-            # completed, otherwise we don't know.
-            if encounter["type"] == "any_achievement_or_none":
-                for _id in encounter["ids"]:
-                    for achievement in results:
-                        if achievement["id"] == _id and achievement["done"]:
-                            return "+"
-                return "?"
-
-        embed = discord.Embed(title="Kill Proof", color=self.embed_color)
+        embed = discord.Embed(
+            title="Kill Proof", color=await self.get_embed_color(ctx))
         embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
         for area in areas:
             value = ["```diff"]
@@ -370,9 +254,10 @@ class AccountMixin:
             value.append("```")
             embed.add_field(name=area["name"], value="\n".join(value))
 
-        embed.description = "List of completed encounters"
+        embed.description = ("Achievements were checked to find "
+                             "completed encounters.")
         embed.set_footer(text="Green (+) means completed. Red (-) means not. "
-                         "Gray (?) means unknown.")
+                         "CM stands for Challenge Mode.")
 
         await ctx.send(
             "{.mention}, here is your kill proof.".format(user), embed=embed)
@@ -393,7 +278,7 @@ class AccountMixin:
         except APIError as e:
             return await self.error_handler(ctx, e)
         raids = await self.get_raids()
-        embed = self.boss_embed(raids, results)
+        embed = await self.boss_embed(ctx, raids, results)
         embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
         if not self.can_embed_links(ctx):
             return await ctx.send("Need permission to embed links")
@@ -410,7 +295,10 @@ class AccountMixin:
         if not self.can_embed_links(ctx):
             return await ctx.send("Need permission to embed links")
         user = ctx.author
-        scopes = ["inventories", "characters"]
+        try:
+            doc = await self.fetch_key(user, ["inventories", "characters"])
+        except APIError as e:
+            await self.error_handler(ctx, e)
         choice = await self.itemname_to_id(
             ctx, item, user, group_duplicates=True)
         if not choice:
@@ -418,74 +306,11 @@ class AccountMixin:
             return
         await ctx.trigger_typing()
         try:
-            endpoints = [
-                "account/bank", "account/inventory", "account/materials",
-                "characters?page=0&page_size=200"
-            ]
-            doc = await self.fetch_key(user, scopes)
-            results = await self.call_multiple(endpoints, key=doc["key"])
-            storage_spaces = ("bank", "shared", "material storage")
-            storage_spaces = OrderedDict(list(zip(storage_spaces, results)))
-            characters = results[3]
+            search_results = await self.find_items_in_account(
+                ctx, choice["ids"], flatten=True)
         except APIError as e:
             return await self.error_handler(ctx, e)
-
-        def get_amount_in_slot(item):
-            def count_upgrades(slots):
-                return sum(1 for i in slots if i in choice["ids"])
-
-            if not item:
-                return 0
-            if item["id"] in choice["ids"]:
-                if "count" not in item:
-                    return 1
-                return item["count"]
-            if not choice.get("is_upgrade"):
-                return 0
-
-            if item.get("infusions"):
-                infusions_sum = count_upgrades(item["infusions"])
-                if infusions_sum:
-                    return infusions_sum
-            if item.get("upgrades"):
-                upgrades_sum = count_upgrades(item["upgrades"])
-                if upgrades_sum:
-                    return upgrades_sum
-            return 0
-
-        storage_counts = OrderedDict()
-        for k, v in storage_spaces.items():
-            count = 0
-            for item in v:
-                count += get_amount_in_slot(item)
-            storage_counts[k] = count
-        try:
-            if "tradingpost" in doc["permissions"]:
-                result = await self.call_api(
-                    "commerce/delivery", key=doc["key"])
-                delivery = result.get("items", [])
-                storage_counts["tp delivery"] = 0
-                for item in delivery:
-                    storage_counts["tp delivery"] += get_amount_in_slot(item)
-        except APIError:
-            pass
-        for character in characters:
-            bag_count = 0
-            for bag in character["bags"]:
-                bag_count += get_amount_in_slot(bag)
-            bags = [
-                bag["inventory"] for bag in filter(None, character["bags"])
-            ]
-            bag_total = 0
-            for bag in bags:
-                for item in bag:
-                    bag_total += get_amount_in_slot(item)
-            equipment = 0
-            for piece in character["equipment"]:
-                equipment += get_amount_in_slot(piece)
-            count = bag_total + equipment + bag_count
-            storage_counts[character["name"]] = count
-        seq = [k for k, v in storage_counts.items() if v]
+        seq = [k for k, v in search_results.items() if v]
         if not seq:
             return await ctx.send("Sorry, not found on your account. "
                                   "Make sure you've selected the "
@@ -499,7 +324,7 @@ class AccountMixin:
         ]
         total = 0
         storage_counts = OrderedDict(
-            sorted(storage_counts.items(), key=lambda kv: kv[1], reverse=True))
+            sorted(search_results.items(), key=lambda kv: kv[1], reverse=True))
         for k, v in storage_counts.items():
             if v:
                 total += v
@@ -513,7 +338,10 @@ class AccountMixin:
                     16)
         item_doc = await self.fetch_item(choice["ids"][0])
         icon_url = item_doc["icon"]
-        data = discord.Embed(description="Search results", color=color)
+        data = discord.Embed(
+            description="Search results".format(item_doc["name"]) + " " * 80 +
+            u'\u200b',
+            color=color)
         value = "\n".join(output)
         if len(value) > 1014:
             value = ""
@@ -552,45 +380,30 @@ class AccountMixin:
         user = ctx.message.author
         endpoint = "account/home/cats"
         try:
-            results = await self.call_api(endpoint, user, ["progression"])
+            doc = await self.fetch_key(user, ["progression"])
+            results = await self.call_api(endpoint, key=doc["key"])
         except APIError as e:
             return await self.error_handler(ctx, e)
-        else:
-            listofcats = []
-            for cat in results:
-                cat_id = cat["id"]
-                try:
-                    hint = cat["hint"]
-                except KeyError:
-                    thanks_anet = {
-                        34: "holographic",
-                        36: "bluecatmander",
-                        37: "yellowcatmander"
-                    }
-                    hint = thanks_anet.get(cat_id)
-                listofcats.append(hint)
-            catslist = list(set(list(self.gamedata["cats"])) ^ set(listofcats))
-            if not catslist:
-                await ctx.send(
-                    ":cat: Congratulations {0.mention}, "
-                    "you've collected all the cats :cat:. Here's another: "
-                    ":cat2:".format(user))
-            else:
-                formattedlist = []
-                output = (":cat: {0.mention}, you haven't collected the "
-                          "following cats yet: :cat:\n```")
-                catslist.sort(
-                    key=lambda val: self.gamedata["cats"][val]["order"])
-                for cat in catslist:
-                    formattedlist.append(self.gamedata["cats"][cat]["name"])
-                for x in formattedlist:
-                    output += "\n" + x
-                output += "```"
-                await ctx.send(output.format(user))
+        owned_cats = [cat["id"] for cat in results]
+        lines = []
+        for cat in self.gamedata["cats"]:
+            if cat["id"] not in owned_cats:
+                lines.append(cat["guide"])
+        if not lines:
+            return await ctx.send("You have collected all the "
+                                  "cats! Congratulations! :cat2:")
+        embed = discord.Embed(color=await self.get_embed_color(ctx))
+        embed = embed_list_lines(embed, lines,
+                                 "Cats you haven't collected yet")
+        embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
+        embed.set_footer(
+            text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
+        await ctx.send(
+            "{.mention}, here are your cats:".format(user), embed=embed)
 
-    def boss_embed(self, raids, results):
+    async def boss_embed(self, ctx, raids, results):
         def is_killed(boss):
-            return "+" if boss["id"] in results else "-"
+            return "+✔" if boss["id"] in results else "-✖"
 
         def readable_id(_id):
             _id = _id.split("_")
@@ -600,7 +413,8 @@ class AccountMixin:
             ])
 
         not_completed = []
-        embed = discord.Embed(title="Bosses", color=self.embed_color)
+        embed = discord.Embed(
+            title="Bosses", color=await self.get_embed_color(ctx))
         for raid in raids:
             for wing in raid["wings"]:
                 wing_done = True
@@ -639,3 +453,79 @@ class AccountMixin:
         embed.set_footer(text="Green (+) means completed this week. Red (-) "
                          "means not")
         return embed
+
+    async def find_items_in_account(self,
+                                    ctx,
+                                    item_ids,
+                                    *,
+                                    doc=None,
+                                    flatten=False):
+        user = ctx.author
+        if not doc:
+            doc = await self.fetch_key(user, ["inventories", "characters"])
+        endpoints = [
+            "account/bank", "account/inventory", "account/materials",
+            "characters?page=0&page_size=200"
+        ]
+        results = await self.call_multiple(endpoints, key=doc["key"])
+        bank, shared, materials, characters = results
+        spaces = {
+            "bank": bank,
+            "shared": shared,
+            "material storage": materials
+        }
+        counts = {item_id: defaultdict(int) for item_id in item_ids}
+
+        def amounts_in_space(space, name):
+            for s in space:
+                for item_id in item_ids:
+                    amt = get_amount(s, item_id)
+                    if amt:
+                        counts[item_id][name] += amt
+
+        def get_amount(slot, item_id):
+            def count_upgrades(slots):
+                return sum(1 for i in slots if i == item_id)
+
+            if not slot:
+                return 0
+            if slot["id"] == item_id:
+                if "count" in slot:
+                    return slot["count"]
+                return 1
+
+            if "infusions" in slot:
+                infusions_sum = count_upgrades(slot["infusions"])
+                if infusions_sum:
+                    return infusions_sum
+            if "upgrades" in slot:
+                upgrades_sum = count_upgrades(slot["upgrades"])
+                if upgrades_sum:
+                    return upgrades_sum
+            return 0
+
+        for name, space in spaces.items():
+            amounts_in_space(space, name)
+        for character in characters:
+            amounts_in_space(character["bags"], character["name"])
+            bags = [
+                bag["inventory"] for bag in filter(None, character["bags"])
+            ]
+            for bag in bags:
+                amounts_in_space(bag, character["name"])
+            amounts_in_space(character["equipment"], character["name"])
+        try:
+            if "tradingpost" in doc["permissions"]:
+                result = await self.call_api(
+                    "commerce/delivery", key=doc["key"])
+                delivery = result.get("items", [])
+                amounts_in_space(delivery, "TP delivery")
+        except APIError:
+            pass
+        if flatten:
+            flattened = defaultdict(int)
+            for count_dict in counts.values():
+                for k, v in count_dict.items():
+                    flattened[k] += v
+            return flattened
+        return counts

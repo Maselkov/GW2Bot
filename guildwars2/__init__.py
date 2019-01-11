@@ -1,8 +1,7 @@
+import asyncio
 import datetime
 import json
 import logging
-import aiohttp
-import asyncio
 
 import discord
 
@@ -13,43 +12,47 @@ from .characters import CharactersMixin
 from .commerce import CommerceMixin
 from .daily import DailyMixin
 from .database import DatabaseMixin
+from .emojis import EmojiMixin
 from .events import EventsMixin
+from .exceptions import APIError, APIInactiveError, APIInvalidKey, APIKeyError
 from .guild import GuildMixin
 from .guildmanage import GuildManageMixin
 from .key import KeyMixin
 from .misc import MiscMixin
 from .notifiers import NotiifiersMixin
 from .pvp import PvpMixin
+from .skills import SkillsMixin
 from .wallet import WalletMixin
 from .wvw import WvwMixin
-from .exceptions import APIKeyError, APIError, APIInvalidKey, APIInactiveError
 
 
 class GuildWars2(AccountMixin, AchievementsMixin, ApiMixin, CharactersMixin,
-                 CommerceMixin, DailyMixin, DatabaseMixin, EventsMixin,
-                 GuildMixin, GuildManageMixin, KeyMixin, MiscMixin,
-                 NotiifiersMixin, PvpMixin, WalletMixin, WvwMixin):
+                 CommerceMixin, DailyMixin, DatabaseMixin, EmojiMixin,
+                 EventsMixin, GuildMixin, GuildManageMixin, KeyMixin,
+                 MiscMixin, NotiifiersMixin, PvpMixin, SkillsMixin,
+                 WalletMixin, WvwMixin):
     """Guild Wars 2 commands"""
 
     def __init__(self, bot):
+
         self.bot = bot
         self.db = self.bot.database.db.gw2
         with open(
                 "cogs/guildwars2/gamedata.json", encoding="utf-8",
                 mode="r") as f:
             self.gamedata = json.load(f)
-        self.session = aiohttp.ClientSession(loop=self.bot.loop)
+        self.session = bot.session
         self.boss_schedule = self.generate_schedule()
         self.embed_color = 0xc12d2b
         self.log = logging.getLogger(__name__)
         self.tasks = []
         self.waiting_for = []
+        self.emojis = {}
 
     def __unload(self):
         for task in self.tasks:
             task.cancel()
         self.tasks = []
-        self.session.close()
 
     async def error_handler(self, ctx, exc):
         user = ctx.author
@@ -86,19 +89,33 @@ class GuildWars2(AccountMixin, AchievementsMixin, ApiMixin, CharactersMixin,
                 continue
             await asyncio.sleep(interval)
 
+    async def get_embed_color(self, ctx):
+        doc = await self.bot.database.users.find_one({
+            "_id": ctx.author.id
+        }, {
+            "embed_color": 1,
+            "_id": 0
+        })
+        if doc and doc["embed_color"]:
+            return int(doc["embed_color"], 16)
+        return self.embed_color
+
 
 def setup(bot):
     cog = GuildWars2(bot)
     loop = bot.loop
     loop.create_task(
-        bot.database.setup_cog(cog, {
-            "cache": {
-                "day": datetime.datetime.utcnow().weekday(),
-                "news": [],
-                "build": 0,
-                "dailies": {}
-            }
-        }))
+        bot.database.setup_cog(
+            cog, {
+                "cache": {
+                    "day": datetime.datetime.utcnow().weekday(),
+                    "news": [],
+                    "build": 0,
+                    "dailies": {}
+                },
+                "emojis": {}
+            }))
+    loop.create_task(cog.prepare_emojis())
     tasks = {
         cog.game_update_checker: 60,
         cog.daily_checker: 60,

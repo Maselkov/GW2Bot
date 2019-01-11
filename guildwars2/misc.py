@@ -1,6 +1,5 @@
 import asyncio
 import codecs
-import random
 import struct
 from collections import OrderedDict
 
@@ -12,17 +11,45 @@ from discord.ext import commands
 class MiscMixin:
     @commands.command(aliases=["gw2wiki"])
     async def wiki(self, ctx, *, search):
-        """Search the Guild wars 2 wiki"""
+        """Search the Guild wars 2 wiki
+        
+        Append a 2-character language tag to search in the localized wikis
+        Available languages:
+        en
+        de
+        fr
+        es
+        
+        Defaults to en
+
+        Examples:
+        Search for Lion's Arch:
+        $wiki Lion's Arch
+        Search it in the german wiki:
+        $wiki Löwenstein de
+        """
         if len(search) > 300:
             await ctx.send("Search too long")
             return
-        wiki = "https://wiki.guildwars2.com"
+        wiki = {"en": "https://wiki.guildwars2.com",
+            "de": "https://wiki-de.guildwars2.com",
+            "fr": "https://wiki-fr.guildwars2.com",
+            "es": "https://wiki-es.guildwars2.com"}
+        search_url = {"en": "{}/index.php?title=Special%3ASearch&search={}",
+            "de": "{}/index.php?search={}&title=Spezial%3ASuche&",
+            "fr": "{}/index.php?search={}&title=Spécial%3ARecherche",
+            "es": "{}/index.php?title=Especial%3ABuscar&search={}"}
+        lang = search.split(" ")[-1].lower()
+        if lang in wiki:
+            search = search[:-3]
+        else:
+            lang = "en"
         search = search.replace(" ", "+")
-        url = ("{}/index.php?title=Special%3ASearch&"
-               "Search&search={}".format(wiki, search))
+        url = (search_url[lang].format(wiki[lang], search))
         async with self.session.get(url) as r:
             if r.history:
-                embed = await self.search_results_embed("Wiki", exact_match=r)
+                embed = await self.search_results_embed(
+                    ctx, "Wiki", exact_match=r)
                 try:
                     await ctx.send(embed=embed)
                 except discord.Forbidden:
@@ -36,13 +63,14 @@ class MiscMixin:
                 if not posts:
                     await ctx.send("No results")
                     return
-        embed = await self.search_results_embed("Wiki", posts, base_url=wiki)
+        embed = await self.search_results_embed(
+            ctx, "Wiki", posts, base_url=wiki[lang])
         try:
             await ctx.send(embed=embed)
         except discord.Forbidden:
             await ctx.send("Need permission to embed links")
 
-    @commands.command()
+    @commands.command(hidden=True)
     async def dulfy(self, ctx, *, search):
         """Search dulfy.net"""
         if len(search) > 300:
@@ -59,13 +87,14 @@ class MiscMixin:
         posts = soup.find_all(class_="post-title")[:5]
         if not posts:
             return await message.edit(content="No results")
-        embed = await self.search_results_embed("Dulfy", posts)
+        embed = await self.search_results_embed(ctx, "Dulfy", posts)
         try:
             await message.edit(content=None, embed=embed)
         except discord.Forbidden:
             await ctx.send("Need permission to embed links")
 
     async def search_results_embed(self,
+                                   ctx,
                                    site,
                                    posts=None,
                                    *,
@@ -75,13 +104,13 @@ class MiscMixin:
             soup = BeautifulSoup(await exact_match.text(), 'html.parser')
             embed = discord.Embed(
                 title=soup.title.get_text(),
-                color=self.embed_color,
+                color=await self.get_embed_color(ctx),
                 url=str(exact_match.url))
             return embed
         embed = discord.Embed(
             title="{} search results".format(site),
             description="Closest matches",
-            color=self.embed_color)
+            color=await self.get_embed_color(ctx))
         for post in posts:
             post = post.a
             url = base_url + post['href']
@@ -95,10 +124,7 @@ class MiscMixin:
     @commands.command(hidden=True)
     async def praisejoko(self, ctx):
         """To defy his Eminence is to defy life itself"""
-        praise_art = (
-            "```fix\nP R A I S E\nR J     O S\nA   O K   I\nI   O K   "
-            "A\nS J     O R\nE S I A R P```")
-        await ctx.send(random.choice([praise_art, "Praise joko " * 40]))
+        await ctx.send("404 Joko not found")
 
     @commands.command()
     async def chatcode(self, ctx):
@@ -118,8 +144,8 @@ class MiscMixin:
         if not item:
             return
         item = item["_id"]
-        response = await self.user_input(ctx,
-                                         "Type the amount of the item (1-255)")
+        response = await self.user_input(
+            ctx, "Type the amount of the item (1-255)")
         if not response:
             return
         try:

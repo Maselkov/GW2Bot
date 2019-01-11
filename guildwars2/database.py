@@ -5,109 +5,14 @@ import time
 
 import discord
 from discord.ext import commands
-from discord.ext.commands.cooldowns import BucketType
+from pymongo import ReplaceOne
 from pymongo.errors import BulkWriteError
 
 from .exceptions import APIKeyError
 
 
 class DatabaseMixin:
-    @commands.command()
-    @commands.cooldown(1, 5, BucketType.user)
-    async def skillinfo(self, ctx, *, skill):
-        """Information about a given skill"""
-        user = ctx.author
-        skill_sanitized = re.escape(skill)
-        search = re.compile(skill_sanitized + ".*", re.IGNORECASE)
-        cursor = self.db.skills.find({"name": search})
-        number = await cursor.count()
-        if not number:
-            await ctx.send(
-                "Your search gave me no results, sorry. Check for typos.")
-            return
-        if number > 20:
-            await ctx.send(
-                "Your search gave me {} results. Please be more specific".
-                format(number))
-            return
-        items = []
-        msg = "Which one of these interests you? Type it's number```"
-        async for item in cursor:
-            items.append(item)
-        if number != 1:
-            for c, m in enumerate(items):
-                msg += "\n{}: {}".format(c, m["name"])
-            msg += "```"
-            message = await ctx.send(msg)
-
-            def check(m):
-                return m.channel == ctx.channel and m.author == user
-
-            try:
-                answer = await self.bot.wait_for(
-                    "message", timeout=120, check=check)
-            except asyncio.TimeoutError:
-                message.edit(content="No response in time")
-                return None
-            try:
-                num = int(answer.content)
-                choice = items[num]
-            except:
-                await message.edit(content="That's not a number in the list")
-                return None
-            try:
-                await answer.delete()
-            except:
-                pass
-        else:
-            message = await ctx.send("Searching far and wide...")
-            choice = items[0]
-        data = await self.skill_embed(choice)
-        try:
-            await message.edit(content=None, embed=data)
-        except discord.HTTPException:
-            await ctx.send("Need permission to embed links")
-
-    async def skill_embed(self, skill):
-        # Very inconsistent endpoint, playing it safe
-        description = None
-        if "description" in skill:
-            description = skill["description"]
-        url = "https://wiki.guildwars2.com/wiki/" + skill["name"].replace(
-            ' ', '_')
-        async with self.session.head(url) as r:
-            if not r.status == 200:
-                url = None
-        data = discord.Embed(
-            title=skill["name"], description=description, url=url)
-        if "icon" in skill:
-            data.set_thumbnail(url=skill["icon"])
-        if "professions" in skill:
-            if skill["professions"]:
-                professions = skill["professions"]
-                if len(professions) != 1:
-                    data.add_field(
-                        name="Professions", value=", ".join(professions))
-                elif len(professions) == 9:
-                    data.add_field(name="Professions", value="All")
-                else:
-                    data.add_field(
-                        name="Profession", value=", ".join(professions))
-        if "facts" in skill:
-            for fact in skill["facts"]:
-                try:
-                    if fact["type"] == "Recharge":
-                        data.add_field(name="Cooldown", value=fact["value"])
-                    if fact["type"] == "Distance" or fact["type"] == "Number":
-                        data.add_field(name=fact["text"], value=fact["value"])
-                    if fact["type"] == "ComboField":
-                        data.add_field(
-                            name=fact["text"], value=fact["field_type"])
-                except:
-                    pass
-        return data
-
-    @commands.group()
+    @commands.group(case_insensitive=True)
     @commands.is_owner()
     async def database(self, ctx):
         """Commands related to DB management"""
@@ -123,33 +28,19 @@ class DatabaseMixin:
 
     @database.command(name="statistics")
     async def db_stats(self, ctx):
-        """Some statistics
-        """
-        cursor = self.bot.database.get_users_cursor({
-            "key": {
+        """Some statistics   """
+        result = await self.bot.database.users.count_documents({
+            "cogs.GuildWars2.key": {
                 "$ne": None
             }
         }, self)
-        result = await cursor.count()
         await ctx.send("{} registered users".format(result))
-        cursor_updates = self.bot.database.get_guilds_cursor({
-            "updates.on": True
-        })
-        cursor_daily = self.bot.database.get_guilds_cursor({"daily.on": True})
-        cursor_news = self.bot.database.get_guilds_cursor({"news.on": True})
-        result_updates = await cursor_updates.count()
-        result_daily = await cursor_daily.count()
-        result_news = await cursor_news.count()
-        await ctx.send("{} guilds for update notifs\n{} guilds for daily "
-                       "notifs\n{} guilds for news "
-                       "feed".format(result_updates, result_daily,
-                                     result_news))
 
     async def get_title(self, title_id):
         try:
             results = await self.db.titles.find_one({"_id": title_id})
             title = results["name"]
-        except:
+        except KeyError:
             return ""
         return title
 
@@ -157,7 +48,7 @@ class DatabaseMixin:
         try:
             doc = await self.db.worlds.find_one({"_id": wid})
             name = doc["name"]
-        except:
+        except KeyError:
             name = None
         return name
 
@@ -251,12 +142,15 @@ class DatabaseMixin:
 
     async def cache_endpoint(self, endpoint, all_at_once=False):
         async def bulk_write(item_group):
-            bulk = self.db[endpoint].initialize_unordered_bulk_op()
+            requests = []
             for item in itemgroup:
                 item["_id"] = item.pop("id")
-                bulk.find({"_id": item["_id"]}).upsert().replace_one(item)
+                requests.append(
+                    ReplaceOne({
+                        "_id": item["_id"]
+                    }, item, upsert=True))
             try:
-                await bulk.execute()
+                await self.db[endpoint].bulk_write(requests)
             except BulkWriteError as e:
                 self.log.exception(
                     "BWE while caching {}".format(endpoint), exc_info=e)
@@ -289,8 +183,8 @@ class DatabaseMixin:
         endpoints = [["items"], ["achievements"], ["itemstats", True], [
             "titles", True
         ], ["recipes"], ["skins"], ["currencies", True], ["skills", True],
-                     ["specializations", True], ["traits",
-                                                 True], ["worlds", True]]
+                     ["specializations", True], ["traits", True],
+                     ["worlds", True], ["minis", True]]
         for e in endpoints:
             try:
                 await self.cache_endpoint(*e)
@@ -309,6 +203,7 @@ class DatabaseMixin:
         await self.db.worlds.create_index("name")
         await self.cache_raids()
         end = time.time()
+        await self.bot.change_presence()
         self.bot.available = True
         print("Done")
         self.log.info(
@@ -345,19 +240,14 @@ class DatabaseMixin:
 
         item_sanitized = re.escape(item)
         search = re.compile(item_sanitized + ".*", re.IGNORECASE)
-        cursor = self.db[database].find({
-            "name": search,
-            "flags": {
-                "$nin": flags
-            },
-            **filters
-        })
-        number = await cursor.count()
+        query = {"name": search, "flags": {"$nin": flags}, **filters}
+        number = await self.db[database].count_documents(query)
         if not number:
             await destination.send(
                 "Your search gave me no results, sorry. Check for "
                 "typos.\nAlways use singular forms, e.g. Legendary Insight")
             return None
+        cursor = self.db[database].find(query)
         if number > 25:
             await destination.send("Your search gave me {} item results. "
                                    "Try exact match "
@@ -371,14 +261,9 @@ class DatabaseMixin:
                 return
             exact_match = "^" + item_sanitized + "$"
             search = re.compile(exact_match, re.IGNORECASE)
-            cursor = self.db[database].find({
-                "name": search,
-                "flags": {
-                    "$nin": flags
-                },
-                **filters
-            })
-            number = await cursor.count()
+            query["name"] = search
+            number = await self.db[database].count_documents(query)
+            cursor = self.db[database].find()
             if not number:
                 await destination.send(
                     "Your search gave me no results, sorry. Check for "
@@ -397,9 +282,9 @@ class DatabaseMixin:
         longest = len(max([item["name"] for item in items], key=len))
         msg = [
             "Which one of these interests you? Simply type it's number "
-            "into the chat now:```ml", "INDEX    NAME {}RARITY".format(
-                " " * (longest)), "-----|------{}|-------".format(
-                    "-" * (longest))
+            "into the chat now:```ml",
+            "INDEX    NAME {}RARITY".format(" " * (longest)),
+            "-----|------{}|-------".format("-" * (longest))
         ]
 
         if group_duplicates:
@@ -440,4 +325,69 @@ class DatabaseMixin:
                 if item["type"] == "UpgradeComponent":
                     choice["is_upgrade"] = True
 
+        return choice
+
+    async def selection_menu(self,
+                             ctx,
+                             cursor,
+                             number,
+                             *,
+                             filter_callable=None):
+        # TODO implement fields
+
+        def check(m):
+            return m.channel == ctx.channel and m.author == ctx.author
+
+        if not number:
+            await ctx.send(
+                "Your search gave me no results, sorry. Check for "
+                "typos.\nAlways use singular forms, e.g. Legendary Insight")
+            return None
+        if number > 25:
+            await ctx.send("Your search gave me {} item results. "
+                           "Please be more specific".format(number))
+            return None
+        items = []
+        async for item in cursor:
+            items.append(item)
+        key = "name"
+        if filter_callable:
+            items = filter_callable(items)
+        number = len(items)
+        items.sort(key=lambda i: i[key])
+        longest = len(max([item[key] for item in items], key=len))
+        key_pos = (longest + 2) // 2 - 2
+        header = "INDEX{} {}{}".format(" " * key_pos, key.upper(),
+                                       " " * (longest - 2 - key_pos))
+        msg = [
+            "Which one of these interests you? Simply type it's number "
+            "into the chat now:```ml", header,
+            "-----|-{}-".format("-" * longest)
+        ]
+        if number != 1:
+            for c, m in enumerate(items, 1):
+                msg.append("  {} {}| {} {}".format(
+                    c, " " * (2 - len(str(c))), m[key].upper(),
+                    " " * (longest - len(m[key]))))
+            msg.append("```")
+            message = await ctx.send("\n".join(msg))
+            try:
+                answer = await self.bot.wait_for(
+                    "message", timeout=120, check=check)
+            except asyncio.TimeoutError:
+                await message.edit(content="No response in time")
+                return None
+            try:
+                num = int(answer.content) - 1
+                choice = items[num]
+            except:
+                await message.edit(content="That's not a number in the list")
+                return None
+            try:
+                await message.delete()
+                await answer.delete()
+            except:
+                pass
+        else:
+            choice = items[0]
         return choice

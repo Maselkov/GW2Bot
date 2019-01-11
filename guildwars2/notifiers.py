@@ -2,6 +2,7 @@ import asyncio
 import datetime
 import html
 import re
+import unicodedata
 import xml.etree.ElementTree as et
 
 import discord
@@ -13,7 +14,7 @@ from .exceptions import APIError
 
 
 class NotiifiersMixin:
-    @commands.group()
+    @commands.group(case_insensitive=True)
     @commands.guild_only()
     @commands.has_permissions(manage_guild=True)
     async def dailynotifier(self, ctx):
@@ -138,7 +139,7 @@ class NotiifiersMixin:
                                           self)
         await ctx.send("Autopinning for daily notifs enabled")
 
-    @commands.group()
+    @commands.group(case_insensitive=True)
     @commands.guild_only()
     @commands.has_permissions(manage_guild=True)
     async def newsfeed(self, ctx):
@@ -187,7 +188,18 @@ class NotiifiersMixin:
             msg = ("Newsfeed disabled")
         await ctx.send(msg)
 
-    @commands.group()
+    @newsfeed.command(name="filter")
+    async def newsfeed_filter(self, ctx, on_off: bool):
+        """Toggle filtering livestream schedule/community showcase"""
+        guild = ctx.guild
+        await self.bot.database.set_guild(guild, {"news.filter": on_off}, self)
+        if on_off:
+            msg = "Newsfeed community post filter enabled"
+        else:
+            msg = "Newsfeed community post filter disabled"
+        await ctx.send(msg)
+
+    @commands.group(case_insensitive=True)
     @commands.guild_only()
     @commands.has_permissions(manage_guild=True)
     async def updatenotifier(self, ctx):
@@ -207,11 +219,16 @@ class NotiifiersMixin:
         doc = await self.bot.database.get_guild(guild, self)
         enabled = doc["updates"].get("on", False)
         if enabled:
-            msg = (
-                "I will now automatically send update notifications to "
-                "{.mention}. **WARNING** these notifications include `@here` "
-                "mention. Take away bot's permissions to mention everyone "
-                "if you don't want it.".format(channel))
+            mention = doc["updates"].get("mention", "here")
+            if mention == "none":
+                suffix = ""
+            else:
+                suffix = (" **WARNING** Currently bot will "
+                          "mention `@{}`. Use `{}updatenotifier "
+                          "mention` to change that".format(
+                              mention, ctx.prefix))
+            msg = ("I will now automatically send update notifications to "
+                   "{.mention}.".format(channel) + suffix)
         else:
             msg = ("Channel set to {.mention}. In order to receive "
                    "update notifications, you still need to enable it using "
@@ -229,12 +246,17 @@ class NotiifiersMixin:
             if channel:
                 channel = guild.get_channel(channel)
                 if channel:  # Channel can be none now
+                    mention = doc["updates"].get("mention", "here")
+                    if mention == "none":
+                        suffix = ""
+                    else:
+                        suffix = (" **WARNING** Currently bot will "
+                                  "mention `@{}`. Use `{}updatenotifier "
+                                  "mention` to change that".format(
+                                      mention, ctx.prefix))
                     msg = (
                         "I will now automatically send update notifications "
-                        "to {.mention}. **WARNING** these notifications "
-                        "include `@here` mention. Take away bot's permissions "
-                        "to mention everyone if you don't "
-                        "want it.".format(channel))
+                        "to {.mention}".format(channel) + suffix)
                 else:  # TODO change it, ugly
                     msg = (
                         "Update notifier toggled on. In order to reeceive "
@@ -267,7 +289,7 @@ class NotiifiersMixin:
             guild, {"updates.mention": mention_type}, self)
         await ctx.send("Mention type set")
 
-    @commands.group()
+    @commands.group(case_insensitive=True)
     @commands.guild_only()
     @commands.has_permissions(manage_guild=True)
     async def bossnotifier(self, ctx):
@@ -334,11 +356,19 @@ class NotiifiersMixin:
 
         def patchnotes_embed(embed, notes):
             notes = "\n".join(html.unescape(notes).splitlines())
-            notes = re.sub('#{5} ', '**', notes)
-            notes = re.sub('(\*{2}.*)', r'\1**', notes)
-            notes = re.sub('\*{4}', '**', notes)
-            headers = re.findall('#{4}.*', notes, re.MULTILINE)
-            values = re.split('#{4}.*', notes)
+            lines = notes.splitlines()
+            notes_sub = ""
+            for line in lines:
+                # Don't sub #### as those are made to a new header
+                line = re.sub('^#{1,3} ', '**', line)
+                line = re.sub('#{5} ', '**', line)
+                line = re.sub('(\*{2}.*)', r'\1**', line)
+                line = re.sub('\*{4}', '**', line)
+                line = re.sub('&quot;(.*)&quot;', r'*\1*', line)
+                notes_sub += "{}\n".format(line)
+
+            headers = re.findall('#{4}.*', notes_sub, re.MULTILINE)
+            values = re.split('#{4}.*', notes_sub)
             counter = 0
             if headers:
                 for header in headers:
@@ -347,7 +377,7 @@ class NotiifiersMixin:
                     values[counter] = re.sub("\n\n", "\n", values[counter])
                     embed.add_field(name=header, value=values[counter])
             else:
-                embed.description = notes
+                embed.description = notes_sub
             return embed
 
         base_url = "https://en-forum.guildwars2.com"
@@ -422,7 +452,7 @@ class NotiifiersMixin:
         description = "[Click here]({0})\n{1}".format(item["link"],
                                                       soup.get_text())
         data = discord.Embed(
-            title="{0}".format(item["title"]),
+            title=unicodedata.normalize("NFKD", item["title"]),
             description=description,
             color=0xc12d2b)
         return data
@@ -544,24 +574,33 @@ class NotiifiersMixin:
             return
 
     async def send_news(self, embeds):
-        try:
-            name = self.__class__.__name__
-            cursor = self.bot.database.get_guilds_cursor({
+        cursor = self.bot.database.iter(
+            "guilds",
+            {
                 "news.on": True,
                 "news.channel": {
                     "$ne": None
                 }
-            }, self)
-            async for doc in cursor:
-                try:
-                    guild = doc["cogs"][name]["news"]
-                    channel = self.bot.get_channel(guild["channel"])
-                    for embed in embeds:
-                        await channel.send(embed=embed)
-                except:
-                    pass
-        except Exception as e:
-            self.log.exception("Exception sending daily notifs: ", exc_info=e)
+            },
+            self,
+            subdocs=["news"],
+        )
+        to_filter = ["the arenanet streaming schedule", "community showcase"]
+        filtered = [
+            embed.title for embed in embeds
+            if any(f in embed.title.lower() for f in to_filter)
+        ]
+        async for doc in cursor:
+            try:
+                channel = self.bot.get_channel(doc["channel"])
+                filter_on = doc.get("filter", True)
+                for embed in embeds:
+                    if filter_on:
+                        if embed.title in filtered:
+                            continue
+                    await channel.send(embed=embed)
+            except Exception as e:
+                self.log.exception(e)
 
     async def send_update_notifs(self):
         try:
@@ -626,27 +665,22 @@ class NotiifiersMixin:
             await self.rebuild_database()
 
     async def gem_tracker(self):
-        name = self.__class__.__name__
         cost = await self.get_gem_price()
-        cost_coins = self.gold_to_coins(cost)
-        cursor = self.bot.database.get_users_cursor({
-            "gemtrack": {
-                "$ne": None
-            }
-        }, self)
+        cost_coins = self.gold_to_coins(None, cost)
+        cursor = self.bot.database.iter("users", {"gemtrack": {
+            "$ne": None
+        }}, self)
         async for doc in cursor:
             try:
-                user_price = doc["cogs"][name]["gemtrack"]
-                if cost < user_price:
-                    user = await self.bot.get_user_info(doc["_id"])
-                    user_price = self.gold_to_coins(user_price)
+                if cost < doc["gemtrack"]:
+                    user = doc["_obj"]
+                    user_price = self.gold_to_coins(None, doc["gemtrack"])
                     msg = ("Hey, {.mention}! You asked to be notified "
                            "when 400 gems were cheaper than {}. Guess "
                            "what? They're now only "
                            "{}!".format(user, user_price, cost_coins))
                     await user.send(msg)
-                    await self.bot.database.set_user(user, {"gemtrack": None},
-                                                     self)
+                    await self.bot.database.set(user, {"gemtrack": None}, self)
             except:
                 pass
 
@@ -711,10 +745,10 @@ class NotiifiersMixin:
                     pass
 
     async def forced_account_names(self):
-        cursor = self.bot.database.get_guilds_cursor({
-            "force_account_names":
-            True
-        }, self)
+        cursor = self.bot.database.get_guilds_cursor(
+            {
+                "force_account_names": True
+            }, self)
         async for doc in cursor:
             try:
                 guild = self.bot.get_guild(doc["_id"])
