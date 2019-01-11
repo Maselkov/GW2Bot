@@ -319,7 +319,7 @@ class AccountMixin:
         if longest < 8:
             longest = 8
         output = [
-            "LOCATION{}COUNT".format(" " * (longest - 5)),
+            "LOCATION{}COUNT".format(" " * (longest - 4)),
             "--------{}|-----".format("-" * (longest - 6))
         ]
         total = 0
@@ -338,9 +338,9 @@ class AccountMixin:
                         if slotted_inf == 0:
                             inf = ""
                         else:
-                            inf = "[{}]".format(slotted_inf)
+                            inf = "/{} ".format(slotted_inf)
                         output.append("{} {} | {} {}".format(k.upper(),
-                                                         " " * (longest - len(k)), v, inf))
+                                                         " " * (longest - len(k)), v - slotted_inf, inf))
                     else:
                         output.append("{} {} | {}".format(k.upper(),
                                                   " " * (longest - len(k)), v))
@@ -361,6 +361,7 @@ class AccountMixin:
             u'\u200b',
             color=color)
         value = "\n".join(output)
+
         if len(value) > 1014:
             value = ""
             values = []
@@ -384,8 +385,13 @@ class AccountMixin:
             data.add_field(
                 name=choice["name"], value="```ml\n{}\n```".format(value))
         data.set_author(name=doc["account_name"], icon_url=user.avatar_url)
-        data.set_footer(
-            text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
+        if "infusion" in choice["name"].lower():
+            data.set_footer(
+                text="Amount in inventory / Amount in gear",
+                icon_url=self.bot.user.avatar_url)
+        else:
+            data.set_footer(
+                text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
         data.set_thumbnail(url=icon_url)
         await ctx.send(message, embed=data)
 
