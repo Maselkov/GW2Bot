@@ -338,7 +338,7 @@ class AccountMixin:
                         if slotted_inf == 0:
                             inf = ""
                         else:
-                            inf = "/{} ".format(slotted_inf)
+                            inf = "/ {} ".format(slotted_inf)
                         output.append("{} {} | {} {}".format(k.upper(),
                                                          " " * (longest - len(k)), v - slotted_inf, inf))
                     else:
