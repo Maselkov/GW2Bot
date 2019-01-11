@@ -397,7 +397,7 @@ class AccountMixin:
 
     async def collect_infusions(self, ctx, character: str, infusion):
         "Returns slotted infusion count of character"
-        character.title()
+        character = character.title()
         inf_count = 0
         try:
             results = await self.get_character(ctx, character)
