@@ -339,7 +339,7 @@ class AccountMixin:
                             inf = ""
                         else:
                             inf = "[{}]".format(slotted_inf)
-                        output.append("{} {} | {} [{}]".format(k.upper(),
+                        output.append("{} {} | {} {}".format(k.upper(),
                                                          " " * (longest - len(k)), v, inf))
                     else:
                         output.append("{} {} | {}".format(k.upper(),
