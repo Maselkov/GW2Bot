@@ -420,9 +420,9 @@ class AccountMixin:
                 for u in item["infusions"]:
                     if u == upgrade:
                         upg_count += 1
-            elif "upgrades" in item:
-                for u in item["upgrades"]:
-                    if u == upgrade:
+            if "upgrades" in item:
+                for up in item["upgrades"]:
+                    if up == upgrade:
                         upg_count += 1
         return upg_count
 
