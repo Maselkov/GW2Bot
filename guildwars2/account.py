@@ -318,7 +318,7 @@ class AccountMixin:
         longest = len(max(seq, key=len))
         if longest < 8:
             longest = 8
-        if "infusion" in choice["name"].lower():
+        if 'is_upgrade' in choice and choice['is_upgrade']:
             output = [
                 "LOCATION{}INV / GEAR".format(" " * (longest - 5)),
                 "--------{}|-----".format("-" * (longest - 6))
@@ -333,22 +333,22 @@ class AccountMixin:
         total = 0
         storage_counts = OrderedDict(
             sorted(search_results.items(), key=lambda kv: kv[1], reverse=True))
+        characters = await self.get_all_characters(user)
+        char_names = []
+        for character in characters:
+            char_names.append(character.name)
         for k, v in storage_counts.items():
             if v:
-                if "infusion" in choice["name"].lower():
+                if 'is_upgrade' in choice and choice['is_upgrade']:
                     total += v
-                    characters = await self.get_all_characters(user)
-                    char_names = []
-                    for character in characters:
-                        char_names.append(character.name)
                     if k in char_names:
-                        slotted_inf = await self.collect_infusions(ctx, k.title(), choice["ids"][0])
-                        if slotted_inf == 0:
+                        slotted_upg = await self.collect_upgrades(ctx, k.title(), choice["ids"][0])
+                        if slotted_upg == 0:
                             inf = ""
                         else:
-                            inf = "/ {} ".format(slotted_inf)
+                            inf = "/ {} ".format(slotted_upg)
                         output.append("{} {} | {} {}".format(k.upper(),
-                                                         " " * (longest - len(k)), v - slotted_inf, inf))
+                                                         " " * (longest - len(k)), v - slotted_upg, inf))
                     else:
                         output.append("{} {} | {}".format(k.upper(),
                                                   " " * (longest - len(k)), v))
@@ -403,11 +403,11 @@ class AccountMixin:
         data.set_thumbnail(url=icon_url)
         await ctx.send(message, embed=data)
 
-    async def collect_infusions(self, ctx, character: str, infusion):
+    async def collect_upgrades(self, ctx, character: str, upgrade):
         "Returns slotted infusion count of character"
         character = character.title()
         await ctx.trigger_typing()
-        inf_count = 0
+        upg_count = 0
         try:
             results = await self.get_character(ctx, character)
         except APINotFound:
@@ -418,9 +418,13 @@ class AccountMixin:
         for item in eq:
             if "infusions" in item:
                 for u in item["infusions"]:
-                    if u == infusion:
-                        inf_count += 1
-        return inf_count
+                    if u == upgrade:
+                        upg_count += 1
+            elif "upgrades" in item:
+                for u in item["upgrades"]:
+                    if u == upgrade:
+                        upg_count += 1
+        return upg_count
 
     @commands.command()
     @commands.cooldown(1, 10, BucketType.user)
