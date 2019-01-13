@@ -51,6 +51,8 @@ class WalletMixin:
             elif item["id"] == currency_id:
                 count = "{:,}".format(item["value"])
                 break
+            else:
+                count = 0
         embed.add_field(name="Amount in wallet", value=count, inline=False)
         embed.set_thumbnail(url=choice["icon"])
         embed.set_author(
