@@ -318,10 +318,18 @@ class AccountMixin:
         longest = len(max(seq, key=len))
         if longest < 8:
             longest = 8
-        output = [
-            "LOCATION{}COUNT".format(" " * (longest - 4)),
-            "--------{}|-----".format("-" * (longest - 6))
-        ]
+        if "infusion" in choice["name"].lower():
+            output = [
+                "LOCATION{}INV / GEAR".format(" " * (longest - 5)),
+                "--------{}|-----".format("-" * (longest - 6))
+            ]
+            align = 110
+        else:
+            output = [
+                "LOCATION{}COUNT".format(" " * (longest - 5)),
+                "--------{}|-----".format("-" * (longest - 6))
+            ]
+            align = 80
         total = 0
         storage_counts = OrderedDict(
             sorted(search_results.items(), key=lambda kv: kv[1], reverse=True))
@@ -348,7 +356,7 @@ class AccountMixin:
                     total += v
                     output.append("{} {} | {}".format(k.upper(),
                                                   " " * (longest - len(k)), v))
-        output.append("--------{}------".format("-" * (longest - 10)))
+        output.append("--------{}------".format("-" * (longest - 5)))
         output.append("TOTAL:{}{}".format(" " * (longest - 2), total))
         message = ("{.mention}, here are your search results".format(user))
 
@@ -357,7 +365,7 @@ class AccountMixin:
         item_doc = await self.fetch_item(choice["ids"][0])
         icon_url = item_doc["icon"]
         data = discord.Embed(
-            description="Search results".format(item_doc["name"]) + " " * 80 +
+            description="Search results".format(item_doc["name"]) + " " * align +
             u'\u200b',
             color=color)
         value = "\n".join(output)
@@ -398,6 +406,7 @@ class AccountMixin:
     async def collect_infusions(self, ctx, character: str, infusion):
         "Returns slotted infusion count of character"
         character = character.title()
+        await ctx.trigger_typing()
         inf_count = 0
         try:
             results = await self.get_character(ctx, character)
