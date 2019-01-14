@@ -393,7 +393,7 @@ class AccountMixin:
             data.add_field(
                 name=choice["name"], value="```ml\n{}\n```".format(value))
         data.set_author(name=doc["account_name"], icon_url=user.avatar_url)
-        if "infusion" in choice["name"].lower():
+        if 'is_upgrade' in choice and choice['is_upgrade']:
             data.set_footer(
                 text="Amount in inventory / Amount in gear",
                 icon_url=self.bot.user.avatar_url)
@@ -415,15 +415,27 @@ class AccountMixin:
         except APIError as e:
             return await self.error_handler(ctx, e)
         eq = results["equipment"]
+        bags = results["bags"]
         for item in eq:
-            if "infusions" in item:
+            if item and "infusions" in item:
                 for u in item["infusions"]:
                     if u == upgrade:
                         upg_count += 1
-            if "upgrades" in item:
+            if item and "upgrades" in item:
                 for up in item["upgrades"]:
                     if up == upgrade:
                         upg_count += 1
+        for bag in bags:
+            inventory = bag["inventory"]
+            for item in inventory:
+                if item and "infusions" in item:
+                    for u in item["infusions"]:
+                        if u == upgrade:
+                            upg_count += 1
+                if item and "upgrades" in item:
+                    for up in item["upgrades"]:
+                        if up == upgrade:
+                            upg_count += 1
         return upg_count
 
     @commands.command()
