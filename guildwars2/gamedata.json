@@ -85,7 +85,7 @@
     "[&BCECAAA=][&BC0AAAA=][&BDoBAAA=][&BIkHAAA=][&BO4CAAA=][&BIUCAAA=]"
   ],
 
-  "fractals": {
+"fractals": {
     "Aquatic Ruins": [
       7,
       26,
@@ -226,7 +226,6 @@
       54,
       78
     ]
-
   },
   "event_timers": {
     "bosses": {
@@ -329,213 +328,218 @@
         }
       ]
     },
-      "hot": [{
-          "name": "Verdant Brink",
-          "phases": [{
-              "name": "Night",
-              "duration": 10
-            },
-            {
-              "name": "Night Bosses",
-              "duration": 20
-            },
-            {
-              "name": "Daytime",
-              "duration": 75
-            },
-            {
-              "name": "Night",
-              "duration": 15
-            }
-          ]
-        },
-        {
-          "name": "Auric Basin",
-          "phases": [{
-              "name": "Activate the Pillars",
-              "duration": 45
-            },
-            {
-              "name": "Challenges",
-              "duration": 15
-            },
-            {
-              "name": "Octovine",
-              "duration": 20
-            },
-            {
-              "name": "Reset",
-              "duration": 10
-            },
-            {
-              "name": "Activate the Pillars",
-              "duration": 30
-            }
-          ]
-        },
-        {
-          "name": "Tangled Depths",
-          "phases": [{
-              "name": "Help the Outposts",
-              "duration": 25
-            },
-            {
-              "name": "Gerent Preparation",
-              "duration": 5
-            },
-            {
-              "name": "Chak Gerent",
-              "duration": 20
-            },
-            {
-              "name": "Help the Outposts",
-              "duration": 70
-            }
-          ]
-        },
-
-        {
-          "name": "Dragon's Stand",
-          "phases": [{
-              "name": "Assault",
-              "duration": 90
-            },
-            {
-              "name": "Start",
-              "duration": 0
-            },
-            {
-              "name": "Assault",
-              "duration": 30
-            }
-          ]
-        },
-
-        {
-          "name": "Dry Top",
-          "phases": [{
-              "name": "Crash Site",
-              "duration": 40
-            },
-            {
-              "name": "Sandstorm",
-              "duration": 20
-            },
-            {
-              "name": "Crash Site",
-              "duration": 40
-            },
-            {
-              "name": "Sandstorm",
-              "duration": 20
-            }
-          ]
-        }
-      ],
-      "pof": [{
-        "name": "Crystal Oasis",
-        "phases": [{
-            "name": "Nothing",
-            "duration": 5
-          },
-          {
-            "name": "Rounds 1-3",
-            "duration": 16
-          },
-          {
-            "name": "Pinata",
-            "duration": 9
-          },
-          {
-            "name": "Nothing",
-            "duration": 90
-          }
-        ]
-      }, {
-        "name": "Domain of Istan",
-        "phases": [{
-            "name": "Palawadan",
-            "duration": 15
-          },
-          {
-            "name": "Nothing",
-            "duration": 90
-          },
-          {
-            "name": "Palawadan",
-            "duration": 15
-          }
-        ]
-      }],
-      "day": [{
-        "name": "Day/night cycle",
+    "hot": [{
+        "name": "Verdant Brink",
         "phases": [{
             "name": "Night",
+            "duration": 10
+          },
+          {
+            "name": "Night Bosses",
+            "duration": 20
+          },
+          {
+            "name": "Daytime",
+            "duration": 75
+          },
+          {
+            "name": "Night",
+            "duration": 15
+          }
+        ]
+      },
+      {
+        "name": "Auric Basin",
+        "phases": [{
+            "name": "Activate the Pillars",
+            "duration": 45
+          },
+          {
+            "name": "Challenges",
+            "duration": 15
+          },
+          {
+            "name": "Octovine",
+            "duration": 20
+          },
+          {
+            "name": "Reset",
+            "duration": 10
+          },
+          {
+            "name": "Activate the Pillars",
+            "duration": 30
+          }
+        ]
+      },
+      {
+        "name": "Tangled Depths",
+        "phases": [{
+            "name": "Help the Outposts",
             "duration": 25
           },
           {
-            "name": "Dawn",
+            "name": "Gerent Preparation",
             "duration": 5
           },
           {
-            "name": "Day",
+            "name": "Chak Gerent",
+            "duration": 20
+          },
+          {
+            "name": "Help the Outposts",
             "duration": 70
-          },
-          {
-            "name": "Dusk",
-            "duration": 5
-          },
-          {
-            "name": "Night",
-            "duration": 15
           }
         ]
-      }]
+      },
+
+      {
+        "name": "Dragon's Stand",
+        "phases": [{
+            "name": "Assault",
+            "duration": 90
+          },
+          {
+            "name": "Start",
+            "duration": 0
+          },
+          {
+            "name": "Assault",
+            "duration": 30
+          }
+        ]
+      },
+
+      {
+        "name": "Dry Top",
+        "phases": [{
+            "name": "Crash Site",
+            "duration": 40
+          },
+          {
+            "name": "Sandstorm",
+            "duration": 20
+          },
+          {
+            "name": "Crash Site",
+            "duration": 40
+          },
+          {
+            "name": "Sandstorm",
+            "duration": 20
+          }
+        ]
+      }
+    ],
+    "pof": [{
+      "name": "Crystal Oasis",
+      "phases": [{
+          "name": "Nothing",
+          "duration": 5
+        },
+        {
+          "name": "Rounds 1-3",
+          "duration": 16
+        },
+        {
+          "name": "Pinata",
+          "duration": 9
+        },
+        {
+          "name": "Nothing",
+          "duration": 90
+        }
+      ]
+    }, {
+      "name": "Domain of Istan",
+      "phases": [{
+          "name": "Palawadan",
+          "duration": 15
+        },
+        {
+          "name": "Nothing",
+          "duration": 90
+        },
+        {
+          "name": "Palawadan",
+          "duration": 15
+        }
+      ]
+    }],
+    "day": [{
+      "name": "Day/night cycle",
+      "phases": [{
+          "name": "Night",
+          "duration": 25
+        },
+        {
+          "name": "Dawn",
+          "duration": 5
+        },
+        {
+          "name": "Day",
+          "duration": 70
+        },
+        {
+          "name": "Dusk",
+          "duration": 5
+        },
+        {
+          "name": "Night",
+          "duration": 15
+        }
+      ]
+    }]
 
   },
-  "insights": {
-    "legendary_insight": 77302,
-    "gift_of_prowess": 78989,
-    "envoy_insignia": 80516,
-    "refined_envoy_armor": {
-      "refined_envoy_helmet": 80387,
-      "refined_envoy_pauldrons": 80236,
-      "refined_envoy_breastplate": 80648,
-      "refined_envoy_gauntlets": 80673,
-      "refined_envoy_tassets": 80427,
-      "refined_envoy_greaves": 80127,
-      "refined_envoy_mask": 80634,
-      "refined_envoy_shoulderpads": 80366,
-      "refined_envoy_jerkin": 80607,
-      "refined_envoy_vambraces": 80658,
-      "refined_envoy_leggings": 80675,
-      "refined_envoy_boots": 80177,
-      "refined_envoy_cowl": 80441,
-      "refined_envoy_mantle": 80264,
-      "refined_envoy_vestments": 80120,
-      "refined_envoy_gloves": 80460,
-      "refined_envoy_pants": 80275,
-      "refined_envoy_shoes": 80583
+  "raid_trophies": {
+    "insights": {
+      "legendary_insight": 77302,
+      "gift_of_prowess": 78989,
+      "envoy_insignia": 80516,
+      "refined_envoy_armor": {
+        "refined_envoy_helmet": 80387,
+        "refined_envoy_pauldrons": 80236,
+        "refined_envoy_breastplate": 80648,
+        "refined_envoy_gauntlets": 80673,
+        "refined_envoy_tassets": 80427,
+        "refined_envoy_greaves": 80127,
+        "refined_envoy_mask": 80634,
+        "refined_envoy_shoulderpads": 80366,
+        "refined_envoy_jerkin": 80607,
+        "refined_envoy_vambraces": 80658,
+        "refined_envoy_leggings": 80675,
+        "refined_envoy_boots": 80177,
+        "refined_envoy_cowl": 80441,
+        "refined_envoy_mantle": 80264,
+        "refined_envoy_vestments": 80120,
+        "refined_envoy_gloves": 80460,
+        "refined_envoy_pants": 80275,
+        "refined_envoy_shoes": 80583
+      },
+      "perfected_envoy_armor": {
+        "perfected_envoy_helmet": 80384,
+        "perfected_envoy_pauldrons": 80435,
+        "perfected_envoy_breastplate": 80254,
+        "perfected_envoy_gauntlets": 80205,
+        "perfected_envoy_tassets": 80277,
+        "perfected_envoy_greaves": 80557,
+        "perfected_envoy_mask": 80296,
+        "perfected_envoy_shoulderpads": 80145,
+        "perfected_envoy_jerkin": 80578,
+        "perfected_envoy_vambraces": 80161,
+        "perfected_envoy_leggings": 80252,
+        "perfected_envoy_boots": 80281,
+        "perfected_envoy_cowl": 80248,
+        "perfected_envoy_mantle": 80131,
+        "perfected_envoy_vestments": 80190,
+        "perfected_envoy_gloves": 80111,
+        "perfected_envoy_pants": 80356,
+        "perfected_envoy_shoes": 80399
+      }
     },
-    "perfected_envoy_armor": {
-      "perfected_envoy_helmet": 80384,
-      "perfected_envoy_pauldrons": 80435,
-      "perfected_envoy_breastplate": 80254,
-      "perfected_envoy_gauntlets": 80205,
-      "perfected_envoy_tassets": 80277,
-      "perfected_envoy_greaves": 80557,
-      "perfected_envoy_mask": 80296,
-      "perfected_envoy_shoulderpads": 80145,
-      "perfected_envoy_jerkin": 80578,
-      "perfected_envoy_vambraces": 80161,
-      "perfected_envoy_leggings": 80252,
-      "perfected_envoy_boots": 80281,
-      "perfected_envoy_cowl": 80248,
-      "perfected_envoy_mantle": 80131,
-      "perfected_envoy_vestments": 80190,
-      "perfected_envoy_gloves": 80111,
-      "perfected_envoy_pants": 80356,
-      "perfected_envoy_shoes": 80399
+    "divinations":{
+      "legendary_divination" : 88485
     }
   },
   "killproofs": {
@@ -676,6 +680,40 @@
             "name": "Voice in the Void CM",
             "type": "single_achievement",
             "id": 3979
+          }
+        ]
+      },
+      {
+        "name": "Mythwright Gambit",
+        "encounters": [{
+            "name": "Conjured Amalgamate",
+            "type": "single_achievement",
+            "id": 4423
+          },
+          {
+            "name": "Conjured Amalgamate CM",
+            "type": "single_achievement",
+            "id": 4416
+          },
+          {
+            "name": "Twin Largos",
+            "type": "single_achievement",
+            "id": 4364
+          },
+          {
+            "name": "Twin Largos CM",
+            "type": "single_achievement",
+            "id": 4429
+          },
+          {
+            "name": "Qadim",
+            "type": "single_achievement",
+            "id": 4396
+          },
+          {
+            "name": "Qadim CM",
+            "type": "single_achievement",
+            "id": 4355
           }
         ]
       },
