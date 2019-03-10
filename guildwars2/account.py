@@ -355,6 +355,7 @@ class AccountMixin:
                                                   " " * (longest - len(k)), v[0]))
                 else:
                     total += v[0]
+                    total += v[1]
                     output.append("{} {} | {}".format(k.upper(),
                                                   " " * (longest - len(k)), v[0]))
         output.append("--------{}------".format("-" * (longest - 5)))
