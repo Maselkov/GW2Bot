@@ -357,7 +357,7 @@ class AccountMixin:
                     total += v[0]
                     total += v[1]
                     output.append("{} {} | {}".format(k.upper(),
-                                                  " " * (longest - len(k)), v[0]))
+                                                  " " * (longest - len(k)), v[0] + v[1]))
         output.append("--------{}------".format("-" * (longest - 5)))
         output.append("TOTAL:{}{}".format(" " * (longest - 2), total))
         message = ("{.mention}, here are your search results".format(user))
