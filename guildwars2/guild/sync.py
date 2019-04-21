@@ -492,10 +492,11 @@ class SyncGuild:
     async def remove_sync_roles(self, member, role_list):
         for role in role_list:
             try:
-                await member.remove_roles(
-                    role,
-                    reason=
-                    "GW2Bot Integration [$guildsync]")
+                if role in member.roles:
+                    await member.remove_roles(
+                        role,
+                        reason=
+                        "GW2Bot Integration [$guildsync]")
             except discord.Forbidden:
                 self.log.debug(
                     "Permissions error when trying to "
