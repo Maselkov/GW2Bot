@@ -11,7 +11,7 @@ class PvpMixin:
         """PvP related commands.
         """
         if ctx.invoked_subcommand is None:
-            await self.bot.send_cmd_help(ctx)
+            await ctx.send_help()
 
     @pvp.command(name="stats")
     @commands.cooldown(1, 20, BucketType.user)

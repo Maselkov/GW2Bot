@@ -70,7 +70,7 @@ class CharactersMixin:
     async def character(self, ctx):
         """Character related commands"""
         if ctx.invoked_subcommand is None:
-            await self.bot.send_cmd_help(ctx)
+            await ctx.send_help()
 
     @character.command(name="info")
     @commands.cooldown(1, 5, BucketType.user)
@@ -144,7 +144,7 @@ class CharactersMixin:
 
         sort = sort.lower()
         if sort not in ("profession", "name", "created", "age"):
-            return await self.bot.send_cmd_help(ctx)
+            return await ctx.send_help()
 
         def get_sort_key():
             if sort == "profession":
@@ -835,7 +835,7 @@ class CharactersMixin:
     async def sab(self, ctx):
         """Super Adventure Box commands"""
         if ctx.invoked_subcommand is None:
-            await self.bot.send_cmd_help(ctx)
+            await ctx.send_help()
 
     @sab.command(name="unlocks")
     @commands.cooldown(1, 10, BucketType.user)

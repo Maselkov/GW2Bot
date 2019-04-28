@@ -23,7 +23,7 @@ class EmojiMixin:
     async def emojis_management(self, ctx):
         """Commands related to emoji management"""
         if ctx.invoked_subcommand is None:
-            return await self.bot.send_cmd_help(ctx)
+            return await ctx.send_help()
 
     @emojis_management.command(name="register")
     async def emojis_register(self, ctx):

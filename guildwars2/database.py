@@ -17,7 +17,7 @@ class DatabaseMixin:
     async def database(self, ctx):
         """Commands related to DB management"""
         if ctx.invoked_subcommand is None:
-            await self.bot.send_cmd_help(ctx)
+            await ctx.send_help()
             return
 
     @database.command(name="create")

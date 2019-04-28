@@ -26,11 +26,11 @@ from .wallet import WalletMixin
 from .wvw import WvwMixin
 
 
-class GuildWars2(AccountMixin, AchievementsMixin, ApiMixin, CharactersMixin,
-                 CommerceMixin, DailyMixin, DatabaseMixin, EmojiMixin,
-                 EventsMixin, GuildMixin, GuildManageMixin, KeyMixin,
-                 MiscMixin, NotiifiersMixin, PvpMixin, SkillsMixin,
-                 WalletMixin, WvwMixin):
+class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
+                 ApiMixin, CharactersMixin, CommerceMixin, DailyMixin,
+                 DatabaseMixin, EmojiMixin, EventsMixin, GuildMixin,
+                 GuildManageMixin, KeyMixin, MiscMixin, NotiifiersMixin,
+                 PvpMixin, SkillsMixin, WalletMixin, WvwMixin):
     """Guild Wars 2 commands"""
 
     def __init__(self, bot):
@@ -49,7 +49,7 @@ class GuildWars2(AccountMixin, AchievementsMixin, ApiMixin, CharactersMixin,
         self.waiting_for = []
         self.emojis = {}
 
-    def __unload(self):
+    def cog_unload(self):
         for task in self.tasks:
             task.cancel()
         self.tasks = []
