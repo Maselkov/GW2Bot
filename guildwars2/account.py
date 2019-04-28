@@ -307,7 +307,7 @@ class AccountMixin:
         await ctx.trigger_typing()
         try:
             search_results = await self.find_items_in_account(
-                ctx, choice["ids"], flatten=True)
+                ctx, choice["ids"], flatten=True, search=True)
         except APIError as e:
             return await self.error_handler(ctx, e)
         seq = [k for k, v in search_results.items() if v]
@@ -318,19 +318,47 @@ class AccountMixin:
         longest = len(max(seq, key=len))
         if longest < 8:
             longest = 8
-        output = [
-            "LOCATION{}COUNT".format(" " * (longest - 5)),
-            "--------{}|-----".format("-" * (longest - 6))
-        ]
+        if 'is_upgrade' in choice and choice['is_upgrade']:
+            output = [
+                "LOCATION{}INV / GEAR".format(" " * (longest - 5)),
+                "--------{}|-----".format("-" * (longest - 6))
+            ]
+            align = 110
+        else:
+            output = [
+                "LOCATION{}COUNT".format(" " * (longest - 5)),
+                "--------{}|-----".format("-" * (longest - 6))
+            ]
+            align = 80
         total = 0
         storage_counts = OrderedDict(
             sorted(search_results.items(), key=lambda kv: kv[1], reverse=True))
+        characters = await self.get_all_characters(user)
+        char_names = []
+        for character in characters:
+            char_names.append(character.name)
         for k, v in storage_counts.items():
             if v:
-                total += v
-                output.append("{} {} | {}".format(k.upper(),
-                                                  " " * (longest - len(k)), v))
-        output.append("--------{}------".format("-" * (longest - 10)))
+                if 'is_upgrade' in choice and choice['is_upgrade']:
+                    total += v[0]
+                    total += v[1]
+                    if k in char_names:
+                        slotted_upg = v[1]
+                        if slotted_upg == 0:
+                            inf = ""
+                        else:
+                            inf = "/ {} ".format(slotted_upg)
+                        output.append("{} {} | {} {}".format(k.upper(),
+                                                         " " * (longest - len(k)), v[0], inf))
+                    else:
+                        output.append("{} {} | {}".format(k.upper(),
+                                                  " " * (longest - len(k)), v[0]))
+                else:
+                    total += v[0]
+                    total += v[1]
+                    output.append("{} {} | {}".format(k.upper(),
+                                                  " " * (longest - len(k)), v[0] + v[1]))
+        output.append("--------{}------".format("-" * (longest - 5)))
         output.append("TOTAL:{}{}".format(" " * (longest - 2), total))
         message = ("{.mention}, here are your search results".format(user))
 
@@ -339,10 +367,11 @@ class AccountMixin:
         item_doc = await self.fetch_item(choice["ids"][0])
         icon_url = item_doc["icon"]
         data = discord.Embed(
-            description="Search results".format(item_doc["name"]) + " " * 80 +
+            description="Search results".format(item_doc["name"]) + " " * align +
             u'\u200b',
             color=color)
         value = "\n".join(output)
+
         if len(value) > 1014:
             value = ""
             values = []
@@ -366,8 +395,13 @@ class AccountMixin:
             data.add_field(
                 name=choice["name"], value="```ml\n{}\n```".format(value))
         data.set_author(name=doc["account_name"], icon_url=user.avatar_url)
-        data.set_footer(
-            text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
+        if 'is_upgrade' in choice and choice['is_upgrade']:
+            data.set_footer(
+                text="Amount in inventory / Amount in gear",
+                icon_url=self.bot.user.avatar_url)
+        else:
+            data.set_footer(
+                text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
         data.set_thumbnail(url=icon_url)
         await ctx.send(message, embed=data)
 
@@ -459,7 +493,8 @@ class AccountMixin:
                                     item_ids,
                                     *,
                                     doc=None,
-                                    flatten=False):
+                                    flatten=False,
+                                    search=False):
         user = ctx.author
         if not doc:
             doc = await self.fetch_key(user, ["inventories", "characters"])
@@ -474,14 +509,24 @@ class AccountMixin:
             "shared": shared,
             "material storage": materials
         }
-        counts = {item_id: defaultdict(int) for item_id in item_ids}
+        if search:
+            counts = {item_id: defaultdict(lambda: [0, 0]) for item_id in item_ids}
+        else:
+            counts = {item_id: defaultdict(int) for item_id in item_ids}
 
-        def amounts_in_space(space, name):
+        def amounts_in_space(space, name, geared):
             for s in space:
                 for item_id in item_ids:
                     amt = get_amount(s, item_id)
                     if amt:
-                        counts[item_id][name] += amt
+                        if search:
+                            if geared:
+                                # Tuple of (inventory, geared)
+                                counts[item_id][name][1] += amt
+                            else:
+                                counts[item_id][name][0] += amt
+                        else:
+                            counts[item_id][name] += amt
 
         def get_amount(slot, item_id):
             def count_upgrades(slots):
@@ -505,25 +550,28 @@ class AccountMixin:
             return 0
 
         for name, space in spaces.items():
-            amounts_in_space(space, name)
+            amounts_in_space(space, name, False)
         for character in characters:
-            amounts_in_space(character["bags"], character["name"])
+            amounts_in_space(character["bags"], character["name"], False)
             bags = [
                 bag["inventory"] for bag in filter(None, character["bags"])
             ]
             for bag in bags:
-                amounts_in_space(bag, character["name"])
-            amounts_in_space(character["equipment"], character["name"])
+                amounts_in_space(bag, character["name"], False)
+            amounts_in_space(character["equipment"], character["name"], True)
         try:
             if "tradingpost" in doc["permissions"]:
                 result = await self.call_api(
                     "commerce/delivery", key=doc["key"])
                 delivery = result.get("items", [])
-                amounts_in_space(delivery, "TP delivery")
+                amounts_in_space(delivery, "TP delivery", False)
         except APIError:
             pass
         if flatten:
-            flattened = defaultdict(int)
+            if search:
+                flattened = defaultdict(lambda: [])
+            else:
+                flattened = defaultdict(int)
             for count_dict in counts.values():
                 for k, v in count_dict.items():
                     flattened[k] += v
