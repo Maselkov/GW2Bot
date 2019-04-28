@@ -1,6 +1,8 @@
+import datetime
+import re
 from collections import OrderedDict, defaultdict
 from itertools import chain
-import re
+
 import discord
 from discord.ext import commands
 from discord.ext.commands.cooldowns import BucketType
@@ -289,7 +291,6 @@ class AccountMixin:
     @commands.cooldown(1, 5, BucketType.user)
     async def search(self, ctx, *, item):
         """Find items on your account
-
         Required permissions: inventories, characters
         """
         if not self.can_embed_links(ctx):
@@ -348,16 +349,16 @@ class AccountMixin:
                             inf = ""
                         else:
                             inf = "/ {} ".format(slotted_upg)
-                        output.append("{} {} | {} {}".format(k.upper(),
-                                                         " " * (longest - len(k)), v[0], inf))
+                        output.append("{} {} | {} {}".format(
+                            k.upper(), " " * (longest - len(k)), v[0], inf))
                     else:
-                        output.append("{} {} | {}".format(k.upper(),
-                                                  " " * (longest - len(k)), v[0]))
+                        output.append("{} {} | {}".format(
+                            k.upper(), " " * (longest - len(k)), v[0]))
                 else:
                     total += v[0]
                     total += v[1]
-                    output.append("{} {} | {}".format(k.upper(),
-                                                  " " * (longest - len(k)), v[0] + v[1]))
+                    output.append("{} {} | {}".format(
+                        k.upper(), " " * (longest - len(k)), v[0] + v[1]))
         output.append("--------{}------".format("-" * (longest - 5)))
         output.append("TOTAL:{}{}".format(" " * (longest - 2), total))
         message = ("{.mention}, here are your search results".format(user))
@@ -367,8 +368,8 @@ class AccountMixin:
         item_doc = await self.fetch_item(choice["ids"][0])
         icon_url = item_doc["icon"]
         data = discord.Embed(
-            description="Search results".format(item_doc["name"]) + " " * align +
-            u'\u200b',
+            description="Search results".format(item_doc["name"]) + " " * align
+            + u'\u200b',
             color=color)
         value = "\n".join(output)
 
@@ -449,22 +450,29 @@ class AccountMixin:
         not_completed = []
         embed = discord.Embed(
             title="Bosses", color=await self.get_embed_color(ctx))
-        for raid in raids:
-            for wing in raid["wings"]:
-                wing_done = True
-                value = ["```diff"]
-                for boss in wing["events"]:
-                    if boss["id"] not in results:
-                        wing_done = False
-                        not_completed.append(boss)
-                    value.append(is_killed(boss) + readable_id(boss["id"]))
-                value.append("```")
-                name = readable_id(wing["id"])
-                if wing_done:
-                    name += " :white_check_mark:"
-                else:
-                    name += " :x:"
-                embed.add_field(name=name, value="\n".join(value))
+        wings = [wing for raid in raids for wing in raid["wings"]]
+        cotm = self.get_emoji(ctx, "call_of_the_mists")
+        start_date = datetime.date(year=2019, month=1, day=21)
+        seconds = int((datetime.date.today() - start_date).total_seconds())
+        weeks = seconds // (60 * 60 * 24 * 7 * 2)
+        cotm_index = weeks % 5
+        for index, wing in enumerate(wings):
+            wing_done = True
+            value = ["```diff"]
+            for boss in wing["events"]:
+                if boss["id"] not in results:
+                    wing_done = False
+                    not_completed.append(boss)
+                value.append(is_killed(boss) + readable_id(boss["id"]))
+            value.append("```")
+            cotm_active = index in (len(wings) - 1, cotm_index)
+            name = cotm if cotm_active else ""
+            name += readable_id(wing["id"])
+            if wing_done:
+                name += " :white_check_mark:"
+            else:
+                name += " :x:"
+            embed.add_field(name=name, value="\n".join(value))
         if len(not_completed) == 0:
             description = "Everything completed this week :star:"
         else:
@@ -510,7 +518,10 @@ class AccountMixin:
             "material storage": materials
         }
         if search:
-            counts = {item_id: defaultdict(lambda: [0, 0]) for item_id in item_ids}
+            counts = {
+                item_id: defaultdict(lambda: [0, 0])
+                for item_id in item_ids
+            }
         else:
             counts = {item_id: defaultdict(int) for item_id in item_ids}
 
