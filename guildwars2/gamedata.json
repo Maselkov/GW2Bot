@@ -84,8 +84,7 @@
     "[&BBABAAA=][&BJIBAAA=][&BLkCAAA=][&BH8HAAA=][&BBEDAAA=][&BEICAAA=]",
     "[&BCECAAA=][&BC0AAAA=][&BDoBAAA=][&BIkHAAA=][&BO4CAAA=][&BIUCAAA=]"
   ],
-
-"fractals": {
+  "fractals": {
     "Aquatic Ruins": [
       7,
       26,
@@ -229,108 +228,196 @@
   },
   "event_timers": {
     "bosses": {
-      "normal": [{
+      "normal": [
+        {
           "name": "Admiral Taidha Covington",
-          "start_time": [0, 0],
+          "start_time": [
+            0,
+            0
+          ],
           "interval": 3,
           "waypoint": "[&BKgBAAA=]"
         },
         {
           "name": "Svanir Shaman Chief",
-          "start_time": [0, 15],
+          "start_time": [
+            0,
+            15
+          ],
           "interval": 2,
           "waypoint": "[&BMIDAAA=]"
         },
         {
           "name": "Megadestroyer",
-          "start_time": [0, 30],
+          "start_time": [
+            0,
+            30
+          ],
           "interval": 3,
           "waypoint": "[&BM0CAAA=]"
         },
         {
           "name": "Fire Elemental",
-          "start_time": [0, 45],
+          "start_time": [
+            0,
+            45
+          ],
           "interval": 2,
           "waypoint": "[&BEcAAAA=]"
         },
         {
           "name": "The Shatterer",
-          "start_time": [1, 0],
+          "start_time": [
+            1,
+            0
+          ],
           "interval": 3,
           "waypoint": "[&BE4DAAA=]"
         },
         {
           "name": "Great Jungle Wurm",
-          "start_time": [1, 15],
+          "start_time": [
+            1,
+            15
+          ],
           "interval": 2,
           "waypoint": "[&BEEFAAA=]"
         },
         {
           "name": "Modniir Ulgoth",
-          "start_time": [1, 30],
+          "start_time": [
+            1,
+            30
+          ],
           "interval": 3,
           "waypoint": "[&BLAAAAA=]"
         },
         {
           "name": "Shadow Behemoth",
-          "start_time": [1, 45],
+          "start_time": [
+            1,
+            45
+          ],
           "interval": 2,
           "waypoint": "[&BPcAAAA=]"
         },
         {
           "name": "Golem Mark II",
-          "start_time": [2, 0],
+          "start_time": [
+            2,
+            0
+          ],
           "interval": 3,
           "waypoint": "[&BNQCAAA=]"
         },
         {
           "name": "Claw of Jormag",
-          "start_time": [2, 30],
+          "start_time": [
+            2,
+            30
+          ],
           "interval": 3,
           "waypoint": "[&BHoCAAA=]"
         }
       ],
-      "hardcore": [{
+      "hardcore": [
+        {
           "name": "Evolved Jungle Wurm",
           "times": [
-            [1, 0],
-            [4, 0],
-            [8, 0],
-            [12, 30],
-            [17, 0],
-            [20, 0]
+            [
+              1,
+              0
+            ],
+            [
+              4,
+              0
+            ],
+            [
+              8,
+              0
+            ],
+            [
+              12,
+              30
+            ],
+            [
+              17,
+              0
+            ],
+            [
+              20,
+              0
+            ]
           ],
           "waypoint": "[&BKoBAAA=]"
         },
         {
           "name": "Tequatl the Sunless",
           "times": [
-            [0, 0],
-            [3, 0],
-            [7, 0],
-            [11, 30],
-            [16, 0],
-            [19, 0]
+            [
+              0,
+              0
+            ],
+            [
+              3,
+              0
+            ],
+            [
+              7,
+              0
+            ],
+            [
+              11,
+              30
+            ],
+            [
+              16,
+              0
+            ],
+            [
+              19,
+              0
+            ]
           ],
           "waypoint": "[&BNABAAA=]"
         },
         {
           "name": "Karka Queen",
           "times": [
-            [2, 0],
-            [6, 0],
-            [10, 30],
-            [15, 0],
-            [18, 0],
-            [23, 0]
+            [
+              2,
+              0
+            ],
+            [
+              6,
+              0
+            ],
+            [
+              10,
+              30
+            ],
+            [
+              15,
+              0
+            ],
+            [
+              18,
+              0
+            ],
+            [
+              23,
+              0
+            ]
           ],
           "waypoint": "[&BNUGAAA=]"
         }
       ]
     },
-    "hot": [{
+    "hot": [
+      {
         "name": "Verdant Brink",
-        "phases": [{
+        "phases": [
+          {
             "name": "Night",
             "duration": 10
           },
@@ -350,7 +437,8 @@
       },
       {
         "name": "Auric Basin",
-        "phases": [{
+        "phases": [
+          {
             "name": "Activate the Pillars",
             "duration": 45
           },
@@ -374,7 +462,8 @@
       },
       {
         "name": "Tangled Depths",
-        "phases": [{
+        "phases": [
+          {
             "name": "Help the Outposts",
             "duration": 25
           },
@@ -392,10 +481,10 @@
           }
         ]
       },
-
       {
         "name": "Dragon's Stand",
-        "phases": [{
+        "phases": [
+          {
             "name": "Assault",
             "duration": 90
           },
@@ -409,10 +498,10 @@
           }
         ]
       },
-
       {
         "name": "Dry Top",
-        "phases": [{
+        "phases": [
+          {
             "name": "Crash Site",
             "duration": 40
           },
@@ -431,66 +520,165 @@
         ]
       }
     ],
-    "pof": [{
-      "name": "Crystal Oasis",
-      "phases": [{
-          "name": "Nothing",
-          "duration": 5
-        },
-        {
-          "name": "Rounds 1-3",
-          "duration": 16
-        },
-        {
-          "name": "Pinata",
-          "duration": 9
-        },
-        {
-          "name": "Nothing",
-          "duration": 90
-        }
-      ]
-    }, {
-      "name": "Domain of Istan",
-      "phases": [{
-          "name": "Palawadan",
-          "duration": 15
-        },
-        {
-          "name": "Nothing",
-          "duration": 90
-        },
-        {
-          "name": "Palawadan",
-          "duration": 15
-        }
-      ]
-    }],
-    "day": [{
-      "name": "Day/night cycle",
-      "phases": [{
-          "name": "Night",
-          "duration": 25
-        },
-        {
-          "name": "Dawn",
-          "duration": 5
-        },
-        {
-          "name": "Day",
-          "duration": 70
-        },
-        {
-          "name": "Dusk",
-          "duration": 5
-        },
-        {
-          "name": "Night",
-          "duration": 15
-        }
-      ]
-    }]
-
+    "pof": [
+      {
+        "name": "Crystal Oasis",
+        "phases": [
+          {
+            "name": "Nothing",
+            "duration": 5
+          },
+          {
+            "name": "Rounds 1-3",
+            "duration": 16
+          },
+          {
+            "name": "Pinata",
+            "duration": 9
+          },
+          {
+            "name": "Nothing",
+            "duration": 90
+          }
+        ]
+      },
+      {
+        "name": "Desert Highlands",
+        "phases": [
+          {
+            "name": "Nothing",
+            "duration": 60
+          },
+          {
+            "name": "Buried Treasure",
+            "duration": 15
+          },
+          {
+            "name": "Nothing",
+            "duration": 45
+          }
+        ]
+      },
+      {
+        "name": "Elon Riverlands",
+        "phases": [
+          {
+            "name": "The Path to Ascension",
+            "duration": 10
+          },
+          {
+            "name": "Doppelganger",
+            "duration": 15
+          },
+          {
+            "name": "Nothing",
+            "duration": 65
+          },
+          {
+            "name": "The Path to Ascension: Augury Rock",
+            "duration": 30
+          }
+        ]
+      },
+      {
+        "name": "The Desolation",
+        "phases": [
+          {
+            "name": "Nothing",
+            "duration": 30
+          },
+          {
+            "name": "Junundu Rising",
+            "duration": 20
+          },
+          {
+            "name": "Nothing",
+            "duration": 10
+          },
+          {
+            "name": "Maws of Torment",
+            "duration": 20
+          },
+          {
+            "name": "Nothing",
+            "duration": 10
+          },
+          {
+            "name": "Junundu Rising",
+            "duration": 20
+          },
+          {
+            "name": "Nothing",
+            "duration": 10
+          }
+        ]
+      },
+      {
+        "name": "Domain of Vabbi",
+        "phases": [
+          {
+            "name": "Forged with Fire",
+            "duration": 30
+          },
+          {
+            "name": "Serpents' Ire",
+            "duration": 30
+          },
+          {
+            "name": "Forged with Fire",
+            "duration": 30
+          },
+          {
+            "name": "Nothing",
+            "duration": 30
+          }
+        ]
+      },
+      {
+        "name": "Domain of Istan",
+        "phases": [
+          {
+            "name": "Palawadan",
+            "duration": 15
+          },
+          {
+            "name": "Nothing",
+            "duration": 90
+          },
+          {
+            "name": "Palawadan",
+            "duration": 15
+          }
+        ]
+      }
+    ],
+    "day": [
+      {
+        "name": "Day/night cycle",
+        "phases": [
+          {
+            "name": "Night",
+            "duration": 25
+          },
+          {
+            "name": "Dawn",
+            "duration": 5
+          },
+          {
+            "name": "Day",
+            "duration": 70
+          },
+          {
+            "name": "Dusk",
+            "duration": 5
+          },
+          {
+            "name": "Night",
+            "duration": 15
+          }
+        ]
+      }
+    ]
   },
   "raid_trophies": {
     "insights": {
@@ -538,14 +726,16 @@
         "perfected_envoy_shoes": 80399
       }
     },
-    "divinations":{
-      "legendary_divination" : 88485
+    "divinations": {
+      "legendary_divination": 88485
     }
   },
   "killproofs": {
-    "areas": [{
+    "areas": [
+      {
         "name": "Spirit Vale",
-        "encounters": [{
+        "encounters": [
+          {
             "name": "Vale Guardian",
             "type": "single_achievement",
             "id": 2654
@@ -564,7 +754,8 @@
       },
       {
         "name": "Salvation Pass",
-        "encounters": [{
+        "encounters": [
+          {
             "name": "Slothasor",
             "type": "single_achievement",
             "id": 2826
@@ -583,7 +774,8 @@
       },
       {
         "name": "Stronghold of the Faithful",
-        "encounters": [{
+        "encounters": [
+          {
             "name": "Escort",
             "type": "single_achievement",
             "id": 3024
@@ -607,7 +799,8 @@
       },
       {
         "name": "Bastion of the Penitent",
-        "encounters": [{
+        "encounters": [
+          {
             "name": "Cairn",
             "type": "single_achievement",
             "id": 3349
@@ -651,7 +844,8 @@
       },
       {
         "name": "Hall of Chains",
-        "encounters": [{
+        "encounters": [
+          {
             "name": "Soulless Horror",
             "type": "single_achievement",
             "id": 4004
@@ -669,7 +863,11 @@
           {
             "name": "Statues of Grenth",
             "type": "all_achievements",
-            "ids": [3998, 4036, 4038]
+            "ids": [
+              3998,
+              4036,
+              4038
+            ]
           },
           {
             "name": "Voice in the Void",
@@ -685,7 +883,8 @@
       },
       {
         "name": "Mythwright Gambit",
-        "encounters": [{
+        "encounters": [
+          {
             "name": "Conjured Amalgamate",
             "type": "single_achievement",
             "id": 4423
@@ -719,7 +918,8 @@
       },
       {
         "name": "Fractals",
-        "encounters": [{
+        "encounters": [
+          {
             "name": "Nightmare CM",
             "type": "single_achievement",
             "id": 3180
@@ -733,118 +933,167 @@
       }
     ]
   },
-  "cats": [{
-    "id": 1,
-    "guide": "Slab of Poultry Meat - WP: [&BPoAAAA=]"
-  }, {
-    "id": 2,
-    "guide": "Grilled Poultry - WP: [&BDEEAAA=]"
-  }, {
-    "id": 3,
-    "guide": "Spicy Flank Steak - WP: [&BBAEAAA=]"
-  }, {
-    "id": 4,
-    "guide": "Spicier Flank Steak - WP: [&BNMAAAA=]"
-  }, {
-    "id": 5,
-    "guide": "Plate of Fire Flank Steak - WP: [&BCoDAAA=]"
-  }, {
-    "id": 6,
-    "guide": "Bowl of Prickly Pear Sorbet - WP: [&BIAHAAA=]"
-  }, {
-    "id": 7,
-    "guide": "Bowl of Ginger-Lime Ice Cream - WP: [&BHoHAAA=]"
-  }, {
-    "id": 8,
-    "guide": "Bowl of Saffron-Mango Ice Cream WP: [&BH8HAAA=]"
-  }, {
-    "id": 9,
-    "guide": "Bowl of Peach Raspberry Swirl Ice Cream WP: [&BKwHAAA=]"
-  }, {
-    "id": 10,
-    "guide": "Daytime - Slab of Poultry Meat WP: [&BLwEAAA=]"
-  }, {
-    "id": 11,
-    "guide": "Nighttime - Slab of Poultry Meat WP: [&BLwEAAA=]"
-  }, {
-    "id": 12,
-    "guide": "Warrior - Cheeseburger WP: [&BO8AAAA=]"
-  }, {
-    "id": 13,
-    "guide": "Mesmer - Mystery Tonic WP: [&BO8AAAA=]"
-  }, {
-    "id": 14,
-    "guide": "Ranger - Healing Seed Pod WP: [&BDQBAAA=]"
-  }, {
-    "id": 15,
-    "guide": "Guardian - Bowl of Curry Mussel Soup WP: [&BEAAAAA=]"
-  }, {
-    "id": 16,
-    "guide": "Elementalist - Slice of Rainbow Cake WP: [&BDQBAAA=]"
-  }, {
-    "id": 17,
-    "guide": "Engineer - Flask of Pumpkin Oil WP: [&BIABAAA=]"
-  }, {
-    "id": 18,
-    "guide": "Revenant - 39 Carrots - PvP Lobby"
-  }, {
-    "id": 19,
-    "guide": "Thief - Harpy Feathers - WP: [&BIABAAA=]"
-  }, {
-    "id": 20,
-    "guide": "Necromancer - Grumble Cake - WP: [&BHQBAAA=]"
-  }, {
-    "id": 21,
-    "guide": "Fire Flank Steak + Carry Injured Skritt WP: [&BFUJAAA=]"
-  }, {
-    "id": 22,
-    "guide": "3 Ghost Peppers: [&BHgJAAA=]"
-  }, {
-    "id": 23,
-    "guide": "Frog in a Jar - Feline Familiar from Enchanted Broom"
-  }, {
-    "id": 24,
-    "guide": "Use Koda's Flame to unfreeze - WP: [&BH0JAAA=]"
-  }, {
-    "id": 25,
-    "guide": "Super-Hot Poultry and Leek Soup - WP: [&BDcEAAA=]"
-  }, {
-    "id": 26,
-    "guide": "Super-Hot Poultry and Winter Vegetable Soup - WP: [&BIcDAAA=]"
-  }, {
-    "id": 27,
-    "guide": "Super-Hot Lemongrass Poultry Soup - WP: [&BLgEAAA=]"
-  }, {
-    "id": 28,
-    "guide": "Super-Hot Saffron-Scented Poultry Soup - WP: [&BLwEAAA=]"
-  }, {
-    "id": 29,
-    "guide": "Bowl of Bloodstone Bisque - At the end of LS3E4 Head of the Snake"
-  }, {
-    "id": 32,
-    "guide": "Strawberry Ghost - Also need ghost effect on player - WP: [&BK8JAAA=]"
-  }, {
-    "id": 33,
-    "guide": "SAB World 2 Zone 2 - Bring piranha to cat on top of gong room"
-  }, {
-    "id": 35,
-    "guide": "Shattered Observatory side room - [&AgF+NQEA][&AgHoHAEA][&AgEYwQAA][&AgGxHQEA][&AgFPPwEA]"
-  }, {
-    "id": 34,
-    "guide": "Gift of Battle - Blue Alpine Borderland Cat Room"
-  }, {
-    "id": 36,
-    "guide": "Can of Spicy Meat Chili - Desert Borderland Quaggan Room"
-  }, {
-    "id": 37,
-    "guide": "Holographic Cat - Purchased from Holomancer Netto (next to [&BLgEAAA=]) for 1g"
-  }],
+  "cats": [
+    {
+      "id": 1,
+      "guide": "Slab of Poultry Meat - WP: [&BPoAAAA=]"
+    },
+    {
+      "id": 2,
+      "guide": "Grilled Poultry - WP: [&BDEEAAA=]"
+    },
+    {
+      "id": 3,
+      "guide": "Spicy Flank Steak - WP: [&BBAEAAA=]"
+    },
+    {
+      "id": 4,
+      "guide": "Spicier Flank Steak - WP: [&BNMAAAA=]"
+    },
+    {
+      "id": 5,
+      "guide": "Plate of Fire Flank Steak - WP: [&BCoDAAA=]"
+    },
+    {
+      "id": 6,
+      "guide": "Bowl of Prickly Pear Sorbet - WP: [&BIAHAAA=]"
+    },
+    {
+      "id": 7,
+      "guide": "Bowl of Ginger-Lime Ice Cream - WP: [&BHoHAAA=]"
+    },
+    {
+      "id": 8,
+      "guide": "Bowl of Saffron-Mango Ice Cream WP: [&BH8HAAA=]"
+    },
+    {
+      "id": 9,
+      "guide": "Bowl of Peach Raspberry Swirl Ice Cream WP: [&BKwHAAA=]"
+    },
+    {
+      "id": 10,
+      "guide": "Daytime - Slab of Poultry Meat WP: [&BLwEAAA=]"
+    },
+    {
+      "id": 11,
+      "guide": "Nighttime - Slab of Poultry Meat WP: [&BLwEAAA=]"
+    },
+    {
+      "id": 12,
+      "guide": "Warrior - Cheeseburger WP: [&BO8AAAA=]"
+    },
+    {
+      "id": 13,
+      "guide": "Mesmer - Mystery Tonic WP: [&BO8AAAA=]"
+    },
+    {
+      "id": 14,
+      "guide": "Ranger - Healing Seed Pod WP: [&BDQBAAA=]"
+    },
+    {
+      "id": 15,
+      "guide": "Guardian - Bowl of Curry Mussel Soup WP: [&BEAAAAA=]"
+    },
+    {
+      "id": 16,
+      "guide": "Elementalist - Slice of Rainbow Cake WP: [&BDQBAAA=]"
+    },
+    {
+      "id": 17,
+      "guide": "Engineer - Flask of Pumpkin Oil WP: [&BIABAAA=]"
+    },
+    {
+      "id": 18,
+      "guide": "Revenant - 39 Carrots - PvP Lobby"
+    },
+    {
+      "id": 19,
+      "guide": "Thief - Harpy Feathers - WP: [&BIABAAA=]"
+    },
+    {
+      "id": 20,
+      "guide": "Necromancer - Grumble Cake - WP: [&BHQBAAA=]"
+    },
+    {
+      "id": 21,
+      "guide": "Fire Flank Steak + Carry Injured Skritt WP: [&BFUJAAA=]"
+    },
+    {
+      "id": 22,
+      "guide": "3 Ghost Peppers: [&BHgJAAA=]"
+    },
+    {
+      "id": 23,
+      "guide": "Frog in a Jar - Feline Familiar from Enchanted Broom"
+    },
+    {
+      "id": 24,
+      "guide": "Use Koda's Flame to unfreeze - WP: [&BH0JAAA=]"
+    },
+    {
+      "id": 25,
+      "guide": "Super-Hot Poultry and Leek Soup - WP: [&BDcEAAA=]"
+    },
+    {
+      "id": 26,
+      "guide": "Super-Hot Poultry and Winter Vegetable Soup - WP: [&BIcDAAA=]"
+    },
+    {
+      "id": 27,
+      "guide": "Super-Hot Lemongrass Poultry Soup - WP: [&BLgEAAA=]"
+    },
+    {
+      "id": 28,
+      "guide": "Super-Hot Saffron-Scented Poultry Soup - WP: [&BLwEAAA=]"
+    },
+    {
+      "id": 29,
+      "guide": "Bowl of Bloodstone Bisque - At the end of LS3E4 Head of the Snake"
+    },
+    {
+      "id": 32,
+      "guide": "Strawberry Ghost - Also need ghost effect on player - WP: [&BK8JAAA=]"
+    },
+    {
+      "id": 33,
+      "guide": "SAB World 2 Zone 2 - Bring piranha to cat on top of gong room"
+    },
+    {
+      "id": 35,
+      "guide": "Shattered Observatory side room - [&AgF+NQEA][&AgHoHAEA][&AgEYwQAA][&AgGxHQEA][&AgFPPwEA]"
+    },
+    {
+      "id": 34,
+      "guide": "Gift of Battle - Blue Alpine Borderland Cat Room"
+    },
+    {
+      "id": 36,
+      "guide": "Can of Spicy Meat Chili - Desert Borderland Quaggan Room"
+    },
+    {
+      "id": 37,
+      "guide": "Holographic Cat - Purchased from Holomancer Netto (next to [&BLgEAAA=]) for 1g"
+    }
+  ],
   "sab": {
     "unlocks": [
-      "chain_stick", "slingshot", "whip", "mini_bomb", "candle", "torch",
-      "wooden_whistle", "digger", "nice_scoop", "glove_of_wisdom", "bauble_purse",
-      "bauble_tote_bag", "moto_breath", "moto_finger", "health_vessel_1",
-      "health_vessel_2", "medium_health_potion"
+      "chain_stick",
+      "slingshot",
+      "whip",
+      "mini_bomb",
+      "candle",
+      "torch",
+      "wooden_whistle",
+      "digger",
+      "nice_scoop",
+      "glove_of_wisdom",
+      "bauble_purse",
+      "bauble_tote_bag",
+      "moto_breath",
+      "moto_finger",
+      "health_vessel_1",
+      "health_vessel_2",
+      "medium_health_potion"
     ]
   }
 }
