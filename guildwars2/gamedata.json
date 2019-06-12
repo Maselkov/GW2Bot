@@ -718,6 +718,40 @@
         ]
       },
       {
+        "name": "The Key of Ahdashim",
+        "encounters": [{
+            "name": "Adina",
+            "type": "single_achievement",
+            "id": 4796
+          },
+          {
+            "name": "Adina CM",
+            "type": "single_achievement",
+            "id": 4803
+          },
+          {
+            "name": "Sabir",
+            "type": "single_achievement",
+            "id": 4801
+          },
+          {
+            "name": "Sabir CM",
+            "type": "single_achievement",
+            "id": 4779
+          },
+          {
+            "name": "Qadim the Peerless",
+            "type": "single_achievement",
+            "id": 4799
+          },
+          {
+            "name": "Qadim the Peerless CM",
+            "type": "single_achievement",
+            "id": 4800
+          }
+        ]
+      },
+      {
         "name": "Fractals",
         "encounters": [{
             "name": "Nightmare CM",
