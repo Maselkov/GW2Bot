@@ -443,9 +443,10 @@ class AccountMixin:
         def readable_id(_id):
             _id = _id.split("_")
             dont_capitalize = ("of", "the", "in")
-            return " ".join([
+            title = " ".join([
                 x.capitalize() if x not in dont_capitalize else x for x in _id
             ])
+            return title[0].upper() + title[1:]
 
         not_completed = []
         embed = discord.Embed(
