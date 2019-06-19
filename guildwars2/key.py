@@ -20,7 +20,7 @@ class KeyMixin:
         except:
             pass
         if ctx.invoked_subcommand is None:
-            return await ctx.send_help()
+            return await ctx.send_help(ctx.command)
 
     @key.command(name="add")
     @commands.cooldown(1, 2, BucketType.user)

@@ -19,7 +19,7 @@ class SyncGuild:
         and ingame members are periodically synced to have the
         correct role in discord."""
         if ctx.invoked_subcommand is None:
-            await ctx.send_help()
+            await ctx.send_help(ctx.command)
 
     async def clearsync(self, ctx):
         doc = await self.bot.database.get_guild(ctx.guild, self)

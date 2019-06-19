@@ -10,7 +10,7 @@ class GuildManageMixin:
     async def guild_manage(self, ctx):
         """Commands for server management"""
         if ctx.invoked_subcommand is None:
-            await ctx.send_help()
+            await ctx.send_help(ctx.command)
 
     @guild_manage.command(name="forceaccountnames")
     @commands.has_permissions(manage_nicknames=True)
@@ -62,7 +62,7 @@ class GuildManageMixin:
         """
         guild = ctx.guild
         if not -12 < offset < 14:
-            return await ctx.send_help()
+            return await ctx.send_help(ctx.command)
         await self.bot.database.set_guild(guild, {"timezone": offset}, self)
         await ctx.send("Timezone set")
 

@@ -12,7 +12,7 @@ class CommerceMixin:
     async def tp(self, ctx):
         """Commands related to tradingpost"""
         if ctx.invoked_subcommand is None:
-            await ctx.send_help()
+            await ctx.send_help(ctx.command)
 
     @tp.command(name="current")
     @commands.cooldown(1, 10, BucketType.user)
@@ -223,7 +223,7 @@ class CommerceMixin:
     async def gem(self, ctx):
         """Commands related to gems"""
         if ctx.invoked_subcommand is None:
-            await ctx.send_help()
+            await ctx.send_help(ctx.command)
 
     @gem.command(name="price")
     async def gem_price(self, ctx, quantity: int = 400):

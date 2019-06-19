@@ -23,6 +23,7 @@ from .notifiers import NotiifiersMixin
 from .pvp import PvpMixin
 from .skills import SkillsMixin
 from .wallet import WalletMixin
+from .worldsync import WorldsyncMixin
 from .wvw import WvwMixin
 
 
@@ -30,7 +31,7 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
                  ApiMixin, CharactersMixin, CommerceMixin, DailyMixin,
                  DatabaseMixin, EmojiMixin, EventsMixin, GuildMixin,
                  GuildManageMixin, KeyMixin, MiscMixin, NotiifiersMixin,
-                 PvpMixin, SkillsMixin, WalletMixin, WvwMixin):
+                 PvpMixin, SkillsMixin, WalletMixin, WorldsyncMixin, WvwMixin):
     """Guild Wars 2 commands"""
 
     def __init__(self, bot):

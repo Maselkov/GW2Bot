@@ -11,7 +11,7 @@ class DailyMixin:
     async def daily(self, ctx):
         """Commands showing daily things"""
         if ctx.invoked_subcommand is None:
-            await ctx.send_help()
+            await ctx.send_help(ctx.command)
 
     @daily.command(name="pve", aliases=["e"])
     @commands.cooldown(1, 2, BucketType.user)

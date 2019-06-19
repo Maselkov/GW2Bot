@@ -30,7 +30,7 @@ class EventsMixin:
             try:
                 await ctx.send(info, embed=embed)
             except:
-                await ctx.send_help()
+                await ctx.send_help(ctx.command)
 
     @et.command(name="hot", aliases=["h"])
     async def et_hot(self, ctx):

@@ -23,7 +23,7 @@ class NotiifiersMixin:
         Make sure it's toggle on using $daily notifier toggle on
         """
         if ctx.invoked_subcommand is None:
-            return await ctx.send_help()
+            return await ctx.send_help(ctx.command)
 
     @commands.cooldown(1, 5, BucketType.guild)
     @dailynotifier.command(name="channel")
@@ -97,7 +97,7 @@ class NotiifiersMixin:
         Example: $dailynotifier categories psna psna_later pve fractals
         """
         if not categories:
-            await ctx.send_help()
+            await ctx.send_help(ctx.command)
             return
         guild = ctx.guild
         possible_values = [
@@ -105,14 +105,14 @@ class NotiifiersMixin:
         ]
         categories = [x.lower() for x in categories]
         if len(categories) > 6:
-            await ctx.send_help()
+            await ctx.send_help(ctx.command)
             return
         for category in categories:
             if category not in possible_values:
-                await ctx.send_help()
+                await ctx.send_help(ctx.command)
                 return
             if categories.count(category) > 1:
-                await ctx.send_help()
+                await ctx.send_help(ctx.command)
                 return
             if category == "all":
                 categories = [
@@ -145,7 +145,7 @@ class NotiifiersMixin:
     async def newsfeed(self, ctx):
         """Automatically sends new from guildwars2.com to specified channel"""
         if ctx.invoked_subcommand is None:
-            return await ctx.send_help()
+            return await ctx.send_help(ctx.command)
 
     @newsfeed.command(name="channel")
     async def newsfeed_channel(self, ctx, channel: discord.TextChannel):
@@ -205,7 +205,7 @@ class NotiifiersMixin:
     async def updatenotifier(self, ctx):
         """Sends a notification whenever GW2 is updated"""
         if ctx.invoked_subcommand is None:
-            await ctx.send_help()
+            await ctx.send_help(ctx.command)
 
     @updatenotifier.command(name="channel")
     async def update_channel(self, ctx, channel: discord.TextChannel):
@@ -283,7 +283,7 @@ class NotiifiersMixin:
         valid_types = "none", "here", "everyone"
         mention_type = mention_type.lower()
         if mention_type not in valid_types:
-            return await ctx.send_help()
+            return await ctx.send_help(ctx.command)
         guild = ctx.guild
         await self.bot.database.set_guild(
             guild, {"updates.mention": mention_type}, self)
@@ -296,7 +296,7 @@ class NotiifiersMixin:
         """Sends the next two bosses every 15 minutes to a channel
         """
         if ctx.invoked_subcommand is None:
-            return await ctx.send_help()
+            return await ctx.send_help(ctx.command)
 
     @commands.cooldown(1, 5, BucketType.guild)
     @bossnotifier.command(name="channel")

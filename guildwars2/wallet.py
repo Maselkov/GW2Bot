@@ -18,7 +18,7 @@ class WalletMixin:
                     return await ctx.invoke(self.wallet_currency, currency=arg)
             except:
                 pass
-            await ctx.send_help()
+            await ctx.send_help(ctx.command)
 
     @wallet.command(name="currency")
     @commands.cooldown(1, 5, BucketType.user)

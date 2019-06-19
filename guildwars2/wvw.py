@@ -10,7 +10,7 @@ class WvwMixin:
     async def wvw(self, ctx):
         """Commands related to WVW"""
         if ctx.invoked_subcommand is None:
-            await ctx.send_help()
+            await ctx.send_help(ctx.command)
 
     @wvw.command(name="worlds")
     @commands.cooldown(1, 20, BucketType.user)

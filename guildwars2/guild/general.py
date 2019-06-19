@@ -13,7 +13,7 @@ class GeneralGuild:
     async def guild(self, ctx):
         """Guild related commands."""
         if ctx.invoked_subcommand is None:
-            await ctx.send_help()
+            await ctx.send_help(ctx.command)
 
     @guild.command(name="info", usage="<guild name>")
     @commands.cooldown(1, 20, BucketType.user)
@@ -184,7 +184,7 @@ class GeneralGuild:
             "invited", "joined", "invite_declined", "rank_change", "kick"
         ]
         if state not in ("stash", "treasury", "members"):
-            return await ctx.send_help()
+            return await ctx.send_help(ctx.command)
         try:
             guild = await self.get_guild(ctx, guild_name=guild_name)
             if not guild:
