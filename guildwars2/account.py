@@ -117,9 +117,11 @@ class AccountMixin:
         ids_refined_envoy_armor = list(ids_li["refined_envoy_armor"].values())
         ids_perfected_envoy_armor = list(
             ids_li["perfected_envoy_armor"].values())
+		id_coalescence = ids_ld["coalescence"]
+		id_gift_of_compassion = ids_ld["gift_of_compassion"]
         all_ids = [
             id_legendary_divination, id_legendary_insight, id_gift_of_prowess,
-            id_envoy_insignia
+            id_envoy_insignia, id_coalescence, id_gift_of_compassion
         ]
         all_ids += ids_perfected_envoy_armor + ids_refined_envoy_armor
         try:
@@ -133,8 +135,12 @@ class AccountMixin:
         sum_ld_on_hand = sum(search_results[id_legendary_divination].values())
         sum_prowess = sum(search_results[id_gift_of_prowess].values())
         sum_insignia = sum(search_results[id_envoy_insignia].values())
+		sum_coalescence = sum(search_results[id_coalescence].values())
+		sum_compassion = sum(search_results[id_gift_of_compassion].values())
         li_prowess = sum_prowess * 25
         li_insignia = sum_insignia * 25
+		ld_coalescence = sum_coalescence * 150
+		ld_compassion = sum_compassion * 150
         sum_perfect_armor = 0
         for k, v in search_results.items():
             if k in ids_perfected_envoy_armor:
@@ -148,10 +154,12 @@ class AccountMixin:
         li_perfect_armor = min(sum_perfect_armor, 6) * 25 + max(
             sum_perfect_armor - 6, 0) * 50
         sum_on_hand = sum_ld_on_hand + sum_li_on_hand
-        sum_crafted = (
+        li_crafted = (
             li_prowess + li_insignia + li_perfect_armor + li_refined_armor)
-        total_li = sum_li_on_hand + sum_crafted
-        total_ld = sum_ld_on_hand
+		ld_crafted = ld_coalescence + ld_compassion
+		sum_crafted = li_crafted + ld_crafted
+        total_li = sum_li_on_hand + li_crafted
+        total_ld = sum_ld_on_hand + ld_crafted
         total_trophies = total_li + total_ld
         embed = discord.Embed(
             title="{} Legendary Insights and Divinations earned"
@@ -182,6 +190,12 @@ class AccountMixin:
                 inline=False)
         if total_ld:
             value = ["On hand - **{}**".format(sum_ld_on_hand)]
+			if sum_coalescence:
+                value.append("{} Coalescence - **{}**".format(
+                    sum_coalescence, ld_coalescence))
+			if sum_compassion:
+                value.append("{} Gifts of Compassion - **{}**".format(
+                    sum_compassion, ld_compassion))		
             embed.add_field(
                 name="{} Legendary Divinations".format(total_ld),
                 value="\n".join(value),
