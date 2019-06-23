@@ -108,6 +108,26 @@ class KeyMixin:
                 await user.send(msg)
             except:
                 pass
+        if guild:
+            await self.guildsync_on_member_join(user)
+            await self.worldsync_on_member_join(user)
+            return
+        for guild in self.bot.guilds:
+            if len(guild.members) > 3000:
+                continue
+            if user not in guild.members:
+                continue
+            doc = await self.bot.database.get(guild, self)
+            worldsync = doc.get("worldsync", {})
+            worldsync_enabled = worldsync.get("enabled", False)
+            if worldsync_enabled:
+                member = guild.get_member(user.id)
+                await self.worldsync_on_member_join(member)
+            guildsync = doc.get("sync", {})
+            if guildsync.get("on", False) and guildsync.get(
+                    "setupdone", False):
+                member = guild.get_member(user.id)
+                await self.guildsync_on_member_join(member)
 
     @key.command(name="remove")
     @commands.cooldown(1, 1, BucketType.user)

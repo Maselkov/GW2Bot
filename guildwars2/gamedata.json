@@ -680,58 +680,102 @@
       }
     ]
   },
-  "raid_trophies": {
-    "insights": {
-      "legendary_insight": 77302,
-      "gift_of_prowess": 78989,
-      "envoy_insignia": 80516,
-      "refined_envoy_armor": {
-        "refined_envoy_helmet": 80387,
-        "refined_envoy_pauldrons": 80236,
-        "refined_envoy_breastplate": 80648,
-        "refined_envoy_gauntlets": 80673,
-        "refined_envoy_tassets": 80427,
-        "refined_envoy_greaves": 80127,
-        "refined_envoy_mask": 80634,
-        "refined_envoy_shoulderpads": 80366,
-        "refined_envoy_jerkin": 80607,
-        "refined_envoy_vambraces": 80658,
-        "refined_envoy_leggings": 80675,
-        "refined_envoy_boots": 80177,
-        "refined_envoy_cowl": 80441,
-        "refined_envoy_mantle": 80264,
-        "refined_envoy_vestments": 80120,
-        "refined_envoy_gloves": 80460,
-        "refined_envoy_pants": 80275,
-        "refined_envoy_shoes": 80583
-      },
-      "perfected_envoy_armor": {
-        "perfected_envoy_helmet": 80384,
-        "perfected_envoy_pauldrons": 80435,
-        "perfected_envoy_breastplate": 80254,
-        "perfected_envoy_gauntlets": 80205,
-        "perfected_envoy_tassets": 80277,
-        "perfected_envoy_greaves": 80557,
-        "perfected_envoy_mask": 80296,
-        "perfected_envoy_shoulderpads": 80145,
-        "perfected_envoy_jerkin": 80578,
-        "perfected_envoy_vambraces": 80161,
-        "perfected_envoy_leggings": 80252,
-        "perfected_envoy_boots": 80281,
-        "perfected_envoy_cowl": 80248,
-        "perfected_envoy_mantle": 80131,
-        "perfected_envoy_vestments": 80190,
-        "perfected_envoy_gloves": 80111,
-        "perfected_envoy_pants": 80356,
-        "perfected_envoy_shoes": 80399
-      }
+  "raid_trophies": [
+    {
+      "name": "Insights",
+      "items": [
+        {
+          "worth": 1,
+          "crafted": false,
+          "items": [
+            77302
+          ]
+        },
+        {
+          "worth": 25,
+          "crafted": true,
+          "items": [
+            78989,
+            80516
+          ]
+        },
+        {
+          "worth": 25,
+          "crafted": true,
+          "name": "Refined Armor",
+          "reduced_worth": 0,
+          "reduced_amount": 6,
+          "items": [
+            80387,
+            80236,
+            80648,
+            80673,
+            80427,
+            80127,
+            80634,
+            80366,
+            80607,
+            80658,
+            80675,
+            80177,
+            80441,
+            80264,
+            80120,
+            80460,
+            80275,
+            80583
+          ]
+        },
+        {
+          "worth": 50,
+          "crafted": true,
+          "name": "Perfected Armor",
+          "reduced_worth": 25,
+          "reduced_amount": 6,
+          "items": [
+            80384,
+            80435,
+            80254,
+            80205,
+            80277,
+            80557,
+            80296,
+            80145,
+            80578,
+            80161,
+            80252,
+            80281,
+            80248,
+            80131,
+            80190,
+            80111,
+            80356,
+            80399
+          ]
+        }
+      ]
     },
-    "divinations": {
-      "legendary_divination": 88485
-	  "coalescence": 91234
-	  "gift_of_compassion": 91225
+    {
+      "name": "Divinations",
+      "items": [
+        {
+          "worth": 1,
+          "crafted": false,
+          "items": [
+            88485
+          ]
+        },
+        {
+          "worth": 150,
+          "crafted": true,
+          "items": [
+            91225,
+            91234
+          ]
+        }
+      ]
     }
-  },
+  ],
   "killproofs": {
     "areas": [
       {
@@ -920,7 +964,8 @@
       },
       {
         "name": "The Key of Ahdashim",
-        "encounters": [{
+        "encounters": [
+          {
             "name": "Adina",
             "type": "single_achievement",
             "id": 4796

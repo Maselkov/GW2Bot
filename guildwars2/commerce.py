@@ -208,8 +208,8 @@ class CommerceMixin:
         gold, remainder = divmod(money, 10000)
         silver, copper = divmod(remainder, 100)
         kwargs = {"fallback": True, "fallback_fmt": " {} "}
-        gold = "{}{}".format(gold, self.get_emoji(ctx, "gold",
-                                                  **kwargs)) if gold else ""
+        gold = "{}{}".format(gold, self.get_emoji(ctx, "gold", **
+                                                  kwargs)) if gold else ""
         silver = "{}{}".format(silver, self.get_emoji(
             ctx, "silver", **kwargs)) if silver else ""
         copper = "{}{}".format(copper, self.get_emoji(
@@ -283,7 +283,7 @@ class CommerceMixin:
                     "price of 400 gems drops below **{}**".format(
                         current // 10000))
             else:
-                return await self.send_cmd_help(ctx)
+                return await ctx.send_help(ctx.command)
         if not 0 <= gold <= 500:
             return await ctx.send("Invalid value")
         price = gold * 10000

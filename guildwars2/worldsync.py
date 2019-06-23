@@ -95,6 +95,35 @@ class WorldsyncMixin:
                 worlds.remove(world)
                 return worlds
 
+    async def worldsync_member(self, member, world_role, ally_role, world_id,
+                               linked_worlds):
+        try:
+            on_world = False
+            on_linked = False
+            try:
+                results = await self.call_api("account", member)
+                user_world = results["world"]
+                if user_world == world_id:
+                    on_world = True
+                if user_world in linked_worlds:
+                    on_linked = True
+            except APIError:
+                pass
+            if on_world:
+                if world_role not in member.roles:
+                    await member.add_roles(world_role)
+                return
+            if on_linked:
+                if ally_role not in member.roles:
+                    await member.add_roles(ally_role)
+                return
+            if world_role in member.roles:
+                await member.remove_roles(world_role)
+            if ally_role in member.roles:
+                await member.remove_roles(ally_role)
+        except:
+            pass
+
     async def sync_worlds(self, doc, guild):
         world_id = doc.get("world_id")
         try:
@@ -110,26 +139,8 @@ class WorldsyncMixin:
         for member in guild.members:
             if member.bot:
                 continue
-            try:
-                try:
-                    results = await self.call_api("account", member)
-                    wid = results["world"]
-                except APIError as e:
-                    continue
-                if wid == world_id:
-                    if world_role not in member.roles:
-                        await member.add_roles(world_role)
-                    continue
-                if wid in linked_worlds:
-                    if ally_role not in member.roles:
-                        await member.add_roles(ally_role)
-                    continue
-                if world_role in member.roles:
-                    await member.remove_roles(world_role)
-                if ally_role in member.roles:
-                    await member.remove_roles(ally_role)
-            except:
-                pass
+            await self.worldsync_member(member, world_role, ally_role,
+                                        world_id, linked_worlds)
             await asyncio.sleep(0.25)
 
     @tasks.loop(minutes=5)
@@ -145,3 +156,27 @@ class WorldsyncMixin:
     @worldsync_task.before_loop
     async def before_worldsync_task(self):
         await self.bot.wait_until_ready()
+
+    @commands.Cog.listener("on_member_join")
+    async def worldsync_on_member_join(self, member):
+        if member.bot:
+            return
+        guild = member.guild
+        doc = await self.bot.database.get(guild, self)
+        worldsync = doc.get("worldsync", {})
+        enabled = worldsync.get("enabled", False)
+        if not enabled:
+            return
+        world_role = guild.get_role(doc.get("world_role"))
+        ally_role = guild.get_role(doc.get("ally_role"))
+        if not world_role or not ally_role:
+            return
+        world_id = doc.get("world_id")
+        try:
+            linked_worlds = await self.get_linked_worlds(world_id)
+        except APIError as e:
+            return
+        if not linked_worlds:
+            return
+        await self.worldsync_member(member, world_role, ally_role, world_id,
+                                    linked_worlds)

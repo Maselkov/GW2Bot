@@ -931,7 +931,7 @@ class CharactersMixin:
         endpoint = "characters/" + character.replace(" ", "%20")
         doc = await self.db.characters.find_one({"name": character})
         if doc:
-            user = await self.bot.get_user_info(doc["owner"])
+            user = await self.bot.fetch_user(doc["owner"])
             try:
                 return await self.call_api(endpoint, user)
             except APIError:
@@ -967,8 +967,8 @@ class CharactersMixin:
                                             ["name", "icon", "color"])
         color = discord.Color(
             int(
-                self.gamedata["professions"][character["profession"]
-                                             .lower()]["color"], 0))
+                self.gamedata["professions"][character["profession"].lower()]
+                ["color"], 0))
         name = await get_elite_spec(character) or character["profession"]
         icon = get_icon_url(name)
         return Profession(name, icon, color)

@@ -737,7 +737,7 @@ class NotiifiersMixin:
             }, self)
             async for doc in cursor:
                 try:
-                    user = await self.bot.get_user_info(doc["_id"])
+                    user = await self.bot.fetch_user(doc["_id"])
                     await self.bot.database.set_user(
                         user, {"poptrack": wid}, self, operator="$pull")
                     await user.send(msg)
