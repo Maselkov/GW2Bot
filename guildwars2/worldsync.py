@@ -87,6 +87,19 @@ class WorldsyncMixin:
         await self.sync_worlds(worldsync, ctx.guild)
         await ctx.send("Worldsync complete")
 
+    @worldsync.command(name="requirerank")
+    async def worldsync_requirerank(self, ctx, rank: int):
+        """Set the minimum WvW rank required to get World/Ally roles"""
+        if rank < 0:
+            return await ctx.send("Invalid rank")
+        await self.bot.database.set(ctx.guild, {"worldsync.rank": rank}, self)
+        if rank == 0:
+            return await ctx.send("Rank requirement disabled")
+        await ctx.send(
+            f"Only people with rank {rank} and above will now be "
+            "synced. `progression` scope will now be required "
+            "in the API keys in order to sync. Set to 0 to disable.")
+
     async def get_linked_worlds(self, world):
         endpoint = f"wvw/matches/overview?world={world}"
         results = await self.call_api(endpoint)
@@ -96,10 +109,13 @@ class WorldsyncMixin:
                 return worlds
 
     async def worldsync_member(self, member, world_role, ally_role, world_id,
-                               linked_worlds):
+                               linked_worlds, required_rank):
         try:
             on_world = False
             on_linked = False
+            passed_rank_requirement = True
+            if required_rank:
+                passed_rank_requirement = False
             try:
                 results = await self.call_api("account", member)
                 user_world = results["world"]
@@ -107,13 +123,16 @@ class WorldsyncMixin:
                     on_world = True
                 if user_world in linked_worlds:
                     on_linked = True
+                rank = results.get("wvw_rank", 0)
+                if rank >= required_rank:
+                    passed_rank_requirement = True
             except APIError:
                 pass
-            if on_world:
+            if on_world and passed_rank_requirement:
                 if world_role not in member.roles:
                     await member.add_roles(world_role)
                 return
-            if on_linked:
+            if on_linked and passed_rank_requirement:
                 if ally_role not in member.roles:
                     await member.add_roles(ally_role)
                 return
@@ -136,11 +155,12 @@ class WorldsyncMixin:
         ally_role = guild.get_role(doc.get("ally_role"))
         if not world_role or not ally_role:
             return
+        required_rank = doc.get("rank", 0)
         for member in guild.members:
             if member.bot:
                 continue
             await self.worldsync_member(member, world_role, ally_role,
-                                        world_id, linked_worlds)
+                                        world_id, linked_worlds, required_rank)
             await asyncio.sleep(0.25)
 
     @tasks.loop(minutes=5)
@@ -167,16 +187,17 @@ class WorldsyncMixin:
         enabled = worldsync.get("enabled", False)
         if not enabled:
             return
-        world_role = guild.get_role(doc.get("world_role"))
-        ally_role = guild.get_role(doc.get("ally_role"))
+        world_role = guild.get_role(worldsync.get("world_role"))
+        ally_role = guild.get_role(worldsync.get("ally_role"))
         if not world_role or not ally_role:
             return
-        world_id = doc.get("world_id")
+        world_id = worldsync.get("world_id")
         try:
             linked_worlds = await self.get_linked_worlds(world_id)
         except APIError as e:
             return
         if not linked_worlds:
             return
+        required_rank = worldsync.get("rank", 0)
         await self.worldsync_member(member, world_role, ally_role, world_id,
-                                    linked_worlds)
+                                    linked_worlds, required_rank)
