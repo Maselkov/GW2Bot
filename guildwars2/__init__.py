@@ -49,10 +49,12 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
         self.tasks = []
         self.waiting_for = []
         self.emojis = {}
+        self.worldsync_task.start()
 
     def cog_unload(self):
         for task in self.tasks:
             task.cancel()
+        self.worldsync_task.stop()
         self.tasks = []
 
     async def error_handler(self, ctx, exc):
