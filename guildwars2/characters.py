@@ -1,3 +1,4 @@
+import asyncio
 import collections
 import datetime
 import re
@@ -71,6 +72,76 @@ class CharactersMixin:
         """Character related commands"""
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
+
+    @character.command(name="fashion")
+    @commands.cooldown(1, 10, BucketType.user)
+    async def character_fashion(self, ctx, *, character: str):
+        """Displays the fashion wars of given character
+        You must be the owner of the character.
+
+        Required permissions: characters
+        """
+        character = character.title()
+        await ctx.trigger_typing()
+        try:
+            results = await self.get_character(ctx, character)
+        except APINotFound:
+            return await ctx.send("Invalid character name")
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+        eq = results["equipment"]
+        gear = {}
+        pieces = [
+            "Helm", "Shoulders", "Coat", "Gloves", "Leggings", "Boots",
+            "Backpack", "WeaponA1", "WeaponA2", "WeaponB1", "WeaponB2"
+        ]
+        gear = {piece: {} for piece in pieces}
+        profession = await self.get_profession(results)
+        level = results["level"]
+        for item in eq:
+            slot = item["slot"]
+            if slot not in pieces:
+                continue
+            dye_ids = item.get("dyes", [])
+            dyes = []
+            for dye in dye_ids:
+                if dye:
+                    doc = await self.db.colors.find_one({"_id": dye})
+                    if doc:
+                        dyes.append(doc["name"])
+                        continue
+                dyes.append(None)
+            gear[slot]["dyes"] = dyes
+            skin = item.get("skin")
+            if skin:
+                doc = await self.db.skins.find_one({"_id": skin})
+                if doc:
+                    gear[slot]["name"] = doc["name"]
+                    continue
+            doc = await self.db.items.find_one({"_id": item["id"]})
+            gear[slot]["name"] = doc["name"]
+
+        embed = discord.Embed(description="Fashion", colour=profession.color)
+        for piece in pieces:
+            info = gear[piece]
+            if not info:
+                continue
+            value = []
+            for i, dye in enumerate(info["dyes"], start=1):
+                if dye:
+                    value.append(f"Channel {i}: {dye}")
+            value = "\n".join(value)
+            if not value:
+                value = zero_width_space
+            embed.add_field(name=info["name"], value=value, inline=False)
+        embed.set_author(name=character)
+        embed.set_footer(
+            text="A level {} {} ".format(level, profession.name.lower()),
+            icon_url=profession.icon)
+        try:
+            await ctx.send(embed=embed)
+        except discord.Forbidden as e:
+            await ctx.send("Need permission to embed links")
 
     @character.command(name="info")
     @commands.cooldown(1, 5, BucketType.user)
@@ -195,37 +266,7 @@ class CharactersMixin:
                          format(ctx.prefix))
         await ctx.send("{.mention}".format(user), embed=embed)
 
-    @character.command(name="gear")
-    @commands.cooldown(1, 10, BucketType.user)
-    async def character_gear(self, ctx, *, character: str):
-        """Displays the gear of given character
-        You must be the owner of the character.
-
-        Required permissions: characters
-        """
-
-        def handle_duplicates(upgrades):
-            result = []
-            already_occured = []
-            for u in upgrades:
-                if u in already_occured:
-                    continue
-                already_occured.append(u)
-                count = upgrades.count(u)
-                result.append(u + " x{}".format(count) if count != 1 else u)
-            return result
-
-        def item_name(item, item_type):
-            level = "" if item["level"] == 80 else " (Level {})".format(
-                item["level"])
-            for trinket in "Accessory", "Ring":
-                if item_type.startswith(trinket):
-                    return trinket + level
-            if item_type.startswith("Weapon"):
-                return "{} (Set {})".format(item["details"]["type"],
-                                            item_type[-2]) + level
-            return item_type + level
-
+    async def display_gear(self, ctx, character, mode="pve"):
         character = character.title()
         await ctx.trigger_typing()
         try:
@@ -234,72 +275,196 @@ class CharactersMixin:
             return await ctx.send("Invalid character name")
         except APIError as e:
             return await self.error_handler(ctx, e)
+        task = asyncio.create_task(self.render_traitlines(results, mode=mode))
         eq = results["equipment"]
-        gear = {}
-        pieces = [
-            "Helm", "Shoulders", "Coat", "Gloves", "Leggings", "Boots",
-            "Ring1", "Ring2", "Amulet", "Accessory1", "Accessory2", "Backpack",
-            "WeaponA1", "WeaponA2", "WeaponB1", "WeaponB2"
-        ]
-        for piece in pieces:
-            gear[piece] = {
-                "id": None,
-                "upgrades": [],
-                "infusions": [],
-                "stat": None,
-                "name": None,
-                "rarity": None
-            }
-        for item in eq:
+        profession = await self.get_profession(results, mode=mode)
+        description = mode.upper() + " Build" if mode != "pve" else "Build"
+        embed = discord.Embed(description=description, colour=profession.color)
+        runes = collections.defaultdict(int)
+        bonuses = collections.defaultdict(int)
+        can_use_emojis = ctx.channel.permissions_for(ctx.me).external_emojis
+        if mode in ("pve", "wvw"):
+            armor_lines = []
+            trinket_lines = []
+            weapon_sets = {"A": [], "B": []}
+            armors = [
+                "Helm", "Shoulders", "Coat", "Gloves", "Leggings", "Boots"
+            ]
+            trinkets = [
+                "Ring1", "Ring2", "Amulet", "Accessory1", "Accessory2",
+                "Backpack"
+            ]
+            weapons = ["WeaponA1", "WeaponA2", "WeaponB1", "WeaponB2"]
+            pieces = armors + trinkets + weapons
             for piece in pieces:
-                if item["slot"] == piece:
-                    gear[piece]["id"] = item["id"]
-                    c = await self.fetch_item(item["id"])
-                    gear[piece]["rarity"] = c["rarity"]
-                    gear[piece]["name"] = item_name(c, piece)
-                    if "upgrades" in item:
-                        for u in item["upgrades"]:
-                            upgrade = await self.db.items.find_one({"_id": u})
-                            gear[piece]["upgrades"].append(upgrade["name"])
-                    if "infusions" in item:
-                        for u in item["infusions"]:
-                            infusion = await self.db.items.find_one({"_id": u})
-                            gear[piece]["infusions"].append(infusion["name"])
-                    if "stats" in item:
-                        gear[piece]["stat"] = await self.fetch_statname(
-                            item["stats"]["id"])
+                piece_name = piece
+                if piece[-1].isdigit():
+                    piece_name = piece[:-1]
+                line = ""
+                stat_name = ""
+                upgrades_to_display = []
+                for item in eq:
+                    if item["slot"] == piece:
+                        item_doc = await self.fetch_item(item["id"])
+                        if can_use_emojis:
+                            line = self.get_emoji(
+                                ctx, f"{item_doc['rarity']}_{piece_name}")
+                        else:
+                            if piece.startswith("Weapon"):
+                                if piece.endswith("1"):
+                                    piece_name = "Main hand"
+                                else:
+                                    piece_name = "Off hand"
+                            line = f"**{piece_name}**: {item_doc['rarity']} "
+                        for upgrade_type in "infusions", "upgrades":
+                            if upgrade_type in item:
+                                for upgrade in item[upgrade_type]:
+                                    upgrade_doc = await self.db.items.find_one(
+                                        {
+                                            "_id": upgrade
+                                        })
+                                    details = upgrade_doc["details"]
+                                    if details["type"] == "Rune":
+                                        runes[upgrade_doc["name"]] += 1
+                                    if details["type"] == "Sigil":
+                                        upgrades_to_display.append(
+                                            upgrade_doc["name"])
+                                    if "infix_upgrade" in details:
+                                        if "attributes" in details[
+                                                "infix_upgrade"]:
+                                            for attribute in details[
+                                                    "infix_upgrade"][
+                                                        "attributes"]:
+                                                bonuses[attribute[
+                                                    "attribute"]] += attribute[
+                                                        "modifier"]
+                        if "stats" in item:
+                            stat_name = await self.fetch_statname(
+                                item["stats"]["id"])
+                        else:
+                            try:
+                                stat_id = item_doc["details"]["infix_upgrade"][
+                                    "id"]
+                                stat_name = await self.fetch_statname(stat_id)
+                            except KeyError:
+                                pass
+                        line += stat_name
+                        if piece.startswith("Weapon"):
+                            line += " " + item_doc["details"]["type"]
+                        if upgrades_to_display:
+                            line += f"\n*{' & '.join(upgrades_to_display)}*"
+                if not line and not piece.startswith("Weapon"):
+                    if can_use_emojis:
+                        line = self.get_emoji(ctx,
+                                              f"basic_{piece_name}") + "NONE"
                     else:
-                        try:
-                            statid = c["details"]["infix_upgrade"]["id"]
-                            gear[piece]["stat"] = await self.fetch_statname(
-                                statid)
-                        except KeyError:
-                            gear[piece]["stat"] = ""
-        profession = await self.get_profession(results)
-        level = results["level"]
-        data = discord.Embed(description="Gear", colour=profession.color)
-        for piece in pieces:
-            if gear[piece]["id"] is not None:
-                statname = gear[piece]["stat"]
-                rarity = gear[piece]["rarity"]
-                itemname = gear[piece]["name"]
-                upgrade = handle_duplicates(gear[piece]["upgrades"])
-                infusion = handle_duplicates(gear[piece]["infusions"])
-                msg = "\n".join(upgrade + infusion)
-                if not msg:
-                    msg = zero_width_space
-                data.add_field(
-                    name="{} {} {}".format(statname, rarity, itemname),
-                    value=msg,
-                    inline=False)
-        data.set_author(name=character)
-        data.set_footer(
-            text="A level {} {} ".format(level, profession.name.lower()),
-            icon_url=profession.icon)
+                        line = f"**{piece_name}**: NONE"
+                if piece in armors:
+                    armor_lines.append(line)
+                elif piece in weapons:
+                    if line:
+                        weapon_sets[piece[-2]].append(line)
+                elif piece in trinkets:
+                    trinket_lines.append(line)
+            lines = []
+            lines.append("\n".join(armor_lines))
+            if runes:
+                for rune, count in runes.items():
+                    lines.append(f"*{rune}* ({count}/6)")
+            embed.add_field(name="> **ARMOR**", value="\n".join(lines))
+            embed.add_field(
+                name="> **TRINKETS**", value="\n".join(trinket_lines))
+            if any(weapon_sets["A"]):
+                embed.add_field(
+                    name="> **WEAPON SET #1**",
+                    value="\n".join(weapon_sets["A"]))
+            if any(weapon_sets["B"]):
+                embed.add_field(
+                    name="> **WEAPON SET #2**",
+                    value="\n".join(weapon_sets["B"]))
+            upgrade_lines = []
+            for bonus, count in bonuses.items():
+                emoji = self.get_emoji(ctx, f"attribute_{bonus}")
+                bonus = self.readable_attribute(bonus)
+                upgrade_lines.append(f"{emoji}**{bonus}**: {count}")
+            if not upgrade_lines:
+                upgrade_lines = ["None found"]
+            embed.add_field(
+                name="> **BONUSES FROM UPGRADES**",
+                value="\n".join(upgrade_lines),
+                inline=False)
+            attributes = await self.calculate_character_attributes(results)
+            column_1 = []
+            column_2 = [zero_width_space,
+                        zero_width_space]  # cause power is in a different row
+            for index, (name, value) in enumerate(attributes.items()):
+                line = self.get_emoji(ctx, f"attribute_{name}")
+                line += f"**{name}**: {value}"
+                if index < 9:
+                    column_1.append(line)
+                else:
+                    column_2.append(line)
+            embed.add_field(name="> **ATTRIBUTES**", value="\n".join(column_1))
+            embed.add_field(name=zero_width_space, value="\n".join(column_2))
+        else:
+            if "equipment_pvp" not in results:
+                return await ctx.send("API key missing pvp permission")
+            amulet = results["equipment_pvp"]["amulet"]
+            amulet_doc = await self.db.pvp_amulets.find_one({"_id": amulet})
+            if amulet_doc:
+                lines = [f"**{amulet_doc['name']}"]
+                attributes = amulet_doc["attributes"]
+                for name, value in attributes.items():
+                    name = self.readable_attribute(name)
+                    line = self.get_emoji(ctx, f"attribute_{name}")
+                    line += f"**{name}**: {value}"
+                    lines.append(line)
+                embed.add_field(name="> **AMULET**", value="\n".join(lines))
+        embed.set_author(name=character, icon_url=profession.icon)
         try:
-            await ctx.send(embed=data)
+            file, = await asyncio.gather(task)
+            embed.set_image(url=f"attachment://{file.filename}")
+        except AttributeError:
+            file = None
+        embed.set_footer(
+            text=("Colors of emojis represent item rarity. "
+                  "Attributes aren't guaranteed to be accurate."),
+            icon_url=self.bot.user.avatar_url)
+        try:
+            await ctx.send(embed=embed, file=file)
         except discord.Forbidden as e:
-            await ctx.send("Need permission to embed links")
+            await ctx.send(
+                "Missing permission to embed links or to upload images")
+
+    @character.command(name="gear")
+    @commands.cooldown(1, 10, BucketType.user)
+    async def character_gear(self, ctx, *, character: str):
+        """Displays the gear, attributes and build of given character
+        You must be the owner of the character.
+
+        Required permissions: characters
+        """
+        await self.display_gear(ctx, character)
+
+    @character.command(name="pvpgear")
+    @commands.cooldown(1, 10, BucketType.user)
+    async def character_pvpgear(self, ctx, *, character: str):
+        """Displays the gear, attributes and build of given character
+        You must be the owner of the character.
+
+        Required permissions: characters
+        """
+        await self.display_gear(ctx, character, "pvp")
+
+    @character.command(name="wvwgear")
+    @commands.cooldown(1, 10, BucketType.user)
+    async def character_wvwgear(self, ctx, *, character: str):
+        """Displays the gear, attributes and build of given character
+        You must be the owner of the character.
+
+        Required permissions: characters
+        """
+        await self.display_gear(ctx, character, "wvw")
 
     @character.command(name="birthdays")
     async def character_birthdays(self, ctx):
@@ -349,15 +514,14 @@ class CharactersMixin:
                 k, suffix(k)))
         await ctx.send(msg, embed=embed)
 
-    @character.command(name="attributes")
-    @commands.cooldown(1, 10, BucketType.user)
-    async def character_attributes(self, ctx, *, character: str):
-        """Lists attributes of given character
+    def readable_attribute(self, attribute_name):
+        attribute_sub = re.sub(r"(\w)([A-Z])", r"\1 \2", attribute_name)
+        attribute_sub = re.sub('Crit ', 'Critical ', attribute_sub)
+        attribute_sub = re.sub('Healing', 'Healing Power', attribute_sub)
+        attribute_sub = re.sub('defense', 'Armor', attribute_sub)
+        return attribute_sub
 
-        Required permissions: characters
-        """
-
-        # Helper functions
+    async def calculate_character_attributes(self, character):
         def search_lvl_to_increase(level: int, lvl_dict):
             for increase, lvl in lvl_dict.items():
                 if lvl[0] <= level <= lvl[1]:
@@ -397,7 +561,6 @@ class CharactersMixin:
                 new_lvl = level - 1
                 return calc_base_health(new_lvl, new_acc, health_dict)
 
-        character = character.title()
         attr_list = [
             'defense', 'Power', 'Vitality', 'Precision', 'Toughness',
             'Critical Chance', 'Health', 'Concentration', 'Expertise',
@@ -466,23 +629,8 @@ class CharactersMixin:
         ]
         attr_dict = {key: 0 for (key) in attr_list}
         runes = {}
-        await ctx.trigger_typing()
-        try:
-            results = await self.get_character(ctx, character)
-        except APINotFound:
-            return await ctx.send("Invalid character name")
-        except APIError as e:
-            return await self.error_handler(ctx, e)
-        profession = await self.get_profession(results)
-        level = results["level"]
-        embed = discord.Embed(
-            description="Attributes of {0}".format(character),
-            colour=profession.color)
-        embed.set_thumbnail(url=profession.icon)
-        embed.set_footer(
-            text="A level {} {} ".format(level, profession.name),
-            icon_url=profession.icon)
-        eq = results["equipment"]
+        level = character["level"]
+        eq = character["equipment"]
         for piece in eq:
             item = await self.fetch_item(piece["id"])
             # Gear with selectable values
@@ -505,7 +653,7 @@ class CharactersMixin:
                 if piece["slot"] not in ignore_list:
                     attr_dict['defense'] += item["details"]["defense"]
             # Mapping for old attribute names
-            attr_dict["Concentration"] += attr_dict["BoonDuration"]
+        #   attr_dict["Concentration"] += attr_dict["BoonDuration"]
             attr_dict["Ferocity"] += attr_dict["CritDamage"]
             attr_dict["Expertise"] += attr_dict["ConditionDuration"]
             # Reset old mapped attributes
@@ -635,32 +783,29 @@ class CharactersMixin:
 
         # Calculate base health
         attr_dict["Health"] = calc_base_health(
-            level, 0, profession_group[results["profession"].lower()])
+            level, 0, profession_group[character["profession"].lower()])
         attr_dict["Health"] += attr_dict["Vitality"] * 10
 
-        ordered_list = ('Power', 'Toughness', 'defense', 'Vitality', 'Health',
-                        'Precision', 'Critical Chance', 'Ferocity',
-                        'CritDamage', 'ConditionDamage', 'Healing',
-                        'Expertise', 'ConditionDuration', 'Concentration',
-                        'BoonDuration', 'AgonyResistance')
+        ordered_list = ('Power', 'Toughness', 'Vitality', 'Precision',
+                        'Ferocity', 'ConditionDamage', 'Expertise',
+                        'Concentration', 'AgonyResistance', 'defense',
+                        'Health', 'Critical Chance', 'CritDamage', 'Healing',
+                        'ConditionDuration', 'BoonDuration')
         # First one is not inline for layout purpose
-        inline = False
+        output = {}
         for attribute in ordered_list:
             if attribute in percentage_list:
                 attr_dict[attribute] = '{0}%'.format(attr_dict[attribute])
-            attribute_sub = re.sub(r"(\w)([A-Z])", r"\1 \2", attribute)
-            attribute_sub = re.sub('Crit ', 'Critical ', attribute_sub)
-            embed.add_field(
-                name=attribute_sub.title(),
-                value=attr_dict[attribute],
-                inline=inline)
-            inline = True
-        try:
-            await ctx.send(embed=embed)
-        except discord.Forbidden:
-            await ctx.send("Need permission to embed links")
+            attribute_sub = self.readable_attribute(attribute)
+            output[attribute_sub.title()] = attr_dict[attribute]
+        return output
 
-    @character.command(name="build", aliases=["pvebuild"])
+    @character.command(name="attributes", hidden=True)
+    @commands.cooldown(1, 10, BucketType.user)
+    async def character_attributes(self, ctx, *, character: str):
+        await ctx.invoke(self.character_gear, character=character)
+
+    @character.command(name="build", aliases=["pvebuild"], hidden=True)
     @commands.cooldown(1, 10, BucketType.user)
     async def character_build(self, ctx, *, character: str):
         """Displays the build of given character
@@ -668,21 +813,9 @@ class CharactersMixin:
 
         Required permissions: characters
         """
-        character = character.title()
-        await ctx.trigger_typing()
-        try:
-            results = await self.get_character(ctx, character)
-        except APINotFound:
-            return await ctx.send("Invalid character name")
-        except APIError as e:
-            return await self.error_handler(ctx, e)
-        embed = await self.build_embed(results, "pve")
-        try:
-            await ctx.send(embed=embed)
-        except discord.Forbidden:
-            await ctx.send("Need permission to embed links")
+        await ctx.invoke(self.character_gear, character=character)
 
-    @character.command(name="pvpbuild")
+    @character.command(name="pvpbuild", hidden=True)
     @commands.cooldown(1, 10, BucketType.user)
     async def character_pvpbuild(self, ctx, *, character: str):
         """Displays the build of given character
@@ -690,21 +823,9 @@ class CharactersMixin:
 
         Required permissions: characters
         """
-        character = character.title()
-        await ctx.trigger_typing()
-        try:
-            results = await self.get_character(ctx, character)
-        except APINotFound:
-            return await ctx.send("Invalid character name")
-        except APIError as e:
-            return await self.error_handler(ctx, e)
-        embed = await self.build_embed(results, "pvp")
-        try:
-            await ctx.send(embed=embed)
-        except discord.Forbidden:
-            await ctx.send("Need permission to embed links")
+        await ctx.invoke(self.character_pvpgear, character=character)
 
-    @character.command(name="wvwbuild")
+    @character.command(name="wvwbuild", hidden=True)
     @commands.cooldown(1, 10, BucketType.user)
     async def character_wvwbuild(self, ctx, *, character: str):
         """Displays the build of given character
@@ -712,19 +833,7 @@ class CharactersMixin:
 
         Required permissions: characters
         """
-        character = character.title()
-        await ctx.trigger_typing()
-        try:
-            results = await self.get_character(ctx, character)
-        except APINotFound:
-            return await ctx.send("Invalid character name")
-        except APIError as e:
-            return await self.error_handler(ctx, e)
-        embed = await self.build_embed(results, "wvw")
-        try:
-            await ctx.send(embed=embed)
-        except discord.Forbidden:
-            await ctx.send("Need permission to embed links")
+        await ctx.invoke(self.character_wvwgear, character=character)
 
     async def build_embed(self, results, mode):
         profession = await self.get_profession(results, mode=mode)

@@ -1,9 +1,12 @@
+import io
 import math
 import re
 
 import discord
+import requests
 from discord.ext import commands
 from discord.ext.commands.cooldowns import BucketType
+from PIL import Image, ImageDraw
 
 from .utils.chat import cleanup_xml_tags, embed_list_lines
 from .utils.db import prepare_search
@@ -113,8 +116,8 @@ class SkillsMixin:
 
         replacement_attrs = [("BoonDuration", "Concentration"),
                              ("ConditionDuration", "Expertise"),
-                             ("ConditionDamage",
-                              "Condition Damage"), ("CritDamage", "Ferocity")]
+                             ("ConditionDamage", "Condition Damage"),
+                             ("CritDamage", "Ferocity")]
         description = None
         if "description" in skill:
             description = cleanup_xml_tags(skill["description"])
@@ -358,3 +361,99 @@ class SkillsMixin:
                 })
                 continue
         return fields
+
+    def render_specialization(self, specialization, active_traits, trait_docs):
+        session = requests.Session()
+
+        def get_trait_image(icon_url, size):
+            resp = session.get(icon_url)
+            image = Image.open(io.BytesIO(resp.content))
+            image = image.crop((4, 4, image.width - 4, image.height - 4))
+            return image.resize((size, size), Image.ANTIALIAS)
+
+        resp = session.get(specialization["background"])
+        background = Image.open(io.BytesIO(resp.content))
+        background = background.crop((0, 121, 645, 256))
+        draw = ImageDraw.ImageDraw(background)
+        polygon_points = [
+            120, 11, 167, 39, 167, 93, 120, 121, 73, 93, 73, 39, 120, 11
+        ]
+        draw.line(polygon_points, fill=(183, 190, 195), width=3)
+        mask = Image.new("RGBA", background.size, color=(0, 0, 0, 135))
+        d = ImageDraw.ImageDraw(mask)
+        d.polygon(polygon_points, fill=(0, 0, 0, 0))
+        background.paste(mask, mask=mask)
+        mask.close()
+        column = 0
+        size = (background.height - 18) // 3
+        trait_mask = Image.new("RGBA", (size, size), color=(0, 0, 0, 135))
+        for index, trait in enumerate(specialization["major_traits"]):
+            trait_doc = trait_docs[trait]
+            image = get_trait_image(trait_doc["icon"], size)
+            if trait not in active_traits:
+                image.paste(trait_mask, mask=trait_mask)
+            background.paste(
+                image, (272 + (column * 142), 6 + ((size + 3) * (index % 3))),
+                image)
+            if index and not (index + 1) % 3:
+                column += 1
+            image.close()
+        trait_mask.close()
+        minor_trait_mask = Image.new("RGBA", (size, size))
+        d = ImageDraw.ImageDraw(minor_trait_mask)
+        d.polygon([13, 2, 25, 2, 35, 12, 35, 27, 21, 36, 17, 36, 3, 27, 3, 12],
+                  fill=(0, 0, 0, 255))
+        for index, trait in enumerate(specialization["minor_traits"]):
+            trait_doc = trait_docs[trait]
+            image = get_trait_image(trait_doc["icon"], size)
+            background.paste(image,
+                             (272 - size - 32 + (index * 142), 6 + size + 3),
+                             minor_trait_mask)
+            image.close()
+        minor_trait_mask.close()
+        return background
+
+    async def render_traitlines(self, character, mode="pve"):
+        def render_specializations(to_render):
+            image = None
+            draw = None
+            for index, d in enumerate(to_render):
+                spec_image = self.render_specialization(
+                    d["spec_doc"], d["active_traits"], d["traits"])
+                if not image:
+                    image = Image.new(
+                        "RGB",
+                        (spec_image.width, spec_image.height * len(to_render)))
+                    draw = ImageDraw.ImageDraw(image)
+                image.paste(spec_image, (0, spec_image.height * index))
+                draw.text(
+                    (5, (spec_image.height * index) + spec_image.height - 35),
+                    d["spec_doc"]["name"],
+                    fill="#FFFFFF",
+                    font=self.font)
+            output = io.BytesIO()
+            image.save(output, "png")
+            output.seek(0)
+            file = discord.File(output, "specializations.png")
+            return file
+
+        specializations = character["specializations"][mode]
+        to_render = []
+        for spec in specializations:
+            if not spec:
+                continue
+            spec_doc = await self.db.specializations.find_one({
+                "_id": spec["id"]
+            })
+            trait_docs = {}
+            for trait in spec_doc["minor_traits"] + spec_doc["major_traits"]:
+                trait_docs[trait] = await self.db.traits.find_one({
+                    "_id": trait
+                })
+            to_render.append({
+                "spec_doc": spec_doc,
+                "traits": trait_docs,
+                "active_traits": spec["traits"]
+            })
+        return await self.bot.loop.run_in_executor(
+            None, render_specializations, to_render)
