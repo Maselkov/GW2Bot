@@ -1,5 +1,6 @@
 from .exceptions import (APIBadRequest, APIConnectionError, APIForbidden,
-                         APIInactiveError, APIInvalidKey, APINotFound)
+                         APIInactiveError, APIInvalidKey, APINotFound,
+                         APIRateLimited)
 
 
 class ApiMixin:
@@ -60,7 +61,7 @@ class ApiMixin:
                     raise APIInactiveError("API is dead")
                 if r.status == 429:
                     self.log.error("API Call limit saturated")
-                    raise APIConnectionError(
+                    raise APIRateLimited(
                         "Requests limit has been saturated. Try again later.")
                 else:
                     raise APIConnectionError("{} {}".format(r.status, err_msg))

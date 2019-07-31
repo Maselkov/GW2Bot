@@ -28,3 +28,7 @@ class APIInvalidKey(APIError):
 
 class APIKeyError(APIError):
     pass
+
+
+class APIRateLimited(APIError):
+    pass
