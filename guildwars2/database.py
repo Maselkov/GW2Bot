@@ -150,7 +150,7 @@ class DatabaseMixin:
                         "_id": item["_id"]
                     }, item, upsert=True))
             try:
-                await self.db[endpoint].bulk_write(requests)
+                await self.db[endpoint.replace("/", "_")].bulk_write(requests)
             except BulkWriteError as e:
                 self.log.exception(
                     "BWE while caching {}".format(endpoint), exc_info=e)
@@ -184,7 +184,7 @@ class DatabaseMixin:
             "titles", True
         ], ["recipes"], ["skins"], ["currencies", True], ["skills", True],
                      ["specializations", True], ["traits", True],
-                     ["worlds", True], ["minis", True]]
+                     ["worlds", True], ["minis", True], ["pvp/amulets", True]]
         for e in endpoints:
             try:
                 await self.cache_endpoint(*e)
