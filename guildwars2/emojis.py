@@ -8,7 +8,8 @@ class EmojiMixin:
 
     def get_emoji(self, ctx, emoji, *, fallback=False, fallback_fmt="{}"):
         if ctx and ctx.channel.permissions_for(ctx.me).external_emojis:
-            emoji_id = self.emojis.get(emoji.lower())
+            search_str = emoji.lower().replace(" ", "_")
+            emoji_id = self.emojis.get(search_str)
             if emoji_id:
                 emoji_obj = self.bot.get_emoji(emoji_id)
                 if emoji_obj:
