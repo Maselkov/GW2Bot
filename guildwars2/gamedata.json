@@ -688,7 +688,20 @@
           "worth": 1,
           "crafted": false,
           "items": [
-            77302
+            77302,
+            91203,
+            91215,
+            91147,
+            91160,
+            91184,
+            91252,
+            91262,
+            91187,
+            91182,
+            91186,
+            91191,
+            91267,
+            91233
           ]
         },
         {
@@ -703,6 +716,7 @@
           "worth": 25,
           "crafted": true,
           "name": "Refined Armor",
+          "upgrades_to": "Perfected Armor",
           "reduced_worth": 0,
           "reduced_amount": 6,
           "items": [
@@ -762,7 +776,17 @@
           "worth": 1,
           "crafted": false,
           "items": [
-            88485
+            88485,
+            91211,
+            91244,
+            91138,
+            91220,
+            91157,
+            91166,
+            91237,
+            91200,
+            91241,
+            91260
           ]
         },
         {
@@ -1176,5 +1200,11 @@
       "health_vessel_2",
       "medium_health_potion"
     ]
+  },
+  "attributes": {
+    "AgonyResistance": "Agony Resistance",
+    "CritDamage": "Ferocity",
+    "ConditionDuration": "Expertise",
+    "BoonDuration": "Concentration"
   }
 }

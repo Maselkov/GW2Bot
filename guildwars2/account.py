@@ -107,99 +107,74 @@ class AccountMixin:
         scopes = ["inventories", "characters"]
         if not self.can_embed_links(ctx):
             return await ctx.send("Need permission to embed links")
-        ids = self.gamedata["raid_trophies"]
-        ids_li = ids["insights"]
-        ids_ld = ids["divinations"]
-        id_legendary_insight = ids_li["legendary_insight"]
-        id_legendary_divination = ids_ld["legendary_divination"]
-        id_gift_of_prowess = ids_li["gift_of_prowess"]
-        id_envoy_insignia = ids_li["envoy_insignia"]
-        ids_refined_envoy_armor = list(ids_li["refined_envoy_armor"].values())
-        ids_perfected_envoy_armor = list(
-            ids_li["perfected_envoy_armor"].values())
-        id_coalescence = ids_ld["coalescence"]
-        id_gift_of_compassion = ids_ld["gift_of_compassion"]
-        all_ids = [
-            id_legendary_divination, id_legendary_insight, id_gift_of_prowess,
-            id_envoy_insignia, id_coalescence, id_gift_of_compassion
-        ]
-        all_ids += ids_perfected_envoy_armor + ids_refined_envoy_armor
+        await ctx.trigger_typing()
+
+        trophies = self.gamedata["raid_trophies"]
+        ids = []
+        for trophy in trophies:
+            for items in trophy["items"]:
+                ids += items["items"]
         try:
             doc = await self.fetch_key(user, scopes)
-            await ctx.trigger_typing()
             search_results = await self.find_items_in_account(
-                ctx, all_ids, doc=doc)
+                ctx, ids, doc=doc)
         except APIError as e:
             return await self.error_handler(ctx, e)
-        sum_li_on_hand = sum(search_results[id_legendary_insight].values())
-        sum_ld_on_hand = sum(search_results[id_legendary_divination].values())
-        sum_prowess = sum(search_results[id_gift_of_prowess].values())
-        sum_insignia = sum(search_results[id_envoy_insignia].values())
-        sum_coalescence = sum(search_results[id_coalescence].values())
-        sum_compassion = sum(search_results[id_gift_of_compassion].values())
-        li_prowess = sum_prowess * 25
-        li_insignia = sum_insignia * 25
-        ld_coalescence = sum_coalescence * 150
-        ld_compassion = sum_compassion * 150
-        sum_perfect_armor = 0
-        for k, v in search_results.items():
-            if k in ids_perfected_envoy_armor:
-                sum_perfect_armor += sum(v.values())
-        sum_refined_armor = 0
-        for k, v in search_results.items():
-            if k in ids_refined_envoy_armor:
-                sum_refined_armor += sum(v.values())
-        li_refined_armor = max(
-            min(sum_perfect_armor, 6) + sum_refined_armor - 6, 0) * 25
-        li_perfect_armor = min(sum_perfect_armor, 6) * 25 + max(
-            sum_perfect_armor - 6, 0) * 50
-        sum_on_hand = sum_ld_on_hand + sum_li_on_hand
-        li_crafted = (
-            li_prowess + li_insignia + li_perfect_armor + li_refined_armor)
-        ld_crafted = ld_coalescence + ld_compassion
-        sum_crafted = li_crafted + ld_crafted
-        total_li = sum_li_on_hand + li_crafted
-        total_ld = sum_ld_on_hand + ld_crafted
-        total_trophies = total_li + total_ld
-        embed = discord.Embed(
-            title="{} Legendary Insights and Divinations earned"
-            "".format(total_trophies),
-            description="{} on hand, {} used in crafting".format(
-                sum_on_hand, sum_crafted),
-            color=0x4C139D)
+        embed = discord.Embed(color=0x4C139D)
+        total = 0
+        crafted_total = 0
+        for trophy in trophies:
+            trophy_total = 0
+            breakdown = []
+            for group in trophy["items"]:
+                if "reduced_worth" in group:
+                    upgraded_sum = 0
+                    if "upgrades_to" in group:
+                        upgrade_dict = next(
+                            item for item in trophy["items"]
+                            if item.get("name") == group["upgrades_to"])
+                        for item in upgrade_dict["items"]:
+                            upgraded_sum += sum(search_results[item].values())
+                    amount = 0
+                    for item in group["items"]:
+                        amount += sum(search_results[item].values())
+                    reduced_amount = group["reduced_amount"]
+                    reduced_amount = max(reduced_amount - upgraded_sum, 0)
+                    sum_set = min(
+                        amount, reduced_amount) * group["reduced_worth"] + max(
+                            amount - reduced_amount, 0) * group["worth"]
+                    if sum_set:
+                        trophy_total += sum_set
+                        breakdown.append(
+                            f"{amount} {group['name']} - **{sum_set}**")
+                        if group["crafted"]:
+                            crafted_total += sum_set
+                    continue
+                for item in group["items"]:
+                    amount = sum(search_results[item].values())
+                    sum_item = amount * group["worth"]
+                    if sum_item:
+                        trophy_total += sum_item
+                        if group["crafted"]:
+                            crafted_total += sum_item
+                        item_doc = await self.fetch_item(item)
+                        line = f"{item_doc['name']} - **{sum_item}**"
+                        if group["worth"] != 1:
+                            line = f"{amount} " + line
+                        breakdown.append(line)
+            if trophy_total:
+                name = f"{trophy_total} Legendary {trophy['name']} earned"
+                embed.add_field(
+                    name=name, value="\n".join(breakdown), inline=False)
+                total += trophy_total
+        trophy_names = [trophy["name"] for trophy in trophies]
+        embed.title = "{} Legendary {} and {} earned".format(
+            total, ', '.join(trophy_names[:-1]), trophy_names[-1])
+        embed.description = "{} on hand, {} used in crafting".format(
+            total - crafted_total, crafted_total)
         embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
         embed.set_thumbnail(
             url="https://api.gw2bot.info/resources/icons/lild.png")
-        if total_li:
-            value = ["On hand - **{}**".format(sum_li_on_hand)]
-            if sum_perfect_armor:
-                value.append("{} Perfected Envoy Armor Pieces - **{}**".format(
-                    sum_perfect_armor, li_perfect_armor))
-            if sum_refined_armor:
-                value.append("{} Refined Envoy Armor Pieces - **{}**".format(
-                    sum_refined_armor, li_refined_armor))
-            if sum_prowess:
-                value.append("{} Gifts of Prowess - **{}**".format(
-                    sum_prowess, li_prowess))
-            if sum_insignia:
-                value.append("{} Envoy Insignia - **{}**".format(
-                    sum_insignia, li_insignia))
-            embed.add_field(
-                name="{} Legendary Insights".format(total_li),
-                value="\n".join(value),
-                inline=False)
-        if total_ld:
-            value = ["On hand - **{}**".format(sum_ld_on_hand)]
-            if sum_coalescence:
-                value.append("{} Coalescence - **{}**".format(
-                    sum_coalescence, ld_coalescence))
-            if sum_compassion:
-                value.append("{} Gifts of Compassion - **{}**".format(
-                    sum_compassion, ld_compassion))
-            embed.add_field(
-                name="{} Legendary Divinations".format(total_ld),
-                value="\n".join(value),
-                inline=False)
         embed.set_footer(
             text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
         await ctx.send(
