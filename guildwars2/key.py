@@ -106,22 +106,15 @@ class KeyMixin:
                    "those permissions checked.".format(", ".join(missing)))
             try:
                 await user.send(msg)
-            except:
+            except Exception as e:
                 pass
         try:
             if guild:
-                worldsync = doc.get("worldsync", {})
-                if worldsync.get("rank") and "progression" not in key_doc[
-                        "permissions"]:
-                    await user.send(
-                        "Warning: your key doesn't have the `progression` "
-                        "permission but the server requires it for Worldsync."
-                    )
                 await self.worldsync_on_member_join(user)
                 await self.guildsync_on_member_join(user)
                 return
             for guild in self.bot.guilds:
-                if len(guild.members) > 500:
+                if len(guild.members) > 3000:
                     continue
                 if user not in guild.members:
                     continue
