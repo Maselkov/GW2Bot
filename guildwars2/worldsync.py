@@ -198,6 +198,15 @@ class WorldsyncMixin:
             return
         if not linked_worlds:
             return
-        required_rank = worldsync.get("rank", 0)
         await self.worldsync_member(member, world_role, ally_role, world_id,
-                                    linked_worlds, required_rank)
+                                    linked_worlds)
+
+    @tasks.loop(minutes=5)
+    async def worldsync_task(self):
+        cursor = self.bot.database.iter(
+            "guilds", {"worldsync.enabled": True}, self, subdocs=["worldsync"])
+        async for doc in cursor:
+            try:
+                await self.sync_worlds(doc, doc["_obj"])
+            except Exception as e:
+                pass

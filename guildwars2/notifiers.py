@@ -7,7 +7,7 @@ import xml.etree.ElementTree as et
 
 import discord
 from bs4 import BeautifulSoup
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord.ext.commands.cooldowns import BucketType
 
 from .exceptions import APIError
@@ -643,6 +643,7 @@ class NotiifiersMixin:
         except Exception as e:
             self.log.exception(e)
 
+    @tasks.loop(minutes=3)
     async def daily_checker(self):
         if await self.check_day():
             await asyncio.sleep(300)
@@ -651,6 +652,7 @@ class NotiifiersMixin:
             await self.cache_dailies()
             await self.send_daily_notifs()
 
+    @tasks.loop(minutes=3)
     async def news_checker(self):
         to_post = await self.check_news()
         if to_post:
@@ -659,11 +661,13 @@ class NotiifiersMixin:
                 embeds.append(self.news_embed(item))
             await self.send_news(embeds)
 
+    @tasks.loop(minutes=1)
     async def game_update_checker(self):
         if await self.check_build():
             await self.send_update_notifs()
             await self.rebuild_database()
 
+    @tasks.loop(minutes=5)
     async def gem_tracker(self):
         cost = await self.get_gem_price()
         cost_coins = self.gold_to_coins(None, cost)
@@ -684,6 +688,7 @@ class NotiifiersMixin:
             except:
                 pass
 
+    @tasks.loop(minutes=5)
     async def boss_notifier(self):
         name = self.__class__.__name__
         boss = self.get_upcoming_bosses(1)[0]
@@ -717,6 +722,7 @@ class NotiifiersMixin:
             except:
                 pass
 
+    @tasks.loop(minutes=5)
     async def world_population_checker(self):
         await self.send_population_notifs()
         await asyncio.sleep(300)
@@ -744,6 +750,7 @@ class NotiifiersMixin:
                 except:
                     pass
 
+    @tasks.loop(minutes=5)
     async def forced_account_names(self):
         cursor = self.bot.database.get_guilds_cursor(
             {

@@ -2,7 +2,7 @@ import asyncio
 import datetime
 
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord.ext.commands.cooldowns import BucketType
 
 from ..exceptions import APIError, APIForbidden, APIKeyError, APINotFound
@@ -464,6 +464,7 @@ class SyncGuild:
                 "Unable to obtain member list for {0} server.".format(
                     guild.name))
 
+    @tasks.loop(seconds=60)
     async def guild_synchronizer(self):
         cursor = self.bot.database.get_guilds_cursor({
             "sync.on": True,

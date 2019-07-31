@@ -1,9 +1,9 @@
-import asyncio
 import datetime
 import json
 import logging
 
 import discord
+from PIL import ImageFont
 
 from .account import AccountMixin
 from .achievements import AchievementsMixin
@@ -49,12 +49,22 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
         self.tasks = []
         self.waiting_for = []
         self.emojis = {}
-        self.worldsync_task.start()
+        try:
+            self.font = ImageFont.truetype("GWTwoFont1p1.ttf", size=30)
+        except IOError:
+            self.font = ImageFont.load_default()
+        to_start = [
+            self.game_update_checker, self.daily_checker, self.news_checker,
+            self.gem_tracker, self.world_population_checker,
+            self.guild_synchronizer, self.boss_notifier,
+            self.forced_account_names, self.event_reminder_task,
+            self.worldsync_task
+        ]
+        self.tasks = [task.start() for task in to_start]
 
     def cog_unload(self):
         for task in self.tasks:
             task.cancel()
-        self.worldsync_task.stop()
         self.tasks = []
 
     async def error_handler(self, ctx, exc):
@@ -80,17 +90,6 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
         if not isinstance(ctx.channel, discord.abc.GuildChannel):
             return True
         return ctx.channel.permissions_for(ctx.me).embed_links
-
-    async def run_task(self, f, interval=60):
-        while self is self.bot.get_cog("GuildWars2"):
-            try:
-                await f()
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                self.log.exception(e)
-                continue
-            await asyncio.sleep(interval)
 
     async def get_embed_color(self, ctx):
         doc = await self.bot.database.users.find_one({
@@ -119,16 +118,4 @@ def setup(bot):
                 "emojis": {}
             }))
     loop.create_task(cog.prepare_emojis())
-    tasks = {
-        cog.game_update_checker: 60,
-        cog.daily_checker: 60,
-        cog.news_checker: 180,
-        cog.gem_tracker: 150,
-        cog.world_population_checker: 300,
-        cog.guild_synchronizer: 60,
-        cog.boss_notifier: 300,
-        cog.forced_account_names: 300
-    }
-    for kv in tasks.items():
-        cog.tasks.append(loop.create_task(cog.run_task(*kv)))
     bot.add_cog(cog)
