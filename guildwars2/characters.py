@@ -655,7 +655,7 @@ class CharactersMixin:
                 if piece["slot"] not in ignore_list:
                     attr_dict['defense'] += item["details"]["defense"]
             # Mapping for old attribute names
-        #   attr_dict["Concentration"] += attr_dict["BoonDuration"]
+            attr_dict["Concentration"] += attr_dict["BoonDuration"]
             attr_dict["Ferocity"] += attr_dict["CritDamage"]
             attr_dict["Expertise"] += attr_dict["ConditionDuration"]
             # Reset old mapped attributes
@@ -697,6 +697,7 @@ class CharactersMixin:
                                 attribute_name = bonus.title()
                                 attribute_name = re.sub(
                                     ' Duration', 'Duration', attribute_name)
+                                attribute_name = re.sub('Duration.*', 'Duration', attribute_name)
                                 attribute_name = re.sub(
                                     '^.* ', '', attribute_name)
                                 attribute_name = re.sub(
@@ -713,6 +714,10 @@ class CharactersMixin:
                             attributes = item_infusion["details"][
                                 "infix_upgrade"]["attributes"]
                             for attribute in attributes:
+                                if attribute["attribute"] == "BoonDuration":
+                                    attribute["attribute"] = "Concentration"
+                                if attribute["attribute"] == "ConditionDuration":
+                                    attribute["attribute"] = "Expertise"
                                 attr_dict[attribute["attribute"]] += attribute[
                                     "modifier"]
 
@@ -741,6 +746,7 @@ class CharactersMixin:
                         modifier = re.sub(' .*$', '', bonus)
                         modifier = re.sub('\+', '', modifier)
                         attribute_name = re.sub(' Damage', 'Damage', bonus)
+                        attribute_name = re.sub('Damage.*', 'Damage', attribute_name)
                         attribute_name = re.sub('^.* ', '', attribute_name)
                         if attribute_name in attr_dict:
                             attr_dict[attribute_name] += int(modifier)
@@ -749,6 +755,7 @@ class CharactersMixin:
                         modifier = re.sub('\+', '', modifier)
                         modifier = re.sub('%', '', modifier)
                         attribute_name = re.sub(' Duration', 'Duration', bonus)
+                        attribute_name = re.sub('Duration.*', 'Duration', attribute_name)
                         attribute_name = re.sub('^.* ', '', attribute_name)
                         if attribute_name in attr_dict:
                             attr_dict[attribute_name] += int(modifier)
@@ -797,7 +804,7 @@ class CharactersMixin:
         output = {}
         for attribute in ordered_list:
             if attribute in percentage_list:
-                attr_dict[attribute] = '{0}%'.format(attr_dict[attribute])
+                attr_dict[attribute] = '{0}%'.format(round(attr_dict[attribute]),2)
             attribute_sub = self.readable_attribute(attribute)
             output[attribute_sub.title()] = attr_dict[attribute]
         return output
