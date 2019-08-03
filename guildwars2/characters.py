@@ -350,9 +350,11 @@ class CharactersMixin:
                                 pass
                         line += stat_name
                         if piece.startswith("Weapon"):
-                            line += " " + item_doc["details"]["type"]
+                            line += " " + self.readable_attribute(
+                                item_doc["details"]["type"])
                         if upgrades_to_display:
-                            line += f"\n*{' & '.join(upgrades_to_display)}*"
+                            line += "\n*{}*".format(
+                                "\n".join(upgrades_to_display))
                 if not line and not piece.startswith("Weapon"):
                     if can_use_emojis:
                         line = self.get_emoji(ctx,
@@ -384,8 +386,8 @@ class CharactersMixin:
                     value="\n".join(weapon_sets["B"]))
             upgrade_lines = []
             for bonus, count in bonuses.items():
-                emoji = self.get_emoji(ctx, f"attribute_{bonus}")
                 bonus = self.readable_attribute(bonus)
+                emoji = self.get_emoji(ctx, f"attribute_{bonus}")
                 upgrade_lines.append(f"{emoji}**{bonus}**: {count}")
             if not upgrade_lines:
                 upgrade_lines = ["None found"]
@@ -748,8 +750,12 @@ class CharactersMixin:
                         modifier = re.sub('\+', '', modifier)
                         attribute_name = re.sub(' Damage', 'Damage', bonus)
                         attribute_name = re.sub('Damage.*', 'Damage', attribute_name)
+<<<<<<< HEAD
                         attribute_name = re.sub('\+\d{1,} ', '', attribute_name)
                         attribute_name = re.sub(';.*', '', attribute_name)
+=======
+                        attribute_name = re.sub('^.* ', '', attribute_name)
+>>>>>>> upstream/master
                         if attribute_name in attr_dict:
                             attr_dict[attribute_name] += int(modifier)
                     elif pattern_percentage.match(bonus):
