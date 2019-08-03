@@ -625,7 +625,7 @@ class CharactersMixin:
 
         ignore_list = [
             'HelmAquatic', 'WeaponAquaticA', 'WeaponAquaticB', 'WeaponB1',
-            'WeaponB2'
+            'WeaponB2', "Sickle", "Axe", "Pick"
         ]
         attr_dict = {key: 0 for (key) in attr_list}
         runes = {}
@@ -696,6 +696,9 @@ class CharactersMixin:
                                 attribute_name = re.sub(
                                     ' Duration', 'Duration', attribute_name)
                                 attribute_name = re.sub('Duration.*', 'Duration', attribute_name)
+                                attribute_name = re.sub(
+                                    ' Chance', 'Chance', attribute_name)
+                                attribute_name = re.sub('Chance.*', 'Chance', attribute_name)
                                 attribute_name = re.sub(
                                     '^.* ', '', attribute_name)
                                 attribute_name = re.sub(
