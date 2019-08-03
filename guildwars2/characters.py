@@ -750,12 +750,8 @@ class CharactersMixin:
                         modifier = re.sub('\+', '', modifier)
                         attribute_name = re.sub(' Damage', 'Damage', bonus)
                         attribute_name = re.sub('Damage.*', 'Damage', attribute_name)
-<<<<<<< HEAD
                         attribute_name = re.sub('\+\d{1,} ', '', attribute_name)
                         attribute_name = re.sub(';.*', '', attribute_name)
-=======
-                        attribute_name = re.sub('^.* ', '', attribute_name)
->>>>>>> upstream/master
                         if attribute_name in attr_dict:
                             attr_dict[attribute_name] += int(modifier)
                     elif pattern_percentage.match(bonus):
