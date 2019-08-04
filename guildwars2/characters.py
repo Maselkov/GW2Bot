@@ -319,10 +319,12 @@ class CharactersMixin:
                         for upgrade_type in "infusions", "upgrades":
                             if upgrade_type in item:
                                 for upgrade in item[upgrade_type]:
-                                    upgrade_doc = await self.db.items.find_one(
-                                        {
-                                            "_id": upgrade
-                                        })
+                                    upgrade_doc = await self.fetch_item(upgrade
+                                                                        )
+                                    if not upgrade_doc:
+                                        upgrades_to_display.append(
+                                            "Unknown upgrade")
+                                        continue
                                     details = upgrade_doc["details"]
                                     if details["type"] == "Rune":
                                         runes[upgrade_doc["name"]] += 1
@@ -673,6 +675,8 @@ class CharactersMixin:
                     for upgrade in upgrades:
                         item_upgrade = await self.fetch_item(upgrade)
                         # Jewels and stuff
+                        if not item_upgrade:
+                            continue
                         if "infix_upgrade" in item_upgrade["details"]:
                             attributes = item_upgrade["details"][
                                 "infix_upgrade"]["attributes"]
@@ -697,7 +701,8 @@ class CharactersMixin:
                                 attribute_name = bonus.title()
                                 attribute_name = re.sub(
                                     ' Duration', 'Duration', attribute_name)
-                                attribute_name = re.sub('Duration.*', 'Duration', attribute_name)
+                                attribute_name = re.sub(
+                                    'Duration.*', 'Duration', attribute_name)
                                 attribute_name = re.sub(
                                     '^.* ', '', attribute_name)
                                 attribute_name = re.sub(
@@ -710,19 +715,24 @@ class CharactersMixin:
                     infusions = piece["infusions"]
                     for infusion in infusions:
                         item_infusion = await self.fetch_item(infusion)
+                        if not item_infusion:
+                            continue
                         if "infix_upgrade" in item_infusion["details"]:
                             attributes = item_infusion["details"][
                                 "infix_upgrade"]["attributes"]
                             for attribute in attributes:
                                 if attribute["attribute"] == "BoonDuration":
                                     attribute["attribute"] = "Concentration"
-                                if attribute["attribute"] == "ConditionDuration":
+                                if attribute[
+                                        "attribute"] == "ConditionDuration":
                                     attribute["attribute"] = "Expertise"
                                 attr_dict[attribute["attribute"]] += attribute[
                                     "modifier"]
 
         for rune, runecount in runes.items():
             rune_item = await self.fetch_item(rune)
+            if not rune_item:
+                continue
             bonuses = rune_item["details"]["bonuses"]
             count = 0
             for bonus in bonuses:
@@ -746,7 +756,8 @@ class CharactersMixin:
                         modifier = re.sub(' .*$', '', bonus)
                         modifier = re.sub('\+', '', modifier)
                         attribute_name = re.sub(' Damage', 'Damage', bonus)
-                        attribute_name = re.sub('Damage.*', 'Damage', attribute_name)
+                        attribute_name = re.sub('Damage.*', 'Damage',
+                                                attribute_name)
                         attribute_name = re.sub('^.* ', '', attribute_name)
                         if attribute_name in attr_dict:
                             attr_dict[attribute_name] += int(modifier)
@@ -755,7 +766,8 @@ class CharactersMixin:
                         modifier = re.sub('\+', '', modifier)
                         modifier = re.sub('%', '', modifier)
                         attribute_name = re.sub(' Duration', 'Duration', bonus)
-                        attribute_name = re.sub('Duration.*', 'Duration', attribute_name)
+                        attribute_name = re.sub('Duration.*', 'Duration',
+                                                attribute_name)
                         attribute_name = re.sub('^.* ', '', attribute_name)
                         if attribute_name in attr_dict:
                             attr_dict[attribute_name] += int(modifier)
@@ -804,7 +816,8 @@ class CharactersMixin:
         output = {}
         for attribute in ordered_list:
             if attribute in percentage_list:
-                attr_dict[attribute] = '{0}%'.format(round(attr_dict[attribute]),2)
+                attr_dict[attribute] = '{0}%'.format(
+                    round(attr_dict[attribute]), 2)
             attribute_sub = self.readable_attribute(attribute)
             output[attribute_sub.title()] = attr_dict[attribute]
         return output
