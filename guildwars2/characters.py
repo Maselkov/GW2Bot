@@ -627,7 +627,7 @@ class CharactersMixin:
 
         ignore_list = [
             'HelmAquatic', 'WeaponAquaticA', 'WeaponAquaticB', 'WeaponB1',
-            'WeaponB2'
+            'WeaponB2', "Sickle", "Axe", "Pick"
         ]
         attr_dict = {key: 0 for (key) in attr_list}
         runes = {}
@@ -699,6 +699,9 @@ class CharactersMixin:
                                     ' Duration', 'Duration', attribute_name)
                                 attribute_name = re.sub('Duration.*', 'Duration', attribute_name)
                                 attribute_name = re.sub(
+                                    ' Chance', 'Chance', attribute_name)
+                                attribute_name = re.sub('Chance.*', 'Chance', attribute_name)
+                                attribute_name = re.sub(
                                     '^.* ', '', attribute_name)
                                 attribute_name = re.sub(
                                     '\.', '', attribute_name)
@@ -747,7 +750,8 @@ class CharactersMixin:
                         modifier = re.sub('\+', '', modifier)
                         attribute_name = re.sub(' Damage', 'Damage', bonus)
                         attribute_name = re.sub('Damage.*', 'Damage', attribute_name)
-                        attribute_name = re.sub('^.* ', '', attribute_name)
+                        attribute_name = re.sub('\+\d{1,} ', '', attribute_name)
+                        attribute_name = re.sub(';.*', '', attribute_name)
                         if attribute_name in attr_dict:
                             attr_dict[attribute_name] += int(modifier)
                     elif pattern_percentage.match(bonus):
