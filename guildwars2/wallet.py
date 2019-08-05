@@ -168,7 +168,7 @@ class WalletMixin:
         embed = embed_list_lines(
             embed, token, "> **DUNGEON TOKENS**", inline=True)
         embed = embed_list_lines(embed, keys, "> **KEYS**", inline=True)
-        embed = embed_list_lines(embed, maps, "> **MAPS**", inline=True)
+        embed = embed_list_lines(embed, maps, "> **MAP CURRENCIES**" + " " * 40 + zero_width_space , inline=True)
         embed = embed_list_lines(embed, raid, "> **RAIDS**")
         embed.set_author(
             name=doc["account_name"], icon_url=ctx.author.avatar_url)
