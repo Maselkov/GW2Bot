@@ -269,7 +269,7 @@ class CommerceMixin:
     @gem.command(name="track", usage="<gold>")
     async def gem_track(self, ctx, gold: int = 0):
         """Receive a notification when cost of 400 gems drops below given cost
-        
+
         For example, if you set cost to 100, you will get a notification when
         price of 400 gems drops below 100 gold
         """
