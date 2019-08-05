@@ -140,10 +140,10 @@ class WalletMixin:
         except discord.Forbidden:
             await ctx.send("Need permission to embed links")
 
-    @wallet.command(name="show")
+    @wallet.command(name="show", aliases=["keys", "maps", "tokens"])
     @commands.cooldown(1, 5, BucketType.user)
     async def wallet_show(self, ctx):
-        """Shows map-specific currencies and keys
+        """Shows currencies in your wallet
 
         Required permissions: wallet
         """
