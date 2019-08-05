@@ -19,6 +19,7 @@ class CommerceMixin:
     async def tp_current(self, ctx, buys_sells):
         """Show current selling/buying transactions
         invoke with sells or buys
+
         Required permissions: tradingpost
         """
         user = ctx.author
@@ -149,6 +150,7 @@ class CommerceMixin:
     @commands.cooldown(1, 10, BucketType.user)
     async def tp_delivery(self, ctx):
         """Show your items awaiting in delivery box
+
         Required permissions: tradingpost
         """
         user = ctx.author
@@ -226,6 +228,7 @@ class CommerceMixin:
     @gem.command(name="price")
     async def gem_price(self, ctx, quantity: int = 400):
         """Lists current gold/gem exchange prices.
+
         You can specify a custom amount, defaults to 400
         """
         if quantity <= 1:
@@ -266,6 +269,7 @@ class CommerceMixin:
     @gem.command(name="track", usage="<gold>")
     async def gem_track(self, ctx, gold: int = 0):
         """Receive a notification when cost of 400 gems drops below given cost
+        
         For example, if you set cost to 100, you will get a notification when
         price of 400 gems drops below 100 gold
         """
