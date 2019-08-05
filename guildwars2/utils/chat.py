@@ -3,7 +3,11 @@ import re
 zero_width_space = u'\u200b'
 
 
-def embed_list_lines(embed, lines, field_name, max_characters=1024, inline=False):
+def embed_list_lines(embed,
+                     lines,
+                     field_name,
+                     max_characters=1024,
+                     inline=False):
     value = "\n".join(lines)
     if len(value) > 1024:
         value = ""
