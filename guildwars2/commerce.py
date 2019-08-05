@@ -5,8 +5,7 @@ from discord.ext import commands
 from discord.ext.commands.cooldowns import BucketType
 
 from .exceptions import APIBadRequest, APIError, APINotFound
-from .utils.chat import embed_list_lines, zero_width_space
-import math
+
 
 class CommerceMixin:
     @commands.group(case_insensitive=True)
@@ -17,106 +16,80 @@ class CommerceMixin:
 
     @tp.command(name="current")
     @commands.cooldown(1, 10, BucketType.user)
-    async def tp_current(self, ctx):
+    async def tp_current(self, ctx, buys_sells):
         """Show current selling/buying transactions
         invoke with sells or buys
-
         Required permissions: tradingpost
         """
-
-        # Generates a list of strings that contain all needed data
-        async def generate_listing_output(results,dups,state,listings):
-            output_list = []
-            length_counter = 0
-            for result in results:
-                index = dups[result["item_id"]]
-                price = result["price"]
-                itemdoc = await self.fetch_item(result["item_id"])
-                quantity = result["quantity"]
-                item_name = itemdoc["name"]
-                offers = listings[index][state]
-                max_price = offers[0]["unit_price"]
-                undercuts = 0
-                op = operator.lt if state == "buys" else operator.gt
-                for offer in offers:
-                    if op(offer["unit_price"], price):
-                        break
-                    undercuts += offer["listings"]
-                undercuts = "*Undercuts:* {}".format(
-                    undercuts) if undercuts else ""
-                if quantity == 1:
-                    total = ""
-                else:
-                    total = " - Total: " + self.gold_to_coins(
-                        ctx, quantity * price)
-                line = "**{}\n**{}x {}{}\n*Max. offer:* {}\n{}".format(item_name,quantity,self.gold_to_coins(ctx, price), total,self.gold_to_coins(ctx, max_price), undercuts)
-                if length_counter + len(line) < 3000:
-                    length_counter += len(line)
-                    output_list.append(line)
-                else:
-                    break
-            return output_list
-
-        # Calls api for listings
-        async def call_for_listing(item_ids):
-            endpoint = "commerce/listings?ids={0}".format(str(item_ids))
+        user = ctx.author
+        state = buys_sells.lower()
+        endpoint = "commerce/transactions/current/" + state
+        if state == "buys" or state == "sells":
             try:
-                listings = await self.call_api(endpoint)
-            except APIBadRequest:
-                listings = "None"
+                doc = await self.fetch_key(user, ["tradingpost"])
+                results = await self.call_api(endpoint, key=doc["key"])
             except APIError as e:
                 return await self.error_handler(ctx, e)
-            return listings
-
-        user = ctx.author
-        endpoint_buys = "commerce/transactions/current/buys"
-        endpoint_sells = "commerce/transactions/current/sells"
-        try:
-            doc = await self.fetch_key(user, ["tradingpost"])
-            buys = await self.call_api(endpoint_buys, key=doc["key"])
-            sells = await self.call_api(endpoint_sells, key=doc["key"])
-        except APIError as e:
-            return await self.error_handler(ctx, e)
-
+        else:
+            return await ctx.send(
+                "{0.mention}, Please us either 'sells' or 'buys' as parameter".
+                format(user))
         data = discord.Embed(
-            description='Current Transactions',
+            description='Current ' + state,
             colour=await self.get_embed_color(ctx))
         data.set_author(
             name='Transaction overview of {0}'.format(doc["account_name"]))
-        data.set_footer(text="Black Lion Trading Company",icon_url="https://api.gw2bot.info/resources/icons/bltc.png")
-        item_id_buys = ""
-        dup_item_buys = {}
-        item_id_sells = ""
-        dup_item_sells = {}
+        data.set_thumbnail(
+            url=("https://wiki.guildwars2.com/"
+                 "images/thumb/d/df/Black-Lion-Logo.png/"
+                 "300px-Black-Lion-Logo.png"))
+        data.set_footer(text="Black Lion Trading Company")
+        results = results[:20]  # Only display 20 most recent transactions
+        item_id = ""
+        dup_item = {}
         # Collect listed items
-        for result in buys:
-            item_id_buys += str(result["item_id"]) + ","
-            if result["item_id"] not in dup_item_buys:
-                dup_item_buys[result["item_id"]] = len(dup_item_buys)
-        for result in sells:
-            item_id_sells += str(result["item_id"]) + ","
-            if result["item_id"] not in dup_item_sells:
-                dup_item_sells[result["item_id"]] = len(dup_item_sells)
+        for result in results:
+            item_id += str(result["item_id"]) + ","
+            if result["item_id"] not in dup_item:
+                dup_item[result["item_id"]] = len(dup_item)
+        # Get information about all items, doesn't matter if string ends with ,
+        endpoint_listing = "commerce/listings?ids={0}".format(str(item_id))
+        # Call API once for all items
+        try:
+            listings = await self.call_api(endpoint_listing)
+        except APIBadRequest:
+            return await ctx.send("{.mention} you don't have any ongoing "
+                                  "transactions".format(user))
+        except APIError as e:
+            return await self.error_handler(ctx, e)
 
-        # Get listings
-        listings_buys = await call_for_listing(item_id_buys)
-        listings_sells = await call_for_listing(item_id_sells)
-
-        # Generate strings
-        sells_string = await generate_listing_output(sells,dup_item_sells,"sells",listings_sells)
-        buys_string = await generate_listing_output(buys,dup_item_buys,"buys",listings_buys)
-
-        # Testing values
-        #sells_string = sells_string + sells_string# + sells_string #+ sells_string + sells_string
-        #buys_string = buys_string + buys_string# + buys_string#+ buys_string+ buys_string+ buys_string
-
-        # Captions
-        if sells_string:
-            data = embed_list_lines(data, zero_width_space, "> **SELLS**", inline=False)
-            data = embed_list_lines(data, sells_string, zero_width_space, inline=True)
-        if buys_string:
-            data = embed_list_lines(data, zero_width_space, "> **BUYS**", inline=False)
-            data = embed_list_lines(data, buys_string, zero_width_space, inline=True)
+        for result in results:
+            index = dup_item[result["item_id"]]
+            price = result["price"]
+            itemdoc = await self.fetch_item(result["item_id"])
+            quantity = result["quantity"]
+            item_name = itemdoc["name"]
+            offers = listings[index][state]
+            max_price = offers[0]["unit_price"]
+            undercuts = 0
+            op = operator.lt if state == "buys" else operator.gt
+            for offer in offers:
+                if op(offer["unit_price"], price):
+                    break
+                undercuts += offer["listings"]
+            undercuts = "· Undercuts: {}".format(
+                undercuts) if undercuts else ""
+            if quantity == 1:
+                total = ""
+            else:
+                total = " - Total: " + self.gold_to_coins(
+                    ctx, quantity * price)
+            data.add_field(
+                name=item_name,
+                value="{} x {}{}\nMax. offer: {} {}".format(
+                    quantity, self.gold_to_coins(ctx, price), total,
+                    self.gold_to_coins(ctx, max_price), undercuts),
+                inline=False)
 
         try:
             await ctx.send(embed=data)
@@ -176,7 +149,6 @@ class CommerceMixin:
     @commands.cooldown(1, 10, BucketType.user)
     async def tp_delivery(self, ctx):
         """Show your items awaiting in delivery box
-
         Required permissions: tradingpost
         """
         user = ctx.author
@@ -191,36 +163,40 @@ class CommerceMixin:
             colour=await self.get_embed_color(ctx))
         data.set_author(
             name='Delivery overview of {0}'.format(doc["account_name"]))
-        data.set_footer(text="Black Lion Trading Company",icon_url="https://api.gw2bot.info/resources/icons/bltc.png")
+        data.set_thumbnail(url="https://wiki.guildwars2.com/"
+                           "images/thumb/d/df/Black-Lion-Logo.png"
+                           "/300px-Black-Lion-Logo.png")
+        data.set_footer(text="Black Lion Trading Company")
         coins = results["coins"]
         items = results["items"]
+        items = items[:20]  # Get only first 20 entries
+        item_quantity = []
         itemlist = []
         if coins == 0:
             gold = "Currently no coins for pickup."
         else:
             gold = self.gold_to_coins(ctx, coins)
-        data.add_field(name="> **Gold**", value=gold, inline=False)
+        data.add_field(name="Coins", value=gold, inline=False)
+        counter = 0
         if len(items) != 0:
-            length_counter = 0
             for item in items:
+                item_quantity.append(item["count"])
                 itemdoc = await self.fetch_item(item["id"])
-                line = "**{}** {}".format(item["count"], itemdoc["name"])
-                if length_counter + len(line) < 6000:
-                    length_counter += len(line)
-                    itemlist.append(line)
-                else:
-                    break
-            # Split list for formatting into half
-            items_left = itemlist[:math.ceil(len(items) / 2)]
-            items_right = itemlist[math.ceil(len(items) / 2):]
-            items_right.insert(0, zero_width_space)
-            data = embed_list_lines(data, items_left, "> **ITEMS**",inline=True)
-            data = embed_list_lines(data, items_right, zero_width_space,inline=True)
+                itemlist.append(itemdoc)
+            for item in itemlist:
+                item_name = item["name"]
+                # Get quantity of items
+                quantity = item_quantity[counter]
+                counter += 1
+                data.add_field(
+                    name=item_name,
+                    value="x {0}".format(quantity),
+                    inline=False)
         else:
             if coins == 0:
                 return await ctx.send("Your delivery box is empty!")
             data.add_field(
-                name="> **ITEMS**", value="None", inline=False)
+                name="No current deliveries.", value="Have fun!", inline=False)
         try:
             await ctx.send(embed=data)
         except discord.HTTPException:
@@ -250,7 +226,6 @@ class CommerceMixin:
     @gem.command(name="price")
     async def gem_price(self, ctx, quantity: int = 400):
         """Lists current gold/gem exchange prices.
-
         You can specify a custom amount, defaults to 400
         """
         if quantity <= 1:
@@ -291,7 +266,6 @@ class CommerceMixin:
     @gem.command(name="track", usage="<gold>")
     async def gem_track(self, ctx, gold: int = 0):
         """Receive a notification when cost of 400 gems drops below given cost
-
         For example, if you set cost to 100, you will get a notification when
         price of 400 gems drops below 100 gold
         """
@@ -318,4 +292,3 @@ class CommerceMixin:
                                   "server. Aborting.")
         await self.bot.database.set(user, {"gemtrack": price}, self)
         await ctx.send("Successfully set")
-
