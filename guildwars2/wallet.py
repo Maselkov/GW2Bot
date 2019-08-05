@@ -20,6 +20,11 @@ class WalletMixin:
                 pass
             await ctx.send_help(ctx.command)
 
+    def get_emoji_string(self,ctx , name):
+        emoji_string = name.replace(" ", "_").lower()
+        emoji_string = emoji_string.replace("'", "")
+        return self.get_emoji(ctx, emoji_string)
+
     @wallet.command(name="currency")
     @commands.cooldown(1, 5, BucketType.user)
     async def wallet_currency(self, ctx, *, currency):
@@ -83,6 +88,7 @@ class WalletMixin:
             if currency["id"] not in ids:
                 continue
             c_doc = await self.db.currencies.find_one({"_id": currency["id"]})
+            emoji = self.get_emoji_string(ctx, c_doc["name"])
             if c_doc["name"] == "Coin":
                 embed.add_field(
                     name="Gold",
@@ -92,7 +98,7 @@ class WalletMixin:
                 embed.add_field(
                     name="Gems", value=currency["value"], inline=False)
             else:
-                embed.add_field(name=c_doc["name"], value=currency["value"])
+                embed.add_field(name="{} {}".format(emoji, c_doc["name"]), value=currency["value"])
         embed.set_author(
             name=doc["account_name"], icon_url=ctx.author.avatar_url)
         embed.set_footer(
@@ -121,7 +127,8 @@ class WalletMixin:
             if currency["id"] not in ids:
                 continue
             c_doc = await self.db.currencies.find_one({"_id": currency["id"]})
-            embed.add_field(name=c_doc["name"], value=currency["value"])
+            emoji = self.get_emoji_string(ctx, c_doc["name"])
+            embed.add_field(name="{} {}".format(emoji, c_doc["name"]), value=currency["value"])
         embed.set_author(
             name=doc["account_name"], icon_url=ctx.author.avatar_url)
         embed.set_footer(
@@ -150,11 +157,12 @@ class WalletMixin:
             if currency["id"] not in ids:
                 continue
             c_doc = await self.db.currencies.find_one({"_id": currency["id"]})
+            emoji = self.get_emoji_string(ctx, c_doc["name"])
             if c_doc["name"] == "Magnetite Shard":
                 embed.add_field(
                     name=c_doc["name"], value=currency["value"], inline=False)
             else:
-                embed.add_field(name=c_doc["name"], value=currency["value"])
+                embed.add_field(name="{} {}".format(emoji, c_doc["name"]), value=currency["value"])
         embed.set_author(
             name=doc["account_name"], icon_url=ctx.author.avatar_url)
         embed.set_footer(
