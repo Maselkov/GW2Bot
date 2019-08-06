@@ -693,26 +693,6 @@ class NotiifiersMixin:
 
     @tasks.loop(minutes=5)
     async def boss_notifier(self):
-        async def process_doc(doc):
-            doc = doc["cogs"][name]["bossnotifs"]
-            channel = self.bot.get_channel(doc["channel"])
-            timezone = await self.get_timezone(channel.guild)
-            embed = self.schedule_embed(2, timezone=timezone)
-            try:
-                message = await channel.send(embed=embed)
-            except discord.Forbidden:
-                message = await channel.send("Need permission to "
-                                             "embed links in order "
-                                             "to send boss "
-                                             "notifs!")
-                return
-            await self.bot.database.set_guild(
-                channel.guild, {"bossnotifs.message": message.id}, self)
-            old_message = doc.get("message")
-            if old_message:
-                to_delete = await channel.fetch_message(old_message)
-                await to_delete.delete()
-
         name = self.__class__.__name__
         boss = self.get_upcoming_bosses(1)[0]
         await asyncio.sleep(boss["diff"].total_seconds() + 1)
@@ -724,7 +704,24 @@ class NotiifiersMixin:
         }, self)
         async for doc in cursor:
             try:
-                asyncio.create_task(process_doc(doc))
+                doc = doc["cogs"][name]["bossnotifs"]
+                channel = self.bot.get_channel(doc["channel"])
+                timezone = await self.get_timezone(channel.guild)
+                embed = self.schedule_embed(2, timezone=timezone)
+                try:
+                    message = await channel.send(embed=embed)
+                except discord.Forbidden:
+                    message = await channel.send("Need permission to "
+                                                 "embed links in order "
+                                                 "to send boss "
+                                                 "notifs!")
+                    continue
+                await self.bot.database.set_guild(
+                    channel.guild, {"bossnotifs.message": message.id}, self)
+                old_message = doc.get("message")
+                if old_message:
+                    to_delete = await channel.fetch_message(old_message)
+                    await to_delete.delete()
             except:
                 pass
 
