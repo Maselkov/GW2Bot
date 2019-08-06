@@ -299,8 +299,6 @@ class GeneralGuild:
                 state, guild_name.title()))
         data = embed_list_lines(data, lines,
                                 "> **{0} Log**".format(state.capitalize()))
-        await ctx.send(str(length_lines))
-        await ctx.send(str(len(str(lines))))
         try:
             await ctx.send(embed=data)
         except discord.Forbidden:
