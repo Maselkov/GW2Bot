@@ -174,8 +174,8 @@ class WalletMixin:
         keys = await self.get_wallet(ctx, ids_keys)
         maps = await self.get_wallet(ctx, ids_maps)
         token = await self.get_wallet(ctx, ids_token)
-        ls2 = await self.get_ls_currency(ctx, ids_l2)
-        ls3 = await self.get_ls_currency(ctx, ids_l3)
+        ls3 = await self.get_ls_currency(ctx, ids_l2)
+        ls4 = await self.get_ls_currency(ctx, ids_l3)
         raid = await self.get_wallet(ctx, ids_raid)
 
         embed = discord.Embed(
@@ -185,9 +185,9 @@ class WalletMixin:
             embed, token, "> **DUNGEON TOKENS**", inline=True)
         embed = embed_list_lines(embed, keys, "> **KEYS**", inline=True)
         embed = embed_list_lines(embed, maps, "> **MAP CURRENCIES**", inline=True)
-        embed = embed_list_lines(embed, raid, "> **RAIDS**", inline=True)
-        embed = embed_list_lines(embed, ls2, "> **LIVING SEASON 2**", inline=True)
         embed = embed_list_lines(embed, ls3, "> **LIVING SEASON 3**", inline=True)
+        embed = embed_list_lines(embed, ls4, "> **LIVING SEASON 4**", inline=True)
+        embed = embed_list_lines(embed, raid, "> **RAIDS**", inline=True)
         embed.set_author(
             name=doc["account_name"], icon_url=ctx.author.avatar_url)
         embed.set_footer(
