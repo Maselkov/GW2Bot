@@ -8,6 +8,7 @@ from .exceptions import APIBadRequest, APIError, APINotFound
 from .utils.chat import embed_list_lines, zero_width_space
 import math
 
+
 class CommerceMixin:
     @commands.group(case_insensitive=True)
     async def tp(self, ctx):
@@ -15,7 +16,7 @@ class CommerceMixin:
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @tp.command(name="current")
+    @tp.command(name="current", aliases=["c"])
     @commands.cooldown(1, 10, BucketType.user)
     async def tp_current(self, ctx):
         """Show current selling/buying transactions
@@ -25,7 +26,7 @@ class CommerceMixin:
         """
 
         # Generates a list of strings that contain all needed data
-        async def generate_listing_output(results,dups,state,listings):
+        async def generate_listing_output(results, dups, state, listings):
             output_list = []
             length_counter = 0
             for result in results:
@@ -49,7 +50,9 @@ class CommerceMixin:
                 else:
                     total = " - Total: " + self.gold_to_coins(
                         ctx, quantity * price)
-                line = "**{}\n**{}x {}{}\n*Max. offer:* {}\n{}".format(item_name,quantity,self.gold_to_coins(ctx, price), total,self.gold_to_coins(ctx, max_price), undercuts)
+                line = "**{}\n**{}x {}{}\n*Max. offer:* {}\n{}".format(
+                    item_name, quantity, self.gold_to_coins(ctx, price), total,
+                    self.gold_to_coins(ctx, max_price), undercuts)
                 if length_counter + len(line) < 3000:
                     length_counter += len(line)
                     output_list.append(line)
@@ -83,7 +86,9 @@ class CommerceMixin:
             colour=await self.get_embed_color(ctx))
         data.set_author(
             name='Transaction overview of {0}'.format(doc["account_name"]))
-        data.set_footer(text="Black Lion Trading Company",icon_url="https://api.gw2bot.info/resources/icons/bltc.png")
+        data.set_footer(
+            text="Black Lion Trading Company",
+            icon_url="https://api.gw2bot.info/resources/icons/bltc.png")
         item_id_buys = ""
         dup_item_buys = {}
         item_id_sells = ""
@@ -103,27 +108,35 @@ class CommerceMixin:
         listings_sells = await call_for_listing(item_id_sells)
 
         # Generate strings
-        sells_string = await generate_listing_output(sells,dup_item_sells,"sells",listings_sells)
-        buys_string = await generate_listing_output(buys,dup_item_buys,"buys",listings_buys)
+        sells_string = await generate_listing_output(sells, dup_item_sells,
+                                                     "sells", listings_sells)
+        buys_string = await generate_listing_output(buys, dup_item_buys,
+                                                    "buys", listings_buys)
 
-        # Testing values
-        #sells_string = sells_string + sells_string# + sells_string #+ sells_string + sells_string
-        #buys_string = buys_string + buys_string# + buys_string#+ buys_string+ buys_string+ buys_string
-
-        # Captions
-        if sells_string:
-            data = embed_list_lines(data, zero_width_space, "> **SELLS**", inline=False)
-            data = embed_list_lines(data, sells_string, zero_width_space, inline=True)
-        if buys_string:
-            data = embed_list_lines(data, zero_width_space, "> **BUYS**", inline=False)
-            data = embed_list_lines(data, buys_string, zero_width_space, inline=True)
-
+        # Display inline if both are small enough
+        if sells_string and buys_string and len(sells_string) < 1024 and len(
+                buys_string) < 1024:
+            data = embed_list_lines(
+                data, buys_string, "> **SELLS**", inline=True)
+            data = embed_list_lines(
+                data, sells_string, "> **BUYS**", inline=True)
+        else:
+            if sells_string:
+                data = embed_list_lines(
+                    data, zero_width_space, "> **SELLS**", inline=False)
+                data = embed_list_lines(
+                    data, sells_string, zero_width_space, inline=True)
+            if buys_string:
+                data = embed_list_lines(
+                    data, zero_width_space, "> **BUYS**", inline=False)
+                data = embed_list_lines(
+                    data, buys_string, zero_width_space, inline=True)
         try:
             await ctx.send(embed=data)
         except discord.HTTPException:
             await ctx.send("Need permission to embed links")
 
-    @tp.command(name="price")
+    @tp.command(name="price", aliases=["p"])
     @commands.cooldown(1, 15, BucketType.user)
     async def tp_price(self, ctx, *, item: str):
         """Check price of an item"""
@@ -172,7 +185,7 @@ class CommerceMixin:
         except discord.Forbidden:
             await ctx.send("Issue embedding data into discord")
 
-    @tp.command(name="delivery")
+    @tp.command(name="delivery", aliases=["d"])
     @commands.cooldown(1, 10, BucketType.user)
     async def tp_delivery(self, ctx):
         """Show your items awaiting in delivery box
@@ -191,7 +204,9 @@ class CommerceMixin:
             colour=await self.get_embed_color(ctx))
         data.set_author(
             name='Delivery overview of {0}'.format(doc["account_name"]))
-        data.set_footer(text="Black Lion Trading Company",icon_url="https://api.gw2bot.info/resources/icons/bltc.png")
+        data.set_footer(
+            text="Black Lion Trading Company",
+            icon_url="https://api.gw2bot.info/resources/icons/bltc.png")
         coins = results["coins"]
         items = results["items"]
         itemlist = []
@@ -214,13 +229,14 @@ class CommerceMixin:
             items_left = itemlist[:math.ceil(len(items) / 2)]
             items_right = itemlist[math.ceil(len(items) / 2):]
             items_right.insert(0, zero_width_space)
-            data = embed_list_lines(data, items_left, "> **ITEMS**",inline=True)
-            data = embed_list_lines(data, items_right, zero_width_space,inline=True)
+            data = embed_list_lines(
+                data, items_left, "> **ITEMS**", inline=True)
+            data = embed_list_lines(
+                data, items_right, zero_width_space, inline=True)
         else:
             if coins == 0:
                 return await ctx.send("Your delivery box is empty!")
-            data.add_field(
-                name="> **ITEMS**", value="None", inline=False)
+            data.add_field(name="> **ITEMS**", value="None", inline=False)
         try:
             await ctx.send(embed=data)
         except discord.HTTPException:
@@ -247,7 +263,7 @@ class CommerceMixin:
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @gem.command(name="price")
+    @gem.command(name="price", aliases=["p"])
     async def gem_price(self, ctx, quantity: int = 400):
         """Lists current gold/gem exchange prices.
 
@@ -318,4 +334,3 @@ class CommerceMixin:
                                   "server. Aborting.")
         await self.bot.database.set(user, {"gemtrack": price}, self)
         await ctx.send("Successfully set")
-
