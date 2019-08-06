@@ -1,5 +1,5 @@
 from discord.ext import commands
-
+import re
 
 class EmojiMixin:
     async def prepare_emojis(self):
@@ -9,6 +9,8 @@ class EmojiMixin:
     def get_emoji(self, ctx, emoji, *, fallback=False, fallback_fmt="{}"):
         if ctx and ctx.channel.permissions_for(ctx.me).external_emojis:
             search_str = emoji.lower().replace(" ", "_")
+            # Remove illegal emoji characters
+            search_str = re.sub('[\.,\,,\',\:,\;,!\?]', '', search_str)
             emoji_id = self.emojis.get(search_str)
             if emoji_id:
                 emoji_obj = self.bot.get_emoji(emoji_id)
