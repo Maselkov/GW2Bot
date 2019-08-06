@@ -449,7 +449,6 @@ class AccountMixin:
             ])
             return title[0].upper() + title[1:]
 
-        print(last_modified)
         monday = last_modified - datetime.timedelta(
             days=last_modified.weekday())
         if not last_modified.weekday():
@@ -459,8 +458,6 @@ class AccountMixin:
         reset_time = datetime.datetime(
             monday.year, monday.month, monday.day, hour=7, minute=30)
         next_reset_time = reset_time + datetime.timedelta(weeks=1)
-        print(reset_time)
-        print(next_reset_time)
 
         async def get_dps_report_link(boss_id):
             boss_id = boss_to_id[boss_id]
