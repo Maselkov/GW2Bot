@@ -14,6 +14,7 @@ from .daily import DailyMixin
 from .database import DatabaseMixin
 from .emojis import EmojiMixin
 from .events import EventsMixin
+from .evtc import EvtcMixin
 from .exceptions import APIError, APIInactiveError, APIInvalidKey, APIKeyError
 from .guild import GuildMixin
 from .guildmanage import GuildManageMixin
@@ -29,7 +30,7 @@ from .wvw import WvwMixin
 
 class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
                  ApiMixin, CharactersMixin, CommerceMixin, DailyMixin,
-                 DatabaseMixin, EmojiMixin, EventsMixin, GuildMixin,
+                 DatabaseMixin, EmojiMixin, EventsMixin, EvtcMixin, GuildMixin,
                  GuildManageMixin, KeyMixin, MiscMixin, NotiifiersMixin,
                  PvpMixin, SkillsMixin, WalletMixin, WorldsyncMixin, WvwMixin):
     """Guild Wars 2 commands"""

@@ -1,3 +1,4 @@
+import discord
 from discord.ext import commands
 
 
@@ -7,7 +8,16 @@ class EmojiMixin:
         self.emojis = doc.get("emojis", {})
 
     def get_emoji(self, ctx, emoji, *, fallback=False, fallback_fmt="{}"):
-        if ctx and ctx.channel.permissions_for(ctx.me).external_emojis:
+        if isinstance(ctx, discord.Message):
+            if ctx.guild:
+                me = ctx.guild.me
+            else:
+                me = self.bot.user
+        elif ctx:
+            me = ctx.me
+        else:
+            me = None
+        if ctx and ctx.channel.permissions_for(me).external_emojis:
             search_str = emoji.lower().replace(" ", "_")
             emoji_id = self.emojis.get(search_str)
             if emoji_id:

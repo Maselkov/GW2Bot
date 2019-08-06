@@ -2,6 +2,7 @@ import datetime
 import re
 from collections import OrderedDict, defaultdict
 from itertools import chain
+import pymongo
 
 import discord
 from discord.ext import commands
@@ -262,14 +263,19 @@ class AccountMixin:
         """
         user = ctx.author
         scopes = ["progression"]
-        endpoint = "account/raids"
+        endpoints = ["account/raids", "account"]
         try:
             doc = await self.fetch_key(user, scopes)
-            results = await self.call_api(endpoint, key=doc["key"])
+            schema = datetime.datetime(2019, 2, 21)
+            results, account = await self.call_multiple(
+                endpoints, key=doc["key"], schema_version=schema)
         except APIError as e:
             return await self.error_handler(ctx, e)
+        last_modified = datetime.datetime.strptime(account["last_modified"],
+                                                   "%Y-%m-%dT%H:%M:%Sz")
         raids = await self.get_raids()
-        embed = await self.boss_embed(ctx, raids, results)
+        embed = await self.boss_embed(ctx, raids, results, doc["account_name"],
+                                      last_modified)
         embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
         if not self.can_embed_links(ctx):
             return await ctx.send("Need permission to embed links")
@@ -425,9 +431,15 @@ class AccountMixin:
         await ctx.send(
             "{.mention}, here are your cats:".format(user), embed=embed)
 
-    async def boss_embed(self, ctx, raids, results):
+    async def boss_embed(self, ctx, raids, results, account_name,
+                         last_modified):
+        boss_to_id = defaultdict(list)
+        for boss_id, boss in self.gamedata["bosses"].items():
+            if "api_name" in boss:
+                boss_to_id[boss["api_name"]].append(int(boss_id))
+
         def is_killed(boss):
-            return "+✔" if boss["id"] in results else "-✖"
+            return ":white_check_mark:" if boss["id"] in results else ":x:"
 
         def readable_id(_id):
             _id = _id.split("_")
@@ -436,6 +448,38 @@ class AccountMixin:
                 x.capitalize() if x not in dont_capitalize else x for x in _id
             ])
             return title[0].upper() + title[1:]
+
+        print(last_modified)
+        monday = last_modified - datetime.timedelta(
+            days=last_modified.weekday())
+        if not last_modified.weekday():
+            if last_modified < last_modified.replace(
+                    hour=7, minute=30, second=0, microsecond=0):
+                monday = last_modified - datetime.timedelta(weeks=1)
+        reset_time = datetime.datetime(
+            monday.year, monday.month, monday.day, hour=7, minute=30)
+        next_reset_time = reset_time + datetime.timedelta(weeks=1)
+        print(reset_time)
+        print(next_reset_time)
+
+        async def get_dps_report_link(boss_id):
+            boss_id = boss_to_id[boss_id]
+            cursor = self.db.encounters.find({
+                "boss_id": {
+                    "$in": boss_id
+                },
+                "players": account_name,
+                "date": {
+                    "$gte": reset_time,
+                    "$lt": next_reset_time
+                },
+                "success": boss["id"] in results
+            }).sort("date", pymongo.DESCENDING).limit(1)
+            doc = await cursor.to_list(None)
+            if doc:
+                return doc[0]["permalink"]
+            else:
+                return None
 
         not_completed = []
         embed = discord.Embed(
@@ -448,13 +492,17 @@ class AccountMixin:
         cotm_index = weeks % (len(wings) - 1)
         for index, wing in enumerate(wings):
             wing_done = True
-            value = ["```diff"]
+            value = []
             for boss in wing["events"]:
                 if boss["id"] not in results:
                     wing_done = False
                     not_completed.append(boss)
-                value.append(is_killed(boss) + readable_id(boss["id"]))
-            value.append("```")
+                permalink = await get_dps_report_link(boss["id"])
+                if permalink:
+                    boss_name = f"[{readable_id(boss['id'])}]({permalink})"
+                else:
+                    boss_name = readable_id(boss["id"])
+                value.append("> " + is_killed(boss) + boss_name)
             cotm_active = index in (len(wings) - 1, cotm_index)
             name = cotm if cotm_active else ""
             name += readable_id(wing["id"])
@@ -462,7 +510,7 @@ class AccountMixin:
                 name += " :white_check_mark:"
             else:
                 name += " :x:"
-            embed.add_field(name=name, value="\n".join(value))
+            embed.add_field(name=f"**{name}**", value="\n".join(value))
         if len(not_completed) == 0:
             description = "Everything completed this week :star:"
         else:
@@ -481,9 +529,16 @@ class AccountMixin:
                 events = "{} event{}".format(len(events), suffix)
             description = (", ".join(filter(None, [bosses, events])) +
                            " not completed this week")
+        if datetime.datetime.utcnow() > next_reset_time:
+            description = description.replace("this", "that")
+            description += ("\n❗Warning❗\n Data outdated for this week. Log "
+                            "into GW2 in order to update.")
         embed.description = description
-        embed.set_footer(text="Green (+) means completed this week. Red (-) "
-                         "means not")
+        embed.set_footer(
+            text=f"Logs uploaded via {ctx.prefix}evtc will "
+            "appear here with links - they don't have to be "
+            "uploaded by you",
+            icon_url=self.bot.user.avatar_url)
         return embed
 
     async def find_items_in_account(self,
