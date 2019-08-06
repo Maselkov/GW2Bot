@@ -21,6 +21,7 @@ class WalletMixin:
                 pass
             await ctx.send_help(ctx.command)
 
+    # Returns list of strings for currencies
     async def get_wallet(self, ctx, ids):
         # Difference between two lists, xs has to be the bigger one
         def get_diff(xs, ys):
@@ -57,6 +58,25 @@ class WalletMixin:
             c_doc = await self.db.currencies.find_one({"_id": c})
             emoji = self.get_emoji(ctx, c_doc["name"])
             lines.append("{} 0 {}".format(emoji, c_doc["name"]))
+        return lines
+
+    # Searches account for items and returns list of strings
+    async def get_ls_currency(self, ctx, ids):
+        user = ctx.author
+        scopes = ["inventories", "characters"]
+        lines = []
+        try:
+            doc = await self.fetch_key(user, scopes)
+            search_results = await self.find_items_in_account(
+                ctx, ids, doc=doc)
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+        for k, v in search_results.items():
+            doc = await self.db.items.find_one({"_id": k})
+            name = doc["name"]
+            emoji = self.get_emoji(ctx, name)
+            lines.append("{} {} {}".format(emoji, sum(v.values()),
+                                           name))
         return lines
 
     @wallet.command(name="currency")
@@ -142,15 +162,20 @@ class WalletMixin:
             doc = await self.fetch_key(ctx.author, ["wallet"])
         except APIError as e:
             return await self.error_handler(ctx, e)
+        await ctx.trigger_typing()
         ids_cur = [1, 4, 2, 3, 18, 23, 15, 16, 50, 47]
         ids_keys = [38, 37, 43, 41, 42, 40, 44, 49]
         ids_maps = [25, 19, 27, 22, 20, 32, 45, 34]
         ids_token = [5, 6, 9, 10, 11, 12, 13, 14, 7, 24]
         ids_raid = [28, 39]
+        ids_l2 = [79280, 79899, 79469, 80332, 81127, 81706]
+        ids_l3 = [86069, 88955, 86977, 89537, 87645, 90783]
         cur = await self.get_wallet(ctx, ids_cur)
         keys = await self.get_wallet(ctx, ids_keys)
         maps = await self.get_wallet(ctx, ids_maps)
         token = await self.get_wallet(ctx, ids_token)
+        ls2 = await self.get_ls_currency(ctx, ids_l2)
+        ls3 = await self.get_ls_currency(ctx, ids_l3)
         raid = await self.get_wallet(ctx, ids_raid)
 
         embed = discord.Embed(
@@ -160,7 +185,9 @@ class WalletMixin:
             embed, token, "> **DUNGEON TOKENS**", inline=True)
         embed = embed_list_lines(embed, keys, "> **KEYS**", inline=True)
         embed = embed_list_lines(embed, maps, "> **MAP CURRENCIES**", inline=True)
-        embed = embed_list_lines(embed, raid, "> **RAIDS**")
+        embed = embed_list_lines(embed, raid, "> **RAIDS**", inline=True)
+        embed = embed_list_lines(embed, ls2, "> **LIVING SEASON 2**", inline=True)
+        embed = embed_list_lines(embed, ls3, "> **LIVING SEASON 3**", inline=True)
         embed.set_author(
             name=doc["account_name"], icon_url=ctx.author.avatar_url)
         embed.set_footer(
