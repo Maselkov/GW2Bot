@@ -1,3 +1,6 @@
+import asyncio
+import datetime
+
 from .exceptions import (APIBadRequest, APIConnectionError, APIForbidden,
                          APIInactiveError, APIInvalidKey, APINotFound,
                          APIRateLimited)
@@ -19,16 +22,27 @@ class ApiMixin:
         endpoint = "guild/{0}".format(guild_id)
         return await self.call_api(endpoint, ctx.author, ["guilds"])
 
-    async def call_multiple(self, endpoints, user=None, scopes=None, key=None):
+    async def call_multiple(self,
+                            endpoints,
+                            user=None,
+                            scopes=None,
+                            key=None,
+                            schema_version=None):
         if key is None and user:
             doc = await self.fetch_key(user, scopes)
             key = doc["key"]
-        res = []
+        tasks = []
         for e in endpoints:
-            res.append(await self.call_api(e, key=key))
-        return res
+            tasks.append(
+                self.call_api(e, key=key, schema_version=schema_version))
+        return await asyncio.gather(*tasks)
 
-    async def call_api(self, endpoint, user=None, scopes=None, key=None):
+    async def call_api(self,
+                       endpoint,
+                       user=None,
+                       scopes=None,
+                       key=None,
+                       schema_version=None):
         headers = {
             'User-Agent': "GW2Bot - a Discord bot",
             'Accept': 'application/json'
@@ -38,6 +52,9 @@ class ApiMixin:
         if user:
             doc = await self.fetch_key(user, scopes)
             headers.update({"Authorization": "Bearer " + doc["key"]})
+        if schema_version:
+            schema = schema_version.replace(microsecond=0).isoformat() + "Z"
+            headers.update({"X-Schema-Version": schema})
         apiserv = 'https://api.guildwars2.com/v2/'
         url = apiserv + endpoint
         async with self.session.get(url, headers=headers) as r:
