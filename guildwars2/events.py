@@ -410,7 +410,10 @@ class EventsMixin:
                 icon_url=self.bot.user.avatar_url,
                 text="Click on the reaction below to unsubscribe to "
                 "reminders for this event")
-            msg = await user.send(embed=embed)
+            try:
+                msg = await user.send(embed=embed)
+            except discord.HTTPException:
+                return
             reminder["last_reminded"] = msg.created_at
             reminder["last_message"] = msg.id
             await self.bot.database.set(
