@@ -411,6 +411,7 @@ class SkillsMixin:
                              minor_trait_mask)
             image.close()
         minor_trait_mask.close()
+        session.close()
         return background
 
     async def render_traitlines(self, character, mode="pve"):
