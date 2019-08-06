@@ -21,11 +21,6 @@ class WalletMixin:
                 pass
             await ctx.send_help(ctx.command)
 
-    def get_emoji_string(self, ctx, name):
-        emoji_string = name.replace(" ", "_").lower()
-        emoji_string = emoji_string.replace("'", "")
-        return self.get_emoji(ctx, emoji_string)
-
     async def get_wallet(self, ctx, ids):
         # Difference between two lists, xs has to be the bigger one
         def get_diff(xs, ys):
@@ -49,7 +44,7 @@ class WalletMixin:
             if currency["id"] not in ids:
                 continue
             c_doc = await self.db.currencies.find_one({"_id": currency["id"]})
-            emoji = self.get_emoji_string(ctx, c_doc["name"])
+            emoji = self.get_emoji(ctx, c_doc["name"])
             if c_doc["name"] == "Coin":
                 lines.append("{} {} {}".format(
                     emoji, self.gold_to_coins(ctx, currency["value"]),
@@ -60,7 +55,7 @@ class WalletMixin:
         # Currencies with value 0
         for c in diff_ids:
             c_doc = await self.db.currencies.find_one({"_id": c})
-            emoji = self.get_emoji_string(ctx, c_doc["name"])
+            emoji = self.get_emoji(ctx, c_doc["name"])
             lines.append("{} 0 {}".format(emoji, c_doc["name"]))
         return lines
 
@@ -119,9 +114,9 @@ class WalletMixin:
         async for c in self.db.currencies.find({}):
             name = c["name"]
             if name == "Coin":
-                emoji = self.get_emoji_string(ctx, "gold")
+                emoji = self.get_emoji(ctx, "gold")
             else:
-                emoji = self.get_emoji_string(ctx, name)
+                emoji = self.get_emoji(ctx, name)
             lines.append("{} {}".format(emoji, name))
         embed = discord.Embed(
             description=zero_width_space,
