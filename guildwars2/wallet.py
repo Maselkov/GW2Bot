@@ -27,11 +27,6 @@ class WalletMixin:
         return self.get_emoji(ctx, emoji_string)
 
     async def get_wallet(self, ctx, ids):
-        """Shows key-specific currencies
-
-        Required permissions: wallet
-        """
-
         # Difference between two lists, xs has to be the bigger one
         def get_diff(xs, ys):
             zs = []
@@ -115,6 +110,7 @@ class WalletMixin:
     @wallet.command(name="currencies")
     @commands.cooldown(1, 5, BucketType.user)
     async def wallet_currencies(self, ctx):
+        """Displays a list of all available currencies"""
         try:
             doc = await self.fetch_key(ctx.author, ["wallet"])
         except APIError as e:
