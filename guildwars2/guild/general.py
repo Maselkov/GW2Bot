@@ -44,27 +44,19 @@ class GeneralGuild:
             description='General Info about {0}'.format(guild_name),
             colour=await self.get_embed_color(ctx))
         data.set_author(name="{} [{}]".format(results["name"], results["tag"]))
-        data.add_field(
-            name="Influence",
-            value='{} {}'.format(
-                self.get_emoji(ctx, "influence"), results["influence"]))
-        data.add_field(
-            name="Aetherium",
-            value='{} {}'.format(
-                self.get_emoji(ctx, "aetherium"), results["aetherium"]))
-        data.add_field(
-            name="Resonance",
-            value='{} {}'.format(
-                self.get_emoji(ctx, "resonance"), results["resonance"]))
-        data.add_field(
-            name="Favor",
-            value='{} {}'.format(
-                self.get_emoji(ctx, "favor"), results["favor"]))
-        data.add_field(
-            name='Members',
-            value="{} {}/{}".format(
-                self.get_emoji(ctx, "friends"), results["member_count"],
-                str(results["member_capacity"])))
+        guild_currencies = ["influence", "aetherium", "resonance", "favor", "member_count"]
+        for cur in guild_currencies:
+            if cur == "member_count":
+                data.add_field(
+                    name='Members',
+                    value="{} {}/{}".format(
+                        self.get_emoji(ctx, "friends"), results["member_count"],
+                        str(results["member_capacity"])))
+            else:
+                data.add_field(
+                    name=cur.capitalize(),
+                    value='{} {}'.format(
+                        self.get_emoji(ctx, cur), results[cur]))
         if "motd" in results:
             data.add_field(
                 name='Message of the day:',
@@ -79,7 +71,7 @@ class GeneralGuild:
     @guild.command(name="members", usage="<guild name>")
     @commands.cooldown(1, 20, BucketType.user)
     async def guild_members(self, ctx, *, guild_name=None):
-        """Get list of members and their ranks.
+        """Shows a list of members and their ranks.
 
         Required permissions: guilds and in game permissions
         """
@@ -167,7 +159,7 @@ class GeneralGuild:
         length_lines = 0
         itemlist = []
         for item in treasury:
-            res = await self.db.items.find_one({"_id": item["item_id"]})
+            res = await self.fetch_item(item["item_id"])
             itemlist.append(res)
         # Collect amounts
         if treasury:
@@ -347,3 +339,4 @@ class GeneralGuild:
                        "invoked without a specified guild will default to "
                        "this guild. To reset, simply invoke this command "
                        "without specifying a guild".format(guild_name.title()))
+
