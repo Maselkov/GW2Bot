@@ -1,5 +1,4 @@
 import datetime
-import io
 
 import aiohttp
 import discord
@@ -55,15 +54,21 @@ class EvtcMixin:
                 JSON_URL, params={"id": result["id"]}) as r:
             data = await r.json()
         lines = []
+        targets = data["phases"][0]["targets"]
         group_dps = sum(p["dpsTargets"][0][0]["dps"] for p in data["players"])
+
+        def get_graph(percentage):
+            bar_count = round(percentage / 5)
+            bars = ""
+            bars += "▓" * bar_count
+            bars += "░" * (20 - bar_count)
+            return bars
 
         def get_dps(player):
             bars = ""
             dps = player["dpsTargets"][0][0]["dps"]
             percentage = round(100 / group_dps * dps)
-            bar_count = round(percentage / 5)
-            bars += "▓" * bar_count
-            bars += "░" * (20 - bar_count)
+            bars = get_graph(percentage)
             bars += f"` **{dps}** DPS | **{percentage}%** of group DPS"
             return bars
 
@@ -90,24 +95,40 @@ class EvtcMixin:
         minutes, seconds = data["duration"].split()[:2]
         minutes = int(minutes[:-1])
         seconds = int(seconds[:-1])
+        duration_time = (minutes * 60) + seconds
         duration = f"**{minutes}** minutes, **{seconds}** seconds"
         embed = discord.Embed(
             title="DPS Report",
             description="Encounter duration: " + duration,
             url=result["permalink"],
             color=color)
+        boss_lines = []
+        target = data["targets"][0]
+        if data["success"]:
+            health_left = 0
+        else:
+            percent_burned = target["healthPercentBurned"]
+            health_left = 100 - percent_burned
+        boss_lines.append(f"Health: **{health_left}%**")
+        boss_lines.append(get_graph(health_left))
+        embed.add_field(name="> **BOSS**", value="\n".join(boss_lines))
         embed = embed_list_lines(embed, lines, "> **PLAYERS**")
         embed = embed_list_lines(embed, dpses, "> **DPS**")
         boss = self.gamedata["bosses"].get(str(result["encounter"]["bossId"]))
         date = datetime.datetime.strptime(data["timeEnd"] + "00",
                                           "%Y-%m-%d %H:%M:%S %z")
+        start_date = datetime.datetime.strptime(data["timeStart"] + "00",
+                                                "%Y-%m-%d %H:%M:%S %z")
         date = date.astimezone(datetime.timezone.utc)
+        start_date = start_date.astimezone(datetime.timezone.utc)
         doc = {
             "boss_id": result["encounter"]["bossId"],
+            "start_date": start_date,
             "date": date,
             "players": [player["account"] for player in data["players"]],
             "permalink": result["permalink"],
-            "success": data["success"]
+            "success": data["success"],
+            "duration": duration_time
         }
         await self.db.encounters.insert_one(doc)
         embed.timestamp = date
@@ -131,14 +152,16 @@ class EvtcMixin:
                 break
         else:
             return await ctx.send_help(ctx.command)
-        doc = await self.bot.database.get(ctx.channel, self)
-        settings = doc.get("evtc", {})
-        enabled = settings.get("enabled")
-        if not ctx.channel.permissions_for(ctx.me).embed_links:
-            return await ctx.send(
-                "I need embed links permission to process logs.")
-        if not enabled:
-            await self.process_evtc(ctx.message)
+        if ctx.guild:
+            doc = await self.bot.database.get(ctx.channel, self)
+            settings = doc.get("evtc", {})
+            enabled = settings.get("enabled")
+            if not ctx.channel.permissions_for(ctx.me).embed_links:
+                return await ctx.send(
+                    "I need embed links permission to process logs.")
+            if enabled:
+                return
+        await self.process_evtc(ctx.message)
 
     @commands.cooldown(1, 5, BucketType.guild)
     @commands.guild_only()
