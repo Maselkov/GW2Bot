@@ -21,8 +21,9 @@ class WalletMixin:
                 pass
             await ctx.send_help(ctx.command)
 
-    # Returns list of strings for currencies
     async def get_wallet(self, ctx, ids):
+        # Returns a list of lists with currency strings
+
         # Difference between two lists, xs has to be the bigger one
         def get_diff(xs, ys):
             zs = []
@@ -31,33 +32,39 @@ class WalletMixin:
                     zs.append(x)
             return zs
 
+        flattened_ids = [y for x in ids for y in x]
         try:
             doc = await self.fetch_key(ctx.author, ["wallet"])
             results = await self.call_api("account/wallet", key=doc["key"])
         except APIError as e:
             return await self.error_handler(ctx, e)
-        lines = []
+        lines = [[], [], [], [], []]
         found_ids = []
         for c in results:
             found_ids.append(c["id"])
-        diff_ids = get_diff(ids, found_ids)
+        diff_ids = get_diff(flattened_ids, found_ids)
         for currency in results:
-            if currency["id"] not in ids:
+            if currency["id"] not in flattened_ids:
                 continue
             c_doc = await self.db.currencies.find_one({"_id": currency["id"]})
             emoji = self.get_emoji(ctx, c_doc["name"])
-            if c_doc["name"] == "Coin":
-                lines.append("{} {} {}".format(
-                    emoji, self.gold_to_coins(ctx, currency["value"]),
-                    c_doc["name"]))
-            else:
-                lines.append("{} {} {}".format(emoji, currency["value"],
-                                               c_doc["name"]))
-        # Currencies with value 0
+            for i in range(0, len(lines)):
+                if currency["id"] in ids[i]:
+                    if c_doc["name"] == "Coin":
+                        lines[i].append("{} {} {}".format(
+                            emoji,
+                            self.gold_to_coins(ctx, currency["value"]),
+                            c_doc["name"]))
+                    else:
+                        lines[i].append("{} {} {}".format(
+                            emoji, currency["value"], c_doc["name"]))
+        #Currencies with value 0
         for c in diff_ids:
-            c_doc = await self.db.currencies.find_one({"_id": c})
-            emoji = self.get_emoji(ctx, c_doc["name"])
-            lines.append("{} 0 {}".format(emoji, c_doc["name"]))
+            for i in range(0, len(lines)):
+                if c in ids[i]:
+                    c_doc = await self.db.currencies.find_one({"_id": c})
+                    emoji = self.get_emoji(ctx, c_doc["name"])
+                    lines[i].append("{} 0 {}".format(emoji, c_doc["name"]))
         return lines
 
     # Searches account for items and returns list of strings
@@ -65,18 +72,22 @@ class WalletMixin:
         user = ctx.author
         scopes = ["inventories", "characters"]
         lines = []
+        flattened_ids = [y for x in ids for y in x]
         try:
             doc = await self.fetch_key(user, scopes)
             search_results = await self.find_items_in_account(
-                ctx, ids, doc=doc)
+                ctx, flattened_ids, doc=doc)
         except APIError as e:
             return await self.error_handler(ctx, e)
-        for k, v in search_results.items():
-            doc = await self.db.items.find_one({"_id": k})
-            name = doc["name"]
-            emoji = self.get_emoji(ctx, name)
-            lines.append("{} {} {}".format(emoji, sum(v.values()),
-                                           name))
+        for i in range(0, len(ids)):
+            lines.append([])
+            for k, v in search_results.items():
+                if k in ids[i]:
+                    doc = await self.db.items.find_one({"_id": k})
+                    name = doc["name"]
+                    emoji = self.get_emoji(ctx, name)
+                    lines[i].append("{} {} {}".format(emoji,
+                                                      sum(v.values()), name))
         return lines
 
     @wallet.command(name="currency")
@@ -154,7 +165,7 @@ class WalletMixin:
     @wallet.command(name="show", aliases=["keys", "maps", "tokens"])
     @commands.cooldown(1, 5, BucketType.user)
     async def wallet_show(self, ctx):
-        """Shows currencies in your wallet
+        """Shows your wallet
 
         Required permissions: wallet
         """
@@ -168,26 +179,30 @@ class WalletMixin:
         ids_maps = [25, 19, 27, 22, 20, 32, 45, 34]
         ids_token = [5, 6, 9, 10, 11, 12, 13, 14, 7, 24]
         ids_raid = [28, 39]
-        ids_l2 = [79280, 79899, 79469, 80332, 81127, 81706]
-        ids_l3 = [86069, 88955, 86977, 89537, 87645, 90783]
-        cur = await self.get_wallet(ctx, ids_cur)
-        keys = await self.get_wallet(ctx, ids_keys)
-        maps = await self.get_wallet(ctx, ids_maps)
-        token = await self.get_wallet(ctx, ids_token)
-        ls3 = await self.get_ls_currency(ctx, ids_l2)
-        ls4 = await self.get_ls_currency(ctx, ids_l3)
-        raid = await self.get_wallet(ctx, ids_raid)
+        ids_l3 = [79280, 79899, 79469, 80332, 81127, 81706]
+        ids_l4 = [86069, 88955, 86977, 89537, 87645, 90783]
+        ids_wallet = [ids_cur, ids_keys, ids_maps, ids_token, ids_raid]
+        ids_ls = [ids_l3, ids_l4]
+
+        currencies_wallet = await self.get_wallet(ctx, ids_wallet)
+        currencies_ls = await self.get_ls_currency(ctx, ids_ls)
 
         embed = discord.Embed(
             description="Wallet", colour=await self.get_embed_color(ctx))
-        embed = embed_list_lines(embed, cur, "> **CURRENCIES**", inline=True)
         embed = embed_list_lines(
-            embed, token, "> **DUNGEON TOKENS**", inline=True)
-        embed = embed_list_lines(embed, keys, "> **KEYS**", inline=True)
-        embed = embed_list_lines(embed, maps, "> **MAP CURRENCIES**", inline=True)
-        embed = embed_list_lines(embed, ls3, "> **LIVING SEASON 3**", inline=True)
-        embed = embed_list_lines(embed, ls4, "> **LIVING SEASON 4**", inline=True)
-        embed = embed_list_lines(embed, raid, "> **RAIDS**", inline=True)
+            embed, currencies_wallet[0], "> **CURRENCIES**", inline=True)
+        embed = embed_list_lines(
+            embed, currencies_wallet[3], "> **DUNGEON TOKENS**", inline=True)
+        embed = embed_list_lines(
+            embed, currencies_wallet[1], "> **KEYS**", inline=True)
+        embed = embed_list_lines(
+            embed, currencies_wallet[2], "> **MAP CURRENCIES**", inline=True)
+        embed = embed_list_lines(
+            embed, currencies_ls[0], "> **LIVING SEASON 3**", inline=True)
+        embed = embed_list_lines(
+            embed, currencies_ls[1], "> **LIVING SEASON 4**", inline=True)
+        embed = embed_list_lines(
+            embed, currencies_wallet[4], "> **RAIDS**", inline=True)
         embed.set_author(
             name=doc["account_name"], icon_url=ctx.author.avatar_url)
         embed.set_footer(
