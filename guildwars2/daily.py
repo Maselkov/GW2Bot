@@ -5,6 +5,8 @@ import discord
 from discord.ext import commands
 from discord.ext.commands.cooldowns import BucketType
 
+from .exceptions import APIKeyError
+
 
 class DailyMixin:
     @commands.group(aliases=["d"], case_insensitive=True)
@@ -109,6 +111,13 @@ class DailyMixin:
             if category == "psna_later":
                 category = "psna in 8 hours"
             value = re.sub(r"(?:Daily|Tier 4|PvP|WvW) ", "", value)
+            if category == "psna" and ctx:
+                try:
+                    key = await self.fetch_key(ctx.author)
+                    whisper = f"/whisper {key['account_name']} "
+                    value = f"```\n{whisper}{value}```"
+                except APIKeyError:
+                    pass
             embed.add_field(name=category.upper(), value=value, inline=False)
         embed.set_footer(
             text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
