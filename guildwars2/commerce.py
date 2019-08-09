@@ -210,39 +210,40 @@ class CommerceMixin:
         coins = results["coins"]
         items = results["items"]
         itemlist = []
-        if coins == 0:
-            gold = "Currently no coins for pickup."
-        else:
-            gold = self.gold_to_coins(ctx, coins)
+
+        gold = self.gold_to_coins(ctx, coins)
         data.add_field(name="> **Gold**", value=gold, inline=False)
         if len(items) != 0:
-            length_counter = 0
             for item in items:
                 itemdoc = await self.fetch_item(item["id"])
                 line = "**{}** {}".format(item["count"], itemdoc["name"])
-                if length_counter + len(line) < 6000:
-                    length_counter += len(line)
+                if len(str(itemlist)) + len(line) < 6000:
                     itemlist.append(line)
                 else:
                     break
             # Split list for formatting into half
-            items_left = itemlist[:math.ceil(len(items) / 2)]
-            items_right = itemlist[math.ceil(len(items) / 2):]
+            items_left = itemlist[:math.ceil(len(itemlist) / 2)]
+            items_right = itemlist[math.ceil(len(itemlist) / 2):]
             items_right.insert(0, zero_width_space)
-            data = embed_list_lines(
-                data, items_left, "> **ITEMS**", inline=True)
-            data = embed_list_lines(
-                data, items_right, zero_width_space, inline=True)
+            if items_left and items_right and len(items_left) < 1024:
+                data = embed_list_lines(
+                    data, items_left, "> **ITEMS**", inline=True)
+                data = embed_list_lines(
+                    data, items_right, zero_width_space, inline=True)
+            else:
+                data = embed_list_lines(
+                    data, itemlist, "> **ITEMS**", inline=True)
         else:
-            if coins == 0:
-                return await ctx.send("Your delivery box is empty!")
-            data.add_field(name="> **ITEMS**", value="None", inline=False)
+            data.add_field(name="> **ITEMS**", value="No items for pickup available.", inline=False)
         try:
             await ctx.send(embed=data)
         except discord.HTTPException:
             await ctx.send("Need permission to embed links")
 
     def gold_to_coins(self, ctx, money):
+        if money == 0:
+            return "0{}".format(self.get_emoji(
+            ctx, "copper"))
         gold, remainder = divmod(money, 10000)
         silver, copper = divmod(remainder, 100)
         kwargs = {"fallback": True, "fallback_fmt": " {} "}
@@ -334,3 +335,4 @@ class CommerceMixin:
                                   "server. Aborting.")
         await self.bot.database.set(user, {"gemtrack": price}, self)
         await ctx.send("Successfully set")
+
