@@ -104,7 +104,6 @@ class GeneralGuild:
         # For each order the rank has, go through each member and add it with
         # the current order increment to the embed
         lines = []
-        length_lines = 0
         for order in ranks:
             for member in results:
                 # Filter invited members
@@ -116,8 +115,7 @@ class GeneralGuild:
                             if rank['order'] == order_id:
                                 line = "**{}**\n*{}*".format(
                                     member['name'], member['rank'])
-                                if length_lines + len(line) < 6000:
-                                    length_lines += len(line)
+                                if len(str(lines)) + len(line) < 6000:
                                     lines.append(line)
             order_id += 1
         data = embed_list_lines(data, lines, "> **MEMBERS**", inline=True)
@@ -156,7 +154,6 @@ class GeneralGuild:
         item_counter = 0
         amount = 0
         lines = []
-        length_lines = 0
         itemlist = []
         for item in treasury:
             res = await self.fetch_item(item["item_id"])
@@ -173,8 +170,7 @@ class GeneralGuild:
                     line = "**{}**\n*{}*".format(
                         item_name,
                         str(current) + "/" + str(amount))
-                    if length_lines + len(line) < 6000:
-                        length_lines += len(line)
+                    if len(str(lines)) + len(line) < 6000:
                         lines.append(line)
                 amount = 0
                 item_counter += 1
