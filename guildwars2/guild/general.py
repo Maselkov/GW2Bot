@@ -6,6 +6,7 @@ from discord.ext.commands.cooldowns import BucketType
 from discord.ext.commands.errors import BadArgument
 
 from ..exceptions import APIError, APIForbidden, APINotFound
+from ..utils.chat import embed_list_lines, zero_width_space
 
 
 class GeneralGuild:
@@ -43,14 +44,19 @@ class GeneralGuild:
             description='General Info about {0}'.format(guild_name),
             colour=await self.get_embed_color(ctx))
         data.set_author(name="{} [{}]".format(results["name"], results["tag"]))
-        data.add_field(name='Influence', value=results["influence"])
-        data.add_field(name='Aetherium', value=results["aetherium"])
-        data.add_field(name='Resonance', value=results["resonance"])
-        data.add_field(name='Favor', value=results["favor"])
-        data.add_field(
-            name='Members',
-            value="{}/{}".format(results["member_count"],
-                                 str(results["member_capacity"])))
+        guild_currencies = ["influence", "aetherium", "resonance", "favor", "member_count"]
+        for cur in guild_currencies:
+            if cur == "member_count":
+                data.add_field(
+                    name='Members',
+                    value="{} {}/{}".format(
+                        self.get_emoji(ctx, "friends"), results["member_count"],
+                        str(results["member_capacity"])))
+            else:
+                data.add_field(
+                    name=cur.capitalize(),
+                    value='{} {}'.format(
+                        self.get_emoji(ctx, cur), results[cur]))
         if "motd" in results:
             data.add_field(
                 name='Message of the day:',
@@ -65,8 +71,7 @@ class GeneralGuild:
     @guild.command(name="members", usage="<guild name>")
     @commands.cooldown(1, 20, BucketType.user)
     async def guild_members(self, ctx, *, guild_name=None):
-        """Get list of the first 20 members and their ranks.
-        Only displays the highest ranks.
+        """Shows a list of members and their ranks.
 
         Required permissions: guilds and in game permissions
         """
@@ -91,12 +96,14 @@ class GeneralGuild:
                 "use this command")
         except APIError as e:
             return await self.error_handler(ctx, e)
-        data = discord.Embed(description="Members", colour=await self.get_embed_color(ctx))
+        data = discord.Embed(
+            description=zero_width_space,
+            colour=await self.get_embed_color(ctx))
         data.set_author(name=guild_name.title())
-        counter = 0
         order_id = 1
         # For each order the rank has, go through each member and add it with
         # the current order increment to the embed
+        lines = []
         for order in ranks:
             for member in results:
                 # Filter invited members
@@ -106,12 +113,12 @@ class GeneralGuild:
                     for rank in ranks:
                         if member_rank == rank['id']:
                             if rank['order'] == order_id:
-                                if counter < 20:
-                                    data.add_field(
-                                        name=member['name'],
-                                        value=member['rank'])
-                                    counter += 1
+                                line = "**{}**\n*{}*".format(
+                                    member['name'], member['rank'])
+                                if len(str(lines)) + len(line) < 6000:
+                                    lines.append(line)
             order_id += 1
+        data = embed_list_lines(data, lines, "> **MEMBERS**", inline=True)
         try:
             await ctx.send(embed=data)
         except discord.Forbidden:
@@ -140,35 +147,37 @@ class GeneralGuild:
                 "use this command")
         except APIError as e:
             return await self.error_handler(ctx, e)
-        data = discord.Embed(description="Treasury", colour=await self.get_embed_color(ctx))
+        data = discord.Embed(
+            description=zero_width_space,
+            colour=await self.get_embed_color(ctx))
         data.set_author(name=guild_name.title())
-        counter = 0
         item_counter = 0
         amount = 0
+        lines = []
         itemlist = []
         for item in treasury:
-            res = await self.db.items.find_one({"_id": item["item_id"]})
+            res = await self.fetch_item(item["item_id"])
             itemlist.append(res)
         # Collect amounts
         if treasury:
             for item in treasury:
-                if counter < 20:
-                    current = item["count"]
-                    item_name = itemlist[item_counter]["name"]
-                    needed = item["needed_by"]
-                    for need in needed:
-                        amount = amount + need["count"]
-                    if amount != current:
-                        data.add_field(
-                            name=item_name,
-                            value=str(current) + "/" + str(amount),
-                            inline=True)
-                        counter += 1
-                    amount = 0
-                    item_counter += 1
+                current = item["count"]
+                item_name = itemlist[item_counter]["name"]
+                needed = item["needed_by"]
+                for need in needed:
+                    amount = amount + need["count"]
+                if amount != current:
+                    line = "**{}**\n*{}*".format(
+                        item_name,
+                        str(current) + "/" + str(amount))
+                    if len(str(lines)) + len(line) < 6000:
+                        lines.append(line)
+                amount = 0
+                item_counter += 1
         else:
             await ctx.send("Treasury is empty!")
             return
+        data = embed_list_lines(data, lines, "> **TREASURY**", inline=True)
         try:
             await ctx.send(embed=data)
         except discord.Forbidden:
@@ -177,7 +186,7 @@ class GeneralGuild:
     @guild.command(name="log", usage="stash/treasury/members <guild name>")
     @commands.cooldown(1, 10, BucketType.user)
     async def guild_log(self, ctx, log_type, *, guild_name=None):
-        """Get log of last 20 entries of stash/treasury/members
+        """Get log of stash/treasury/members
         Required permissions: guilds and in game permissions"""
         state = log_type.lower()
         member_list = [
@@ -203,96 +212,81 @@ class GeneralGuild:
             return await self.error_handler(ctx, e)
 
         data = discord.Embed(
-            description="{0} Log".format(state.capitalize()),
+            description=zero_width_space,
             colour=await self.get_embed_color(ctx))
         data.set_author(name=guild_name.title())
-        counter = 0
+        lines = []
+        length_lines = 0
         for entry in log:
             if entry["type"] == state:
-                if counter < 20:
+                time = entry["time"]
+                timedate = datetime.datetime.strptime(
+                    time, "%Y-%m-%dT%H:%M:%S.%fZ").strftime('%d.%m.%Y %H:%M')
+                user = entry["user"]
+                if state == "stash" or state == "treasury":
+                    quantity = entry["count"]
+                    if entry["item_id"] is 0:
+                        item_name = self.gold_to_coins(ctx, entry["coins"])
+                        quantity = ""
+                        multiplier = ""
+                    else:
+                        itemdoc = await self.fetch_item(entry["item_id"])
+                        item_name = itemdoc["name"]
+                        multiplier = "x"
+                    if state == "stash":
+                        if entry["operation"] == "withdraw":
+                            operator = " withdrew"
+                        else:
+                            operator = " deposited"
+                    else:
+                        operator = " donated"
+                    line = "**{}**\n*{}*".format(
+                        timedate, user + "{} {}{} {}".format(
+                            operator, quantity, multiplier, item_name))
+                    if length_lines + len(line) < 5500:
+                        length_lines += len(line)
+                        lines.append(line)
+            if state == "members":
+                entry_string = ""
+                if entry["type"] in member_list:
                     time = entry["time"]
                     timedate = datetime.datetime.strptime(
                         time,
                         "%Y-%m-%dT%H:%M:%S.%fZ").strftime('%d.%m.%Y %H:%M')
                     user = entry["user"]
-                    if state == "stash" or state == "treasury":
-                        quantity = entry["count"]
-                        if entry["item_id"] is 0:
-                            item_name = self.gold_to_coins(entry["coins"])
-                            quantity = ""
-                            multiplier = ""
+                    if entry["type"] == "invited":
+                        invited_by = entry["invited_by"]
+                        entry_string = "{} has invited {} to the guild.".format(
+                            invited_by, user)
+                    elif entry["type"] == "joined":
+                        entry_string = "{} has joined the guild.".format(user)
+                    elif entry["type"] == "kick":
+                        kicked_by = entry["kicked_by"]
+                        if kicked_by == user:
+                            entry_string = "{} has left the guild.".format(
+                                user)
                         else:
-                            itemdoc = await self.fetch_item(entry["item_id"])
-                            item_name = itemdoc["name"]
-                            multiplier = "x"
-                        if state == "stash":
-                            if entry["operation"] == "withdraw":
-                                operator = " withdrew"
-                            else:
-                                operator = " deposited"
+                            entry_string = "{} has been kicked by {}.".format(
+                                user, kicked_by)
+                    elif entry["type"] == "rank_change":
+                        old_rank = entry["old_rank"]
+                        new_rank = entry["new_rank"]
+                        if "changed_by" in entry:
+                            changed_by = entry["changed_by"]
+                            entry_string = "{} has changed the role of {} from {} to {}.".format(
+                                changed_by, user, old_rank, new_rank)
                         else:
-                            operator = " donated"
-                        data.add_field(
-                            name=timedate,
-                            value=user + "{} {}{} {}".format(
-                                operator, quantity, multiplier, item_name),
-                            inline=False)
-                        counter += 1
-            if state == "members":
-                if counter < 20:
-                    if entry["type"] in member_list:
-                        time = entry["time"]
-                        timedate = datetime.datetime.strptime(
-                            time,
-                            "%Y-%m-%dT%H:%M:%S.%fZ").strftime('%d.%m.%Y %H:%M')
-                        user = entry["user"]
-                        if entry["type"] == "invited":
-                            invited_by = entry["invited_by"]
-                            data.add_field(
-                                name=timedate,
-                                value="{} has invited {} to the guild.".format(
-                                    invited_by, user),
-                                inline=False)
-                        elif entry["type"] == "joined":
-                            data.add_field(
-                                name=timedate,
-                                value="{} has joined the guild.".format(user),
-                                inline=False)
-                        elif entry["type"] == "kick":
-                            kicked_by = entry["kicked_by"]
-                            if kicked_by == user:
-                                data.add_field(
-                                    name=timedate,
-                                    value="{} has left the guild.".format(user),
-                                    inline=False)
-                            else:
-                                data.add_field(
-                                    name=timedate,
-                                    value="{} has been kicked by {}.".format(
-                                        user, kicked_by),
-                                    inline=False)
-                        elif entry["type"] == "rank_change":
-                            old_rank = entry["old_rank"]
-                            new_rank = entry["new_rank"]
-                            if "changed_by" in entry:
-                                changed_by = entry["changed_by"]
-                                data.add_field(
-                                    name=timedate,
-                                    value="{} has changed"
-                                    " the role of {} from {} to {}.".format(
-                                        changed_by, user, old_rank, new_rank),
-                                    inline=False)
-                            else:
-                                data.add_field(
-                                    name=timedate,
-                                    value="{} changed his"
-                                    " role from {} to {}.".format(
-                                        user, old_rank, new_rank),
-                                    inline=False)
-                        counter += 1
-        if counter == 0:
+                            entry_string = "{} changed his role from {} to {}.".format(
+                                user, old_rank, new_rank)
+                    line = "**{}**\n*{}*".format(timedate, entry_string)
+                    if length_lines + len(line) < 5500:
+                        length_lines += len(line)
+                        lines.append(line)
+        if not lines:
             return await ctx.send("No {} log entries yet for {}".format(
                 state, guild_name.title()))
+        data = embed_list_lines(data, lines,
+                                "> **{0} Log**".format(state.capitalize()))
         try:
             await ctx.send(embed=data)
         except discord.Forbidden:
@@ -341,3 +335,4 @@ class GeneralGuild:
                        "invoked without a specified guild will default to "
                        "this guild. To reset, simply invoke this command "
                        "without specifying a guild".format(guild_name.title()))
+
