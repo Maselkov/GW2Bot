@@ -2,9 +2,9 @@ import datetime
 import re
 from collections import OrderedDict, defaultdict
 from itertools import chain
-import pymongo
 
 import discord
+import pymongo
 from discord.ext import commands
 from discord.ext.commands.cooldowns import BucketType
 
@@ -459,7 +459,7 @@ class AccountMixin:
             monday.year, monday.month, monday.day, hour=7, minute=30)
         next_reset_time = reset_time + datetime.timedelta(weeks=1)
 
-        async def get_dps_report_link(boss_id):
+        async def get_dps_reports(boss_id):
             boss_id = boss_to_id[boss_id]
             cursor = self.db.encounters.find({
                 "boss_id": {
@@ -471,12 +471,8 @@ class AccountMixin:
                     "$lt": next_reset_time
                 },
                 "success": boss["id"] in results
-            }).sort("date", pymongo.DESCENDING).limit(1)
-            doc = await cursor.to_list(None)
-            if doc:
-                return doc[0]["permalink"]
-            else:
-                return None
+            }).sort("date", pymongo.DESCENDING).limit(5)
+            return await cursor.to_list(None)
 
         not_completed = []
         embed = discord.Embed(
@@ -494,9 +490,15 @@ class AccountMixin:
                 if boss["id"] not in results:
                     wing_done = False
                     not_completed.append(boss)
-                permalink = await get_dps_report_link(boss["id"])
-                if permalink:
-                    boss_name = f"[{readable_id(boss['id'])}]({permalink})"
+                reports = await get_dps_reports(boss["id"])
+                if reports:
+                    boss_name = (f"[{readable_id(boss['id'])}]"
+                                 f"({reports[0]['permalink']})")
+                    if len(reports) > 1:
+                        links = []
+                        for i, report in enumerate(reports[1:], 2):
+                            links.append(f"[{i}]({report['permalink']})")
+                        boss_name += f" ({', '.join(links)})"
                 else:
                     boss_name = readable_id(boss["id"])
                 value.append("> " + is_killed(boss) + boss_name)
