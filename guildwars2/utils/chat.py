@@ -1,6 +1,8 @@
 import re
 
 zero_width_space = u'\u200b'
+magic_space = " "
+en_space = " "
 
 
 def embed_list_lines(embed, lines, field_name, max_characters=1024):
