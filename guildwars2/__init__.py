@@ -54,19 +54,19 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
             self.font = ImageFont.truetype("GWTwoFont1p1.ttf", size=30)
         except IOError:
             self.font = ImageFont.load_default()
-        to_start = [
+        self.tasks = [
             self.game_update_checker, self.daily_checker, self.news_checker,
             self.gem_tracker, self.world_population_checker,
             self.guild_synchronizer, self.boss_notifier,
             self.forced_account_names, self.event_reminder_task,
             self.worldsync_task
         ]
-        self.tasks = [task.start() for task in to_start]
+        for task in self.tasks:
+            task.start()
 
     def cog_unload(self):
         for task in self.tasks:
             task.cancel()
-        self.tasks = []
 
     async def error_handler(self, ctx, exc):
         user = ctx.author
