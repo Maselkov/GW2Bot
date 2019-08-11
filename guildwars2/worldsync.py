@@ -133,8 +133,6 @@ class WorldsyncMixin:
             linked_worlds = await self.get_linked_worlds(world_id)
         except APIError as e:
             return
-        if not linked_worlds:
-            return
         world_role = guild.get_role(doc.get("world_role"))
         ally_role = guild.get_role(doc.get("ally_role"))
         if not world_role or not ally_role:
