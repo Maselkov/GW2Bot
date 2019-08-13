@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 from discord.ext.commands.cooldowns import BucketType
+import re
 
 from .exceptions import APIError
 from .utils.chat import embed_list_lines
@@ -53,7 +54,7 @@ class WalletMixin:
         return lines
 
     # Searches account for items and returns list of strings
-    async def get_ls_currency(self, ctx, ids):
+    async def get_item_currency(self, ctx, ids):
         user = ctx.author
         scopes = ["inventories", "characters"]
         lines = []
@@ -70,6 +71,7 @@ class WalletMixin:
                 if k in ids[i]:
                     doc = await self.db.items.find_one({"_id": k})
                     name = doc["name"]
+                    name = re.sub('\d+ ', '', name)
                     emoji = self.get_emoji(ctx, name)
                     lines[i].append("{} {} {}".format(emoji, sum(v.values()),
                                                       name))
@@ -92,13 +94,14 @@ class WalletMixin:
         ids_maps = [25, 19, 27, 22, 20, 32, 45, 34]
         ids_token = [5, 6, 9, 10, 11, 12, 13, 14, 7, 24]
         ids_raid = [28, 39]
+        ids_maps_items = [88926]
         ids_l3 = [79280, 79899, 79469, 80332, 81127, 81706]
         ids_l4 = [86069, 88955, 86977, 89537, 87645, 90783]
         ids_wallet = [ids_cur, ids_keys, ids_maps, ids_token, ids_raid]
-        ids_ls = [ids_l3, ids_l4]
+        ids_items = [ids_l3, ids_l4, ids_maps_items]
 
         currencies_wallet = await self.get_wallet(ctx, ids_wallet)
-        currencies_ls = await self.get_ls_currency(ctx, ids_ls)
+        currencies_items = await self.get_item_currency(ctx, ids_items)
 
         embed = discord.Embed(
             description="Wallet", colour=await self.get_embed_color(ctx))
@@ -109,11 +112,11 @@ class WalletMixin:
         embed = embed_list_lines(
             embed, currencies_wallet[1], "> **KEYS**", inline=True)
         embed = embed_list_lines(
-            embed, currencies_wallet[2], "> **MAP CURRENCIES**", inline=True)
+            embed, currencies_wallet[2] + currencies_items[2], "> **MAP CURRENCIES**", inline=True)
         embed = embed_list_lines(
-            embed, currencies_ls[0], "> **LIVING SEASON 3**", inline=True)
+            embed, currencies_items[0], "> **LIVING SEASON 3**", inline=True)
         embed = embed_list_lines(
-            embed, currencies_ls[1], "> **LIVING SEASON 4**", inline=True)
+            embed, currencies_items[1], "> **LIVING SEASON 4**", inline=True)
         embed = embed_list_lines(
             embed, currencies_wallet[4], "> **RAIDS**", inline=True)
         embed.set_author(
