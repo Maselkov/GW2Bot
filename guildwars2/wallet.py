@@ -71,7 +71,7 @@ class WalletMixin:
                 if k in ids[i]:
                     doc = await self.db.items.find_one({"_id": k})
                     name = doc["name"]
-                    name = re.sub('\d+ ', '', name)
+                    name = re.sub('^\d+ ', '', name)
                     emoji = self.get_emoji(ctx, name)
                     lines[i].append("{} {} {}".format(emoji, sum(v.values()),
                                                       name))
