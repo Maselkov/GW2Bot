@@ -9,6 +9,7 @@ from .exceptions import APIError, APIInactiveError
 
 
 class KeyMixin:
+#### For the "key" group command.
     @commands.group(case_insensitive=True)
     async def key(self, ctx):
         """Commands related to API keys"""
@@ -22,16 +23,17 @@ class KeyMixin:
         if ctx.invoked_subcommand is None:
             return await ctx.send_help(ctx.command)
 
+#### For the "add" key command.
     @key.command(name="add")
     @commands.cooldown(1, 2, BucketType.user)
     async def key_add(self, ctx, key):
-        """Adds a key and associates it with your discord account
+        """Adds a key and associates it with your discord account.
 
-        To generate an API key, head to https://account.arena.net, and log in.
-        In the "Applications" tab, generate a new key, with all permissions.
+        To generate an API key, go to https://account.arena.net, and log in.
+        In the "Applications" tab, generate a new key with all the permissions you want.
         Then input it using $key add <key>
 
-        Required permissions: account
+        Required permission: account
         """
         guild = ctx.guild
         user = ctx.author
@@ -72,7 +74,7 @@ class KeyMixin:
             keys.append(key)
         if key_doc["key"] in [k["key"] for k in keys]:
             return await ctx.send(
-                "{.mention}, you have already added this key before. {}".
+                "{.mention}, this key is already associated with your account. {}".
                 format(user, output))
         if len(keys) >= 12:
             return await ctx.send(
@@ -132,13 +134,35 @@ class KeyMixin:
         except:
             pass
 
+#### For the "info" key command.
+    @key.command(name="info")
+    @commands.cooldown(1, 5, BucketType.user)
+    async def key_info(self, ctx):
+        """Information about your active api key."""
+        doc = await self.bot.database.get(ctx.author, self)
+        keys = doc.get("keys", [])
+        key = doc.get("key", {})
+        if not keys and not key:
+            return await ctx.send(
+                "You don't have a key added. You can add one with {0}key add.".
+                format(ctx.prefix))
+        embed = await self.display_keys(
+            ctx,
+            doc,
+            display_active=True,
+            show_tokens=True,
+            reveal_tokens=True)
+        try:
+            await ctx.author.send(embed=embed)
+        except discord.HTTPException:
+            if ctx.guild:
+                await ctx.send("I cannot send a message to you.")
+
+#### For the "remove" key command.
     @key.command(name="remove")
     @commands.cooldown(1, 1, BucketType.user)
     async def key_remove(self, ctx):
-        """Removes a key from the bot
-
-        Requires a key
-        """
+        """Removes a key from the bot."""
         if ctx.author.id in self.waiting_for:
             return await ctx.send(
                 "I'm already waiting for a response from you for "
@@ -148,7 +172,7 @@ class KeyMixin:
         key = doc.get("key", {})
         if not keys and not key:
             return await ctx.send(
-                "You have no keys added, you can add one with {0}key add.".
+                "You don't have a key added. You can add one with {0}key add.".
                 format(ctx.prefix))
         if key and not keys:
             keys = []
@@ -202,38 +226,13 @@ class KeyMixin:
             "keys": keys
         }, self)
 
-    @key.command(name="info")
-    @commands.cooldown(1, 5, BucketType.user)
-    async def key_info(self, ctx):
-        """Information about your active api key
-        """
-        doc = await self.bot.database.get(ctx.author, self)
-        keys = doc.get("keys", [])
-        key = doc.get("key", {})
-        if not keys and not key:
-            return await ctx.send(
-                "You have no keys added, you can add one with {0}key add.".
-                format(ctx.prefix))
-        embed = await self.display_keys(
-            ctx,
-            doc,
-            display_active=True,
-            show_tokens=True,
-            reveal_tokens=True)
-        try:
-            await ctx.author.send(embed=embed)
-        except discord.HTTPException:
-            if ctx.guild:
-                await ctx.send("I cannot send a message to you")
-
+#### For the "switch" key command.
     @key.command(name="switch", usage="<choice>")
     @commands.cooldown(1, 5, BucketType.user)
     async def key_switch(self, ctx, choice: int = 0):
-        """Swaps between multiple stored API keys.
+        """Swaps between your stored API keys.
 
-        Can be used with no parameter to display a list of all your
-        keys to select from, or with a number to immediately swap to a selected
-        key e.g. $key switch 3"""
+        Can be used with no parameter to display a list of all your keys to select from, or with a number to immediately swap to a selected key. E.g. $key switch 3"""
         if ctx.author.id in self.waiting_for:
             return await ctx.send(
                 "I'm already waiting for a response from you "
