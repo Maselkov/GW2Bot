@@ -9,7 +9,7 @@ from .exceptions import APIBadRequest, APIError, APINotFound
 
 class CommerceMixin:
 #### For the "gem" group command.
-    @commands.group(case_insensitive=True)
+    @commands.group(aliases=["gems"], case_insensitive=True)
     async def gem(self, ctx):
         """Commands related to gems"""
         if ctx.invoked_subcommand is None:
