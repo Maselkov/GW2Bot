@@ -13,12 +13,13 @@ from .utils.chat import embed_list_lines
 
 
 class AccountMixin:
+    # The "account" command. This displays and acquires information.
     @commands.command()
     @commands.cooldown(1, 10, BucketType.user)
     async def account(self, ctx):
         """General information about your account
 
-        Required permissions: account
+        Required permission: account
         """
         user = ctx.author
         await ctx.trigger_typing()
@@ -97,6 +98,7 @@ class AccountMixin:
         except discord.Forbidden:
             await ctx.send("Need permission to embed links")
 
+    # The "li" command. This displays and acquires information.
     @commands.command(aliases=["ld"])
     @commands.cooldown(1, 10, BucketType.user)
     async def li(self, ctx):
@@ -183,12 +185,13 @@ class AccountMixin:
             format(user),
             embed=embed)
 
+    # The "kp" command. This displays and acquires information.
     @commands.command()
     @commands.cooldown(1, 15, BucketType.user)
     async def kp(self, ctx):
         """Shows completed raids and fractals
 
-        Required permissions: progression
+        Required permission: progression
         """
         user = ctx.author
         scopes = ["progression"]
@@ -254,12 +257,13 @@ class AccountMixin:
         await ctx.send(
             "{.mention}, here is your kill proof.".format(user), embed=embed)
 
+    #The "bosses" command. This is displaying most information.
     @commands.command()
     @commands.cooldown(1, 10, BucketType.user)
     async def bosses(self, ctx):
         """Shows your raid progression for the week
 
-        Required permissions: progression
+        Required permission: progression
         """
         user = ctx.author
         scopes = ["progression"]
@@ -282,10 +286,12 @@ class AccountMixin:
         await ctx.send(
             "{.mention}, here are your raid bosses:".format(user), embed=embed)
 
+    #The "find" command. This is displaying most information.
     @commands.command(aliases=["find"])
     @commands.cooldown(1, 5, BucketType.user)
     async def search(self, ctx, *, item):
         """Find items on your account
+        
         Required permissions: inventories, characters
         """
         if not self.can_embed_links(ctx):
@@ -401,12 +407,14 @@ class AccountMixin:
         data.set_thumbnail(url=icon_url)
         await ctx.send(message, embed=data)
 
+    # The "cats" command. This is displaying and acquiring information
     @commands.command()
     @commands.cooldown(1, 10, BucketType.user)
     async def cats(self, ctx):
         """Displays the cats you haven't unlocked yet
 
-        Required permissions: progression"""
+        Required permission: progression
+        """
         user = ctx.message.author
         endpoint = "account/home/cats"
         try:
@@ -429,8 +437,9 @@ class AccountMixin:
         embed.set_footer(
             text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
         await ctx.send(
-            "{.mention}, here are your cats:".format(user), embed=embed)
-
+            "{.mention}, here are the cats you don't have:".format(user), embed=embed)
+    
+    # For the "bosses" command. This acquires information.
     async def boss_embed(self, ctx, raids, results, account_name,
                          last_modified):
         boss_to_id = defaultdict(list)
@@ -540,6 +549,7 @@ class AccountMixin:
             icon_url=self.bot.user.avatar_url)
         return embed
 
+    # For the "find" command. This acquires information.
     async def find_items_in_account(self,
                                     ctx,
                                     item_ids,
