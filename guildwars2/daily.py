@@ -20,7 +20,7 @@ class DailyMixin:
     @daily.command(name="all", aliases=["a"])
     @commands.cooldown(1, 2, BucketType.user)
     async def daily_all(self, ctx):
-        """Show today's all dailies"""
+        """Shows all dailies"""
         embed = await self.daily_embed(
             ["psna", "pve", "pvp", "wvw", "fractals"], ctx=ctx)
         embed.set_thumbnail(
@@ -35,7 +35,7 @@ class DailyMixin:
     @daily.command(name="fractals", aliases=["f"])
     @commands.cooldown(1, 2, BucketType.user)
     async def daily_fractals(self, ctx):
-        """Show today's fractal dailies"""
+        """Shows today's fractal dailies"""
         embed = await self.daily_embed(["fractals"], ctx=ctx)
         try:
             embed.set_thumbnail(
@@ -49,7 +49,7 @@ class DailyMixin:
     @daily.command(name="psna")
     @commands.cooldown(1, 2, BucketType.user)
     async def daily_psna(self, ctx):
-        """Show today's Pact Supply Network Agent locations"""
+        """Shows today's Pact Supply Network Agent locations"""
         embed = await self.daily_embed(["psna"], ctx=ctx)
         embed.set_thumbnail(
             url="https://wiki.guildwars2.com/images/1/14/Daily_Achievement.png"
@@ -63,7 +63,7 @@ class DailyMixin:
     @daily.command(name="pve", aliases=["e"])
     @commands.cooldown(1, 2, BucketType.user)
     async def daily_pve(self, ctx):
-        """Show today's PvE dailies"""
+        """Shows today's PvE dailies"""
         embed = await self.daily_embed(["pve"], ctx=ctx)
         try:
             await ctx.send(embed=embed)
@@ -74,7 +74,7 @@ class DailyMixin:
     @daily.command(name="pvp", aliases=["p"])
     @commands.cooldown(1, 2, BucketType.user)
     async def daily_pvp(self, ctx):
-        """Show today's PvP dailies"""
+        """Shows today's PvP dailies"""
         embed = await self.daily_embed(["pvp"], ctx=ctx)
         try:
             embed.set_thumbnail(
@@ -88,7 +88,7 @@ class DailyMixin:
     @daily.command(name="wvw", aliases=["w"])
     @commands.cooldown(1, 2, BucketType.user)
     async def daily_wvw(self, ctx):
-        """Show today's WvW dailies"""
+        """Shows today's WvW dailies"""
         embed = await self.daily_embed(["wvw"], ctx=ctx)
         embed.set_thumbnail(
             url="https://render.guildwars2.com/file/"
