@@ -66,15 +66,15 @@ class CharactersMixin:
         if hours:
             return "{}{} {}{}".format(hours, h_str, minutes, m_str)
         return "{}{}".format(minutes, m_str)
-
+		
 #### For the "character" group command.
     @commands.group(case_insensitive=True)
     async def character(self, ctx):
         """Character related commands"""
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
-            
-####For the "birthdays" character command.
+
+#### For the "birthdays" character command.
     @character.command(name="birthdays")
     async def character_birthdays(self, ctx):
         """Lists days until the next birthday for each character.
@@ -122,7 +122,7 @@ class CharactersMixin:
             embed = embed_list_lines(embed, lines, "{}{} Birthday".format(
                 k, suffix(k)))
         await ctx.send(msg, embed=embed)
-        
+
 #### For the "crafting" character command.
     @character.command(name="crafting")
     @commands.cooldown(1, 10, BucketType.user)
@@ -156,15 +156,7 @@ class CharactersMixin:
             await ctx.send(embed=data)
         except discord.HTTPException:
             await ctx.send("Need permission to embed links")
-                         
-        def get_crafting(self, character):
-        craft_list = []
-        for crafting in character["crafting"]:
-            rating = crafting["rating"]
-            discipline = crafting["discipline"]
-            craft_list.append("Level {} {}".format(rating, discipline))
-        return craft_list
-    
+
 #### For the "fashion" character command.
     @character.command(name="fashion")
     @commands.cooldown(1, 10, BucketType.user)
@@ -235,9 +227,9 @@ class CharactersMixin:
             await ctx.send(embed=embed)
         except discord.Forbidden as e:
             await ctx.send("Need permission to embed links")
-
-#### For the "gear" character command.
-    @character.command(name="gear", aliases=["pvegear","attributes","pvebuild"])
+		
+#### For the "gear" character command. This is for PvE.
+    @character.command(name="gear", aliases=["pvegear", "pvebuild", "attributes", "build"])
     @commands.cooldown(1, 10, BucketType.user)
     async def character_gear(self, ctx, *, character: str):
         """Displays the PvE gear, attributes and build of a given character.
@@ -246,9 +238,9 @@ class CharactersMixin:
         Required permission: characters
         """
         await self.display_gear(ctx, character)
-        
-#### For the "pvpgear" character command.
-    @character.command(name="pvpgear" aliases=["pvpbuild"])
+
+#### For the "pvpgear" character command. This is for PvP.
+    @character.command(name="pvpgear", aliases=["pvpbuild"])
     @commands.cooldown(1, 10, BucketType.user)
     async def character_pvpgear(self, ctx, *, character: str):
         """Displays the PvP gear, attributes and build of a given character.
@@ -258,8 +250,8 @@ class CharactersMixin:
         """
         await self.display_gear(ctx, character, "pvp")
 
-#### For the "wvwgear" character command.
-    @character.command(name="wvwgear" aliases=["wvwbuild"])
+#### For the "wvwgear" character command. This is for WvW.
+    @character.command(name="wvwgear", aliases=["wvwbuild"])
     @commands.cooldown(1, 10, BucketType.user)
     async def character_wvwgear(self, ctx, *, character: str):
         """Displays the WvW gear, attributes, and build of a given character.
@@ -268,8 +260,8 @@ class CharactersMixin:
         Required permission: characters
         """
         await self.display_gear(ctx, character, "wvw")
-        
-#### For the "gear|pvpgear|wvwgear" commands. This acquires and displays information.
+
+#### For the "gear|pvpgear|wvwgear" character commands. This acquires and displays information.
     async def display_gear(self, ctx, character, mode="pve"):
         character = character.title()
         await ctx.trigger_typing()
@@ -784,7 +776,7 @@ class CharactersMixin:
                 text="A level {} {} ".format(level, profession.name.lower()),
                 icon_url=profession.icon)
         return embed
-                         
+
 #### For the "info" character command.
     @character.command(name="info")
     @commands.cooldown(1, 5, BucketType.user)
@@ -905,10 +897,10 @@ class CharactersMixin:
         embed.set_footer(text="You can use age|created|profession to "
                          "display more information! E.g. {}character list age".
                          format(ctx.prefix))
-        await ctx.send("{.mention}, here is your list of characters".format(user), embed=embed)
-                         
-#### For the "togglepublic" character command. Currently is outdated.
-    @character.command(name="togglepublic")
+        await ctx.send("{.mention}".format(user), embed=embed)
+
+#### For the "togglepublic" character command. Currently out of date.
+    @character.command(name="togglepublic", usage="<character|all>")
     @commands.cooldown(1, 1, BucketType.user)
     async def character_togglepublic(self, ctx, *, character_or_all: str):
         """Toggle your character(s) status to public.
@@ -951,44 +943,15 @@ class CharactersMixin:
                        "again, type the same command.")
         if character == "All":
             await user.send("\n".join(output))
-                         
-    async def get_all_characters(self, user, scopes=None):
-        endpoint = "characters?page=0&page_size=200"
-        results = await self.call_api(endpoint, user, scopes)
-        return [Character(self, c) for c in results]
-
-    async def get_character(self, ctx, character):
-        character = character.title()
-        endpoint = "characters/" + character.replace(" ", "%20")
-        try:
-            results = await self.call_api(endpoint, ctx.author,
-                                          ["characters", "builds"])
-        except APINotFound:
-            results = await self.get_public_character(character)
-            if not results:
-                raise APINotFound
-        return results
-
-    async def get_public_character(self, character):
-        character = character.title()
-        endpoint = "characters/" + character.replace(" ", "%20")
-        doc = await self.db.characters.find_one({"name": character})
-        if doc:
-            user = await self.bot.fetch_user(doc["owner"])
-            try:
-                return await self.call_api(endpoint, user)
-            except APIError:
-                return None
-        return None
-    
+			
 #### For the "sab" group command.
     @commands.group(case_insensitive=True)
     async def sab(self, ctx):
         """Super Adventure Box commands
-        """
+		"""
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
-
+			
 #### For the "unlocks" sab command.
     @sab.command(name="unlocks")
     @commands.cooldown(1, 10, BucketType.user)
@@ -1022,15 +985,16 @@ class CharactersMixin:
                 "upgrades:\n```fix\n{}\n```".format("\n".join(missing)))
         await ctx.send("You have unlocked all the upgrades on "
                        "this character! Congratulations!")
-
+					   
 #### For the "zones" sab command.
-    @sab.command(name="zones" aliases=["world","worlds"])
+    @sab.command(name="zones", aliases=["worlds"])
     @commands.cooldown(1, 10, BucketType.user)
     async def sab_zones(self, ctx, *, character):
         """Displays missing SAB zones for a given character
         
         Required permissions: character, progression
         """
+
         def missing_zones(zones):
             modes = ["infantile", "normal", "tribulation"]
             worlds = 1, 2
@@ -1067,6 +1031,45 @@ class CharactersMixin:
                 "zones:\n```fix\n{}\n```".format("\n".join(missing)))
         await ctx.send("You have unlocked all zones on "
                        "this character! Congratulations!")
+
+####################
+
+    async def get_all_characters(self, user, scopes=None):
+        endpoint = "characters?page=0&page_size=200"
+        results = await self.call_api(endpoint, user, scopes)
+        return [Character(self, c) for c in results]
+
+    async def get_character(self, ctx, character):
+        character = character.title()
+        endpoint = "characters/" + character.replace(" ", "%20")
+        try:
+            results = await self.call_api(endpoint, ctx.author,
+                                          ["characters", "builds"])
+        except APINotFound:
+            results = await self.get_public_character(character)
+            if not results:
+                raise APINotFound
+        return results
+
+    async def get_public_character(self, character):
+        character = character.title()
+        endpoint = "characters/" + character.replace(" ", "%20")
+        doc = await self.db.characters.find_one({"name": character})
+        if doc:
+            user = await self.bot.fetch_user(doc["owner"])
+            try:
+                return await self.call_api(endpoint, user)
+            except APIError:
+                return None
+        return None
+
+    def get_crafting(self, character):
+        craft_list = []
+        for crafting in character["crafting"]:
+            rating = crafting["rating"]
+            discipline = crafting["discipline"]
+            craft_list.append("Level {} {}".format(rating, discipline))
+        return craft_list
 
     async def get_profession(self, character, *, mode="pve"):
         async def get_elite_spec(character):
