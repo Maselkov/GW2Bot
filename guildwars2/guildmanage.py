@@ -4,6 +4,7 @@ from discord.ext import commands
 
 
 class GuildManageMixin:
+#### For the "server" group command.
     @commands.guild_only()
     @commands.has_permissions(manage_guild=True)
     @commands.group(name="server", case_insensitive=True)
@@ -12,10 +13,13 @@ class GuildManageMixin:
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @guild_manage.command(name="forceaccountnames")
+#### For the "forceaccountnames" server command.
+    @guild_manage.command(name="forceaccountnames", aliases=["fan"], usage="<on|off>")
     @commands.has_permissions(manage_nicknames=True)
     async def server_force_account_names(self, ctx, on_off: bool):
-        """Automatically change nicknames to in-game names"""
+        """Automatically change discord nicknames to gw2 account names.
+		
+		Only works with users that have an API key associated with the bot."""
 
         def check(m):
             return m.author == ctx.author and m.channel == ctx.channel
@@ -49,16 +53,17 @@ class GuildManageMixin:
                        "`$server forceaccountnames off`\nPlease note that the "
                        "bot cannot change nicknames for roles above the bot.")
 
-    @guild_manage.command(name="timezone", usage="<offset from UTC>")
+#### For the "timezone" server command.
+    @guild_manage.command(name="timezone", aliases=["tz"], usage="<offset>")
     @commands.has_permissions(manage_guild=True)
     async def guild_manage_timezone(self, ctx, offset: int):
-        """Change the timezone bot will use in this server.
-        Affects various commands
+        """Changes the timezone the bot will use for this server.
+        Affects various commands.
 
-        Enter value as offset from UTC. UTC is 0.
+        Enter value as offsets from UTC. UTC is 0.
         Examples:
-        `-8` for PST
-        `1` for CET
+        -8 for PST
+        1 for CET
         """
         guild = ctx.guild
         if not -12 < offset < 14:
