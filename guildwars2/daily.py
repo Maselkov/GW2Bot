@@ -10,9 +10,9 @@ from .exceptions import APIKeyError
 
 class DailyMixin:
 #### For the "daily" group command.
-    @commands.group(aliases=["d"], case_insensitive=True)
+    @commands.group(aliases=["dailies", "d"], case_insensitive=True)
     async def daily(self, ctx):
-        """Commands showing daily things"""
+        """Commands showing dailies"""
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
             
@@ -32,7 +32,7 @@ class DailyMixin:
             await ctx.send("Need permission to embed links")
             
 #### For the "fractals" daily command.
-    @daily.command(name="fractals", aliases=["f"])
+    @daily.command(name="fractals", aliases=["fotm", "f"])
     @commands.cooldown(1, 2, BucketType.user)
     async def daily_fractals(self, ctx):
         """Shows today's fractal dailies"""
