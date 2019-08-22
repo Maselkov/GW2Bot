@@ -16,7 +16,7 @@ class CommerceMixin:
             await ctx.send_help(ctx.command)
             
 #### For the "price" gem command.
-    @gem.command(name="price" usage="<amount>")
+    @gem.command(name="price", usage="<amount>")
     async def gem_price(self, ctx, quantity: int = 400):
         """Lists current gold/gem exchange prices.
 
@@ -91,12 +91,12 @@ class CommerceMixin:
 #### For the "tp" group command.
     @commands.group(case_insensitive=True)
     async def tp(self, ctx):
-        """Commands related to tradingpost"""
+        """Commands related to the Trading Post"""
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
 #### For the "current" tp command.
-    @tp.command(name="current" usage="<buys|sells>")
+    @tp.command(name="current", usage="<buys|sells>")
     @commands.cooldown(1, 10, BucketType.user)
     async def tp_current(self, ctx, buys_sells):
         """Show current buying/selling transactions.
@@ -182,7 +182,7 @@ class CommerceMixin:
     @tp.command(name="delivery")
     @commands.cooldown(1, 10, BucketType.user)
     async def tp_delivery(self, ctx):
-        """Show the items awaiting in your delivery box.
+        """Show the items in your delivery box.
 
         Required permission: tradingpost
         """
