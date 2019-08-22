@@ -10,11 +10,12 @@ from .utils.db import prepare_search
 
 
 class AchievementsMixin:
+#### For the "achievement" command.
     @commands.command(
         name="achievement", aliases=["achievementinfo", "ach", "achiev"])
     @commands.cooldown(1, 3, BucketType.user)
     async def achievementinfo(self, ctx, *, achievement):
-        """Display achievement information and your completion status
+        """Display achievement information and your completion status.
         
         Required permission: progression
         """
