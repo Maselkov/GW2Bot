@@ -226,18 +226,19 @@ class EvtcMixin:
             embed.set_author(name=data["fightName"], icon_url=boss["icon"])
         return embed
 
-    @commands.group(case_insensitive=True)
+#### For the "evtc" group command.
+    @commands.group(aliases=["log"], case_insensitive=True)
     async def evtc(self, ctx):
-        """Process an EVTC combat log or enable automatic processing
+        """Process an EVTC log or enable automatic processing.
 
-        Simply upload your file and in the "add a comment" field type $evtc,
-        in other words invoke this command while uploading a file.
-        Use this command ($evtc) without uploading a file to see other commands
+        Simply upload your file and in the "add a comment" field, type $evtc.
+        In other words, invoke this command while uploading a file.
+        Use this command ($evtc) without uploading a file to see other commands.
         Accepted formats are: .evtc, .zevtc, .zip
 
-        It's highly recommended to enable compression in your Arc settings.
-        With the setting enabled logs sized will rarely, if ever, be higher
-        than the Discord upload limit
+        It's highly recommended to enable compression in your ArcDPS settings.
+        With the setting enabled, logs will rarely - if ever - be higher
+        than the Discord upload limit.
         """
         if ctx.invoked_subcommand is None and not ctx.message.attachments:
             return await ctx.send_help(ctx.command)
@@ -257,19 +258,23 @@ class EvtcMixin:
                 return
         await self.process_evtc(ctx.message)
 
+#### For the "channel" evtc command.
     @commands.cooldown(1, 5, BucketType.guild)
     @commands.guild_only()
     @commands.has_permissions(manage_guild=True)
-    @evtc.command(name="channel")
+    @evtc.command(name="channel" usage="<on|off>")
     async def evtc_channel(self, ctx):
-        """Sets this channel to be automatically used to process logs"""
+        """Sets the active channel to be automatically used to process logs.
+        
+        This means that users don't need to type $evtc to upload logs.
+        """
         doc = await self.bot.database.get(ctx.channel, self)
         enabled = not doc.get("evtc.enabled", False)
         await self.bot.database.set(ctx.channel, {"evtc.enabled": enabled},
                                     self)
         if enabled:
             msg = ("Automatic EVTC processing enabled. Simply upload the file "
-                   "wish to be processed in this channel. Accepted "
+                   "you wish to be processed in this channel. Accepted "
                    "formats: `.evtc`, `.zevtc`, `.zip` ")
             if not ctx.channel.permissions_for(ctx.me).embed_links:
                 await ctx.send("I won't be able to process logs without Embed "
@@ -299,7 +304,8 @@ class EvtcMixin:
             await message.delete()
         except discord.HTTPException:
             pass
-
+                                  
+    # Cog listener
     @commands.Cog.listener()
     async def on_message(self, message):
         if not message.attachments:
