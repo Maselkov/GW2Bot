@@ -14,7 +14,10 @@ class AchievementsMixin:
         name="achievement", aliases=["achievementinfo", "ach", "achiev"])
     @commands.cooldown(1, 3, BucketType.user)
     async def achievementinfo(self, ctx, *, achievement):
-        """Display achievement information and your completion status"""
+        """Display achievement information and your completion status
+        
+        Required permission: progression
+        """
         user = ctx.author
         query = {
             "name": prepare_search(achievement)
