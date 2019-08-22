@@ -241,7 +241,7 @@ class AccountMixin:
     @commands.command()
     @commands.cooldown(1, 10, BucketType.user)
     async def cats(self, ctx):
-        """Displays the cats you haven't unlocked yet
+        """Displays the cats you haven't unlocked yet.
 
         Required permission: progression
         """
@@ -273,7 +273,7 @@ class AccountMixin:
     @commands.command(aliases=["find"])
     @commands.cooldown(1, 5, BucketType.user)
     async def search(self, ctx, *, item):
-        """Find items on your account
+        """Find items on your account.
         
         Required permissions: inventories, characters
         """
@@ -345,7 +345,7 @@ class AccountMixin:
                         k.upper(), " " * (longest - len(k)), v[0] + v[1]))
         output.append("--------{}------".format("-" * (longest - 5)))
         output.append("TOTAL:{}{}".format(" " * (longest - 2), total))
-        message = ("{.mention}, here are your search results".format(user))
+        message = ("{.mention}, here are your search results:".format(user))
 
         color = int(self.gamedata["items"]["rarity_colors"][choice["rarity"]],
                     16)
@@ -488,7 +488,7 @@ class AccountMixin:
     @commands.command(aliases=["ld"])
     @commands.cooldown(1, 10, BucketType.user)
     async def li(self, ctx):
-        """Shows how many Legendary Insights and Divinations you have earned
+        """Shows how many Legendary Insights and Divinations you have earned.
 
         Required permissions: inventories, characters
         """
@@ -567,7 +567,7 @@ class AccountMixin:
         embed.set_footer(
             text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
         await ctx.send(
-            "{.mention}, here are your Legendary Insights and Divinations".
+            "{.mention}, here are your Legendary Insights and Divinations:".
             format(user),
             embed=embed)
 
@@ -575,7 +575,7 @@ class AccountMixin:
     @commands.command()
     @commands.cooldown(1, 15, BucketType.user)
     async def kp(self, ctx):
-        """Shows completed raids and fractals
+        """Shows completed raids and fractals.
 
         Required permission: progression
         """
@@ -641,4 +641,4 @@ class AccountMixin:
                          "CM stands for Challenge Mode.")
 
         await ctx.send(
-            "{.mention}, here is your kill proof.".format(user), embed=embed)
+            "{.mention}, here is your kill proof:".format(user), embed=embed)
