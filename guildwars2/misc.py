@@ -9,18 +9,14 @@ from discord.ext import commands
 
 
 class MiscMixin:
-    @commands.command(aliases=["gw2wiki"])
+#### For the "wiki" command.
+    @commands.command(aliases=["gw2wiki"], usage="<search> <language>")
     async def wiki(self, ctx, *, search):
-        """Search the Guild wars 2 wiki
+        """Search the Guild Wars 2 wiki.
         
-        Append a 2-character language tag to search in the localized wikis
-        Available languages:
-        en
-        de
-        fr
-        es
-        
-        Defaults to en
+        Append a 2-character language tag to search in localized wikis.
+        Available languages: en, de, fr, es
+        Default is en.
 
         Examples:
         Search for Lion's Arch:
@@ -70,9 +66,10 @@ class MiscMixin:
         except discord.Forbidden:
             await ctx.send("Need permission to embed links")
 
+#### For the "dulfy" command.
     @commands.command(hidden=True)
     async def dulfy(self, ctx, *, search):
-        """Search dulfy.net"""
+        """Searches dulfy.net"""
         if len(search) > 300:
             await ctx.send("Search too long")
             return
@@ -121,17 +118,19 @@ class MiscMixin:
                 inline=False)
         return embed
 
+#### For the "praisejoko" command.
     @commands.command(hidden=True)
     async def praisejoko(self, ctx):
-        """To defy his Eminence is to defy life itself"""
+        """To defy his Eminence is to defy life itself!"""
         await ctx.send("404 Joko not found")
 
-    @commands.command()
+#### For the "chatcode" command.
+    @commands.command(aliases=["cc"])
     async def chatcode(self, ctx):
-        """Generate a chat code"""
+        """Generates a chat code"""
         user = ctx.author
         try:
-            msg = await user.send("First, type the name of the item")
+            msg = await user.send("First, type the name of the item.")
             if ctx.guild:
                 await ctx.send("I've DMed you.")
         except:
@@ -155,7 +154,7 @@ class MiscMixin:
         except:
             return await ctx.send("Invalid value")
         response = await self.user_input(
-            ctx, "Optionally, type name of a skin to apply to the "
+            ctx, "Optionally, type the name of a skin to apply to the "
             "item. Type `skip` to skip")
         if not response:
             return
@@ -169,7 +168,7 @@ class MiscMixin:
         upgrades = OrderedDict((("first", None), ("second", None)))
         for k in upgrades:
             response = await self.user_input(
-                ctx, "Optionally, type name of {} upgrade to apply to the "
+                ctx, "Optionally, type the name of the {} upgrade to apply to the "
                 "item. Type `skip` to skip".format(k))
             if response.content.lower() == "skip":
                 break
