@@ -6,82 +6,16 @@ import re
 from .exceptions import APIError
 from .utils.chat import embed_list_lines
 
-
 class WalletMixin:
-    async def get_wallet(self, ctx, ids):
-        # Returns a list of lists with currency strings
-
-        # Difference between two lists, xs has to be the bigger one
-        def get_diff(xs, ys):
-            zs = []
-            for x in xs:
-                if x not in ys:
-                    zs.append(x)
-            return zs
-
-        flattened_ids = [y for x in ids for y in x]
-        try:
-            doc = await self.fetch_key(ctx.author, ["wallet"])
-            results = await self.call_api("account/wallet", key=doc["key"])
-        except APIError as e:
-            return await self.error_handler(ctx, e)
-        lines = [[], [], [], [], []]
-        found_ids = []
-        for c in results:
-            found_ids.append(c["id"])
-        for id in flattened_ids:
-            c_doc = await self.db.currencies.find_one({"_id": id})
-            emoji = self.get_emoji(ctx, c_doc["name"])
-            for i in range(0, len(lines)):
-                if id in ids[i]:
-                    try:
-                        cur = next(
-                            item for item in results if item["id"] == id)
-                        value = cur["value"]
-                    except StopIteration:
-                        value = 0
-                    if c_doc["name"] == "Coin":
-                        lines[i].append("{} {} {}".format(
-                            emoji,
-                            self.gold_to_coins(ctx, value), c_doc["name"]))
-                    else:
-                        lines[i].append("{} {} {}".format(
-                            emoji, value, c_doc["name"]))
-        return lines
-
-    # Searches account for items and returns list of strings
-    async def get_item_currency(self, ctx, ids):
-        user = ctx.author
-        scopes = ["inventories", "characters"]
-        lines = []
-        flattened_ids = [y for x in ids for y in x]
-        try:
-            doc = await self.fetch_key(user, scopes)
-            search_results = await self.find_items_in_account(
-                ctx, flattened_ids, doc=doc)
-        except APIError as e:
-            return await self.error_handler(ctx, e)
-        for i in range(0, len(ids)):
-            lines.append([])
-            for k, v in search_results.items():
-                if k in ids[i]:
-                    doc = await self.db.items.find_one({"_id": k})
-                    name = doc["name"]
-                    name = re.sub('^\d+ ', '', name)
-                    emoji = self.get_emoji(ctx, name)
-                    lines[i].append("{} {} {}".format(emoji,
-                                                      sum(v.values()), name))
-        return lines
-
-    @commands.command()
+#### For the "WALLET" command
+    @commands.command(name='wallet')
     @commands.cooldown(1, 10, BucketType.user)
     async def wallet(self, ctx):
-        """Shows your wallet
+        """Shows your wallet.
 
-        Required permissions: wallet
-        """
+        Required permissions: wallet, inventories, characters"""
         try:
-            doc = await self.fetch_key(ctx.author, ["wallet"])
+            doc = await self.fetch_key(ctx.author, ['wallet'])
         except APIError as e:
             return await self.error_handler(ctx, e)
         await ctx.trigger_typing()
@@ -100,7 +34,7 @@ class WalletMixin:
         currencies_items = await self.get_item_currency(ctx, ids_items)
 
         embed = discord.Embed(
-            description="Wallet", colour=await self.get_embed_color(ctx))
+            description="Your Wallet", colour=await self.get_embed_color(ctx))
         embed = embed_list_lines(
             embed, currencies_wallet[0], "> **CURRENCIES**", inline=True)
         embed = embed_list_lines(
@@ -116,10 +50,71 @@ class WalletMixin:
         embed = embed_list_lines(
             embed, currencies_wallet[4], "> **RAIDS**", inline=True)
         embed.set_author(
-            name=doc["account_name"], icon_url=ctx.author.avatar_url)
+            name=doc['account_name'], icon_url=ctx.author.avatar_url)
         embed.set_footer(
             text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
         try:
             await ctx.send(embed=embed)
         except discord.Forbidden:
-            await ctx.send("Need permission to embed links")
+            await ctx.send("Need permission to embed links.")
+
+    ## Searches account for items and returns list of strings
+    async def get_item_currency(self, ctx, ids):
+        user = ctx.author
+        scopes = ['inventories', 'characters']
+        lines = []
+        flattened_ids = [y for x in ids for y in x]
+        try:
+            doc = await self.fetch_key(user, scopes)
+            search_results = await self.find_items_in_account(
+                ctx, flattened_ids, doc=doc)
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+        for i in range(0, len(ids)):
+            lines.append([])
+            for k, v in search_results.items():
+                if k in ids[i]:
+                    doc = await self.db.items.find_one({'_id': k})
+                    name = doc['name']
+                    name = re.sub('^\d+ ', '', name)
+                    emoji = self.get_emoji(ctx, name)
+                    lines[i].append(f"{emoji} {sum(v.values())} {name}")
+        return lines
+        
+    ## Gets wallet information
+    async def get_wallet(self, ctx, ids):
+        # Returns a list of lists with currency strings
+        # Difference between two lists, xs has to be the bigger one
+        def get_diff(xs, ys):
+            zs = []
+            for x in xs:
+                if x not in ys:
+                    zs.append(x)
+            return zs
+
+        flattened_ids = [y for x in ids for y in x]
+        try:
+            doc = await self.fetch_key(ctx.author, ['wallet'])
+            results = await self.call_api('account/wallet', key=doc['key'])
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+        lines = [[], [], [], [], []]
+        found_ids = []
+        for c in results:
+            found_ids.append(c['id'])
+        for id in flattened_ids:
+            c_doc = await self.db.currencies.find_one({'_id': id})
+            emoji = self.get_emoji(ctx, c_doc["name"])
+            for i in range(0, len(lines)):
+                if id in ids[i]:
+                    try:
+                        cur = next(
+                            item for item in results if item['id'] == id)
+                        value = cur['value']
+                    except StopIteration:
+                        value = 0
+                    if c_doc['name'] == "Coin":
+                        lines[i].append(f"{emoji} {self.gold_to_coins(ctx, value)} {c_doc['name']}")
+                    else:
+                        lines[i].append(f"{emoji} {value} {c_doc['name']}")
+        return lines
