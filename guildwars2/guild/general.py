@@ -10,90 +10,86 @@ from ..utils.chat import embed_list_lines, zero_width_space
 
 
 class GeneralGuild:
+#### For the "GUILD" group command
     @commands.group(case_insensitive=True)
     async def guild(self, ctx):
-        """Guild related commands."""
+        """Guild related commands"""
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @guild.command(name="info", usage="<guild name>")
+  ### For the guild "INFO" command
+    @guild.command(name='info', usage='<guild name>')
     @commands.cooldown(1, 20, BucketType.user)
     async def guild_info(self, ctx, *, guild_name=None):
-        """General guild stats
+        """General guild stats.
 
-        Required permissions: guilds
-        """
+        Required permission: guilds"""
         # Read preferred guild from DB
         try:
             guild = await self.get_guild(ctx, guild_name=guild_name)
             if not guild:
                 raise BadArgument
-            guild_id = guild["id"]
-            guild_name = guild["name"]
-            endpoint = "guild/{0}".format(guild_id)
-            results = await self.call_api(endpoint, ctx.author, ["guilds"])
+            guild_id = guild['id']
+            guild_name = guild['name']
+            endpoint = f"guild/{guild_id}"
+            results = await self.call_api(endpoint, ctx.author, ['guilds'])
         except (IndexError, APINotFound):
-            return await ctx.send("Invalid guild name")
+            return await ctx.send("Invalid guild name.")
         except APIForbidden:
             return await ctx.send(
-                "You don't have enough permissions in game to "
-                "use this command")
+                "Only a guild leader can use this command.")
         except APIError as e:
             return await self.error_handler(ctx, e)
         data = discord.Embed(
-            description='General Info about {0}'.format(guild_name),
+            description=f"General Info about {guild_name}",
             colour=await self.get_embed_color(ctx))
-        data.set_author(name="{} [{}]".format(results["name"], results["tag"]))
-        guild_currencies = ["influence", "aetherium", "resonance", "favor", "member_count"]
+        data.set_author(name=f"{results['name']} [{results['tag']}]")
+        guild_currencies = ['influence', 'aetherium', 'resonance', 'favor', 'member_count']
         for cur in guild_currencies:
-            if cur == "member_count":
+            if cur == 'member_count':
                 data.add_field(
-                    name='Members',
-                    value="{} {}/{}".format(
-                        self.get_emoji(ctx, "friends"), results["member_count"],
-                        str(results["member_capacity"])))
+                    name="Members",
+                    value=f"{self.get_emoji(ctx,'friends')} {results['member_count']}/{str(results['member_capacity'])}")
             else:
                 data.add_field(
                     name=cur.capitalize(),
-                    value='{} {}'.format(
-                        self.get_emoji(ctx, cur), results[cur]))
-        if "motd" in results:
+                    value=f"{self.get_emoji(ctx, cur)} {results[cur]}")
+        if 'motd' in results:
             data.add_field(
-                name='Message of the day:',
-                value=results["motd"],
+                name="Message of the Day:",
+                value=results['motd'],
                 inline=False)
-        data.set_footer(text='A level {} guild'.format(results["level"]))
+        data.set_footer(text=f"A level {results['level']} guild.")
         try:
             await ctx.send(embed=data)
         except discord.Forbidden:
-            await ctx.send("Need permission to embed links")
+            await ctx.send("Need permission to embed links.")
 
-    @guild.command(name="members", usage="<guild name>")
+  ### For the guild "MEMBERS" command
+    @guild.command(name='members', usage='<guild name>')
     @commands.cooldown(1, 20, BucketType.user)
     async def guild_members(self, ctx, *, guild_name=None):
         """Shows a list of members and their ranks.
 
-        Required permissions: guilds and in game permissions
-        """
+        Required permissions: guilds, in-game leader"""
         user = ctx.author
-        scopes = ["guilds"]
+        scopes = ['guilds']
         try:
             guild = await self.get_guild(ctx, guild_name=guild_name)
             if not guild:
                 raise BadArgument
-            guild_id = guild["id"]
-            guild_name = guild["name"]
+            guild_id = guild['id']
+            guild_name = guild['name']
             endpoints = [
-                "guild/{}/members".format(guild_id),
-                "guild/{}/ranks".format(guild_id)
+                f"guild/{guild_id}/members",
+                f"guild/{guild_id}/ranks"
             ]
             results, ranks = await self.call_multiple(endpoints, user, scopes)
         except (IndexError, APINotFound):
-            return await ctx.send("Invalid guild name")
+            return await ctx.send("Invalid guild name.")
         except APIForbidden:
             return await ctx.send(
-                "You don't have enough permissions in game to "
-                "use this command")
+                "Only a guild leader can use this command.")
         except APIError as e:
             return await self.error_handler(ctx, e)
         data = discord.Embed(
@@ -106,15 +102,14 @@ class GeneralGuild:
         lines = []
         for order in ranks:
             for member in results:
-                # Filter invited members
+                ## Filter invited members
                 if member['rank'] != "invited":
                     member_rank = member['rank']
-                    # associate order from /ranks with rank from /members
+                    ## associate order from /ranks with rank from /members
                     for rank in ranks:
                         if member_rank == rank['id']:
                             if rank['order'] == order_id:
-                                line = "**{}**\n*{}*".format(
-                                    member['name'], member['rank'])
+                                line = f"**{member['name']}**\n*{member['rank']}*"
                                 if len(str(lines)) + len(line) < 6000:
                                     lines.append(line)
             order_id += 1
@@ -124,27 +119,27 @@ class GeneralGuild:
         except discord.Forbidden:
             await ctx.send("Need permission to embed links")
 
-    @guild.command(name="treasury", usage="<guild name>")
+  ### For the guild "TREASURY" command
+    @guild.command(name='treasury', usage='<guild name>')
     @commands.cooldown(1, 20, BucketType.user)
     async def guild_treasury(self, ctx, *, guild_name=None):
-        """Get list of current and needed items for upgrades
+        """Gets a list of current/needed items in the treasury.
 
-        Required permissions: guilds and in game permissions"""
+        Required permissions: guilds and in-game leader"""
         # Read preferred guild from DB
         try:
             guild = await self.get_guild(ctx, guild_name=guild_name)
             if not guild:
                 raise BadArgument
-            guild_id = guild["id"]
-            guild_name = guild["name"]
-            endpoint = "guild/{0}/treasury".format(guild_id)
-            treasury = await self.call_api(endpoint, ctx.author, ["guilds"])
+            guild_id = guild['id']
+            guild_name = guild['name']
+            endpoint = f"guild/{guild_id}/treasury"
+            treasury = await self.call_api(endpoint, ctx.author, ['guilds'])
         except (IndexError, APINotFound):
-            return await ctx.send("Invalid guild name")
+            return await ctx.send("Invalid guild name.")
         except APIForbidden:
             return await ctx.send(
-                "You don't have enough permissions in game to "
-                "use this command")
+                "Only a guild leader can use this command.")
         except APIError as e:
             return await self.error_handler(ctx, e)
         data = discord.Embed(
@@ -156,58 +151,59 @@ class GeneralGuild:
         lines = []
         itemlist = []
         for item in treasury:
-            res = await self.fetch_item(item["item_id"])
+            res = await self.fetch_item(item['item_id'])
             itemlist.append(res)
         # Collect amounts
         if treasury:
             for item in treasury:
-                current = item["count"]
-                item_name = itemlist[item_counter]["name"]
-                needed = item["needed_by"]
+                current = item['count']
+                item_name = itemlist[item_counter]['name']
+                needed = item['needed_by']
                 for need in needed:
-                    amount = amount + need["count"]
+                    amount = amount + need['count']
                 if amount != current:
-                    line = "**{}**\n*{}*".format(
-                        item_name,
-                        str(current) + "/" + str(amount))
+                    line = f"**{item_name}**\n*{str(current) + '/' + str(amount)}*"
                     if len(str(lines)) + len(line) < 6000:
                         lines.append(line)
                 amount = 0
                 item_counter += 1
         else:
-            await ctx.send("Treasury is empty!")
+            await ctx.send("The treasury is empty.")
             return
         data = embed_list_lines(data, lines, "> **TREASURY**", inline=True)
         try:
             await ctx.send(embed=data)
         except discord.Forbidden:
-            await ctx.send("Need permission to embed links")
+            await ctx.send("Need permission to embed links.")
 
-    @guild.command(name="log", usage="stash/treasury/members <guild name>")
+  ### For the guild "LOG" command
+    @guild.command(name='log', usage='<type> <guild name>')
     @commands.cooldown(1, 10, BucketType.user)
     async def guild_log(self, ctx, log_type, *, guild_name=None):
-        """Get log of stash/treasury/members
-        Required permissions: guilds and in game permissions"""
+        """Gets the guild history.
+        
+        Types: stash, treasury, members
+        
+        Required permissions: guilds, in-game leader"""
         state = log_type.lower()
         member_list = [
-            "invited", "joined", "invite_declined", "rank_change", "kick"
+            'invited', 'joined', 'invite_declined', 'rank_change', 'kick'
         ]
-        if state not in ("stash", "treasury", "members"):
+        if state not in ('stash', 'treasury', 'members'):
             return await ctx.send_help(ctx.command)
         try:
             guild = await self.get_guild(ctx, guild_name=guild_name)
             if not guild:
                 raise BadArgument
-            guild_id = guild["id"]
-            guild_name = guild["name"]
-            endpoint = "guild/{0}/log/".format(guild_id)
-            log = await self.call_api(endpoint, ctx.author, ["guilds"])
+            guild_id = guild['id']
+            guild_name = guild['name']
+            endpoint = f"guild/{guild_id}/log/"
+            log = await self.call_api(endpoint, ctx.author, ['guilds'])
         except (IndexError, APINotFound):
-            return await ctx.send("Invalid guild name")
+            return await ctx.send("Invalid guild name.")
         except APIForbidden:
             return await ctx.send(
-                "You don't have enough permissions in game to "
-                "use this command")
+                "Only a guild leader can use this command.")
         except APIError as e:
             return await self.error_handler(ctx, e)
 
@@ -218,121 +214,110 @@ class GeneralGuild:
         lines = []
         length_lines = 0
         for entry in log:
-            if entry["type"] == state:
-                time = entry["time"]
+            if entry['type'] == state:
+                time = entry['time']
                 timedate = datetime.datetime.strptime(
                     time, "%Y-%m-%dT%H:%M:%S.%fZ").strftime('%d.%m.%Y %H:%M')
-                user = entry["user"]
-                if state == "stash" or state == "treasury":
-                    quantity = entry["count"]
-                    if entry["item_id"] is 0:
-                        item_name = self.gold_to_coins(ctx, entry["coins"])
+                user = entry['user']
+                if state == 'stash' or state == 'treasury': # If type == stash/treasury
+                    quantity = entry['count']
+                    if entry['item_id'] is 0:
+                        item_name = self.gold_to_coins(ctx, entry['coins'])
                         quantity = ""
                         multiplier = ""
                     else:
-                        itemdoc = await self.fetch_item(entry["item_id"])
-                        item_name = itemdoc["name"]
+                        itemdoc = await self.fetch_item(entry['item_id'])
+                        item_name = itemdoc['name']
                         multiplier = "x"
-                    if state == "stash":
-                        if entry["operation"] == "withdraw":
+                    if state == 'stash':
+                        if entry['operation'] == 'withdraw':
                             operator = " withdrew"
                         else:
                             operator = " deposited"
                     else:
                         operator = " donated"
-                    line = "**{}**\n*{}*".format(
-                        timedate, user + "{} {}{} {}".format(
-                            operator, quantity, multiplier, item_name))
+                    line = f"**{timedate}**\n*{user} {operator} {quantity}{multiplier} {item_name}*"
                     if length_lines + len(line) < 5500:
                         length_lines += len(line)
                         lines.append(line)
-            if state == "members":
+            if state == 'members': # If type == members
                 entry_string = ""
-                if entry["type"] in member_list:
-                    time = entry["time"]
+                if entry['type'] in member_list:
+                    time = entry['time']
                     timedate = datetime.datetime.strptime(
                         time,
                         "%Y-%m-%dT%H:%M:%S.%fZ").strftime('%d.%m.%Y %H:%M')
-                    user = entry["user"]
-                    if entry["type"] == "invited":
-                        invited_by = entry["invited_by"]
-                        entry_string = "{} has invited {} to the guild.".format(
-                            invited_by, user)
-                    elif entry["type"] == "joined":
-                        entry_string = "{} has joined the guild.".format(user)
-                    elif entry["type"] == "kick":
+                    user = entry['user']
+                    if entry['type'] == 'invited':
+                        invited_by = entry['invited_by']
+                        entry_string = f"{invited_by} has invited {user} to the guild."
+                    elif entry['type'] == 'joined':
+                        entry_string = f"{user} has joined the guild."
+                    elif entry['type'] == 'kick':
                         kicked_by = entry["kicked_by"]
                         if kicked_by == user:
-                            entry_string = "{} has left the guild.".format(
-                                user)
+                            entry_string = f"{user} has left the guild."
                         else:
-                            entry_string = "{} has been kicked by {}.".format(
-                                user, kicked_by)
-                    elif entry["type"] == "rank_change":
-                        old_rank = entry["old_rank"]
-                        new_rank = entry["new_rank"]
-                        if "changed_by" in entry:
-                            changed_by = entry["changed_by"]
-                            entry_string = "{} has changed the role of {} from {} to {}.".format(
-                                changed_by, user, old_rank, new_rank)
+                            entry_string = f"{user} has been kicked by {kicked_by}."
+                    elif entry['type'] == 'rank_change':
+                        old_rank = entry['old_rank']
+                        new_rank = entry['new_rank']
+                        if 'changed_by' in entry:
+                            changed_by = entry['changed_by']
+                            entry_string = f"{changed_by} has changed the role of {user} from {old_rank} to {new_rank}."
                         else:
-                            entry_string = "{} changed his role from {} to {}.".format(
-                                user, old_rank, new_rank)
-                    line = "**{}**\n*{}*".format(timedate, entry_string)
+                            entry_string = f"{user} changed his role from {old_rank} to {new_rank}."
+                    line = f"**{timedate}**\n*{entry_string}*"
                     if length_lines + len(line) < 5500:
                         length_lines += len(line)
                         lines.append(line)
         if not lines:
-            return await ctx.send("No {} log entries yet for {}".format(
-                state, guild_name.title()))
-        data = embed_list_lines(data, lines,
-                                "> **{0} Log**".format(state.capitalize()))
+            return await ctx.send(f"No {state} log entries yet for {guild_name.title()}.")
+        data = embed_list_lines(data, lines, f"> **{state.capitalize()} Log**")
         try:
             await ctx.send(embed=data)
         except discord.Forbidden:
-            await ctx.send("Need permission to embed links")
+            await ctx.send("Need permission to embed links.")
 
-    @guild.command(name="default", usage="<guild name>")
+  ### For the guild "DEFAULT" command
+    @guild.command(name='default', usage='<guild name>')
     @commands.guild_only()
     @commands.cooldown(1, 10, BucketType.user)
     @commands.has_permissions(manage_guild=True)
     async def guild_default(self, ctx, *, guild_name=None):
-        """ Set your preferred guild for guild commands on this Discord Server.
-        Commands from the guild command group invoked
-        without a guild name will default to this guild.
+        """Sets the default guild for this server.
+        
+        Commands will default to the given guild if no guild is provided for guild commands.
 
-        Invoke this command without an argument to reset the default guild.
-        """
+        Invoke this command without a guild to remove the default guild."""
         guild = ctx.guild
         if guild_name is None:
             await self.bot.database.set_guild(guild, {
-                "guild_ingame": None,
+                'guild_ingame': None,
             }, self)
             return await ctx.send(
-                "Your preferred guild is now reset for "
+                "There is now no default guild for "
                 "this server. Invoke this command with a guild "
                 "name to set a default guild.")
-        endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
+        endpoint_id = 'guild/search?name=' + guild_name.replace(' ', '%20')
         # Guild ID to Guild Name
         try:
             guild_id = await self.call_api(endpoint_id)
             guild_id = guild_id[0]
         except (IndexError, APINotFound):
-            return await ctx.send("Invalid guild name")
+            return await ctx.send("Invalid guild name.")
         except APIForbidden:
             return await ctx.send(
-                "You don't have enough permissions in game to "
-                "use this command")
+                "Only a guild leader can use this command.")
         except APIError as e:
             return await self.error_handler(ctx, e)
 
         # Write to DB, overwrites existing guild
         await self.bot.database.set_guild(guild, {
-            "guild_ingame": guild_id,
+            'guild_ingame': guild_id,
         }, self)
-        await ctx.send("Your default guild is now set to {} for this server. "
-                       "All commands from the `guild` command group "
-                       "invoked without a specified guild will default to "
+        await ctx.send(f"Your default guild has been set to {guild_name.title()} for this server.\n"
+                       f"All commands using `{ctx.prefix}guild` "
+                       "without a specified guild will default to "
                        "this guild. To reset, simply invoke this command "
-                       "without specifying a guild".format(guild_name.title()))
-
+                       "again without specifying a guild.")
