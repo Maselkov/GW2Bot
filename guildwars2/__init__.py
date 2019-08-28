@@ -8,6 +8,7 @@ from PIL import ImageFont
 from .account import AccountMixin
 from .achievements import AchievementsMixin
 from .api import ApiMixin
+from .bt import BtMixin
 from .characters import CharactersMixin
 from .commerce import CommerceMixin
 from .daily import DailyMixin
@@ -29,7 +30,7 @@ from .wvw import WvwMixin
 
 
 class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
-                 ApiMixin, CharactersMixin, CommerceMixin, DailyMixin,
+                 ApiMixin, BtMixin, CharactersMixin, CommerceMixin, DailyMixin,
                  DatabaseMixin, EmojiMixin, EventsMixin, EvtcMixin, GuildMixin,
                  GuildManageMixin, KeyMixin, MiscMixin, NotiifiersMixin,
                  PvpMixin, SkillsMixin, WalletMixin, WorldsyncMixin, WvwMixin):
