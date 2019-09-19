@@ -590,61 +590,58 @@ class NotiifiersMixin:
             embed.title for embed in embeds
             if any(f in embed.title.lower() for f in to_filter)
         ]
-
-        async def process_doc(doc):
-            channel = self.bot.get_channel(doc["channel"])
-            filter_on = doc.get("filter", True)
-            for embed in embeds:
-                if filter_on:
-                    if embed.title in filtered:
-                        continue
-                await channel.send(embed=embed)
-
         async for doc in cursor:
             try:
-                asyncio.create_task(process_doc(doc))
+                channel = self.bot.get_channel(doc["channel"])
+                filter_on = doc.get("filter", True)
+                for embed in embeds:
+                    if filter_on:
+                        if embed.title in filtered:
+                            continue
+                    await channel.send(embed=embed)
             except Exception as e:
                 self.log.exception(e)
 
     async def send_update_notifs(self):
-        doc = await self.bot.database.get_cog_config(self)
-        build = doc["cache"]["build"]
-        embed_available = False
         try:
-            embed, text = await self.update_notification(build)
-            embed_available = True
-        except:
-            text = (
-                "Guild Wars 2 has just updated! New build: {}".format(build))
-
-        async def process_doc(doc):
-            mention = doc.get("mention", "here")
-            if mention == "none":
-                mention = ""
-            else:
-                mention = "@{} ".format(mention)
-            channel = self.bot.get_channel(doc["channel"])
-            if (channel.permissions_for(channel.guild.me).embed_links
-                    and embed_available):
-                message = mention + "Guild Wars 2 has just updated!"
-                await channel.send(message, embed=embed)
-            else:
-                await channel.send(text)
-
-        cursor = self.bot.database.iter(
-            "guilds", {
+            doc = await self.bot.database.get_cog_config(self)
+            build = doc["cache"]["build"]
+            name = self.__class__.__name__
+            embed_available = False
+            try:
+                embed, text = await self.update_notification(build)
+                embed_available = True
+            except:
+                text = ("Guild Wars 2 has just updated! New build: {}".format(
+                    build))
+            cursor = self.bot.database.get_guilds_cursor({
                 "updates.on": True,
                 "updates.channel": {
                     "$ne": None
                 }
-            },
-            self,
-            subdocs=["updates"])
-        async for doc in cursor:
-            try:
-                asyncio.create_task(process_doc(doc))
-            except:
-                pass
+            }, self)
+            sent = 0
+            async for doc in cursor:
+                try:
+                    guild = doc["cogs"][name]["updates"]
+                    mention = guild.get("mention", "here")
+                    if mention == "none":
+                        mention = ""
+                    else:
+                        mention = "@{} ".format(mention)
+                    channel = self.bot.get_channel(guild["channel"])
+                    if (channel.permissions_for(channel.guild.me).embed_links
+                            and embed_available):
+                        message = mention + "Guild Wars 2 has just updated!"
+                        await channel.send(message, embed=embed)
+                    else:
+                        await channel.send(text)
+                    sent += 1
+                except:
+                    pass
+            self.log.info("Update notifs: sent {}".format(sent))
+        except Exception as e:
+            self.log.exception(e)
 
     @tasks.loop(minutes=3)
     async def daily_checker(self):
