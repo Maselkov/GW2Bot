@@ -57,7 +57,7 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
             self.font = ImageFont.load_default()
         self.tasks = [
             self.game_update_checker, self.daily_checker, self.news_checker,
-            self.gem_tracker, self.world_population_checker,
+            self.gem_tracker, self.coin_tracker, self.world_population_checker,
             self.guild_synchronizer, self.boss_notifier,
             self.forced_account_names, self.event_reminder_task,
             self.worldsync_task
