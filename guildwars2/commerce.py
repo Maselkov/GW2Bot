@@ -266,6 +266,11 @@ class CommerceMixin:
         results = await self.call_api(endpoint)
         return results["quantity"]
 
+    async def get_coins_per_gem(self, quantity=400):
+        endpoint = "commerce/exchange/gems?quantity={}".format(quantity)
+        results = await self.call_api(endpoint)
+        return results["coins_per_gem"]
+
     @gem.command(name="track", usage="<gold>")
     async def gem_track(self, ctx, gold: int = 0):
         """Receive a notification when cost of 400 gems drops below given cost
@@ -295,4 +300,34 @@ class CommerceMixin:
                                   "me blocked, or disabled DMs in this "
                                   "server. Aborting.")
         await self.bot.database.set(user, {"gemtrack": price}, self)
+        await ctx.send("Successfully set")
+
+    @gem.command(name="cointrack", usage="<gems>")
+    async def coin_track(self, ctx, gems: int = 0):
+        """Receive a notification when cost of 250 coins drops below given gem cost
+
+        For example, if you set cost to 900, you will get a notification when
+        price of 250 gold drops below 900 gems
+        """
+        user = ctx.author
+        if not gems:
+            doc = await self.bot.database.get(user, self)
+            current = doc.get("cointrack")
+            if current:
+                return await ctx.send(
+                    "You'll currently be notified if "
+                    "price of 250 gold drops below **{}** gems".format(
+                        current))
+            else:
+                return await ctx.send_help(ctx.command)
+        if not 500 <= gems <= 2000:
+            return await ctx.send("Invalid value")
+        try:
+            await user.send("You will be notified when price of 250 gold "
+                            "drops below {} gems".format(gems))
+        except:
+            return await ctx.send("Couldn't send a DM to you. Either you have "
+                                  "me blocked, or disabled DMs in this "
+                                  "server. Aborting.")
+        await self.bot.database.set(user, {"cointrack": gems}, self)
         await ctx.send("Successfully set")

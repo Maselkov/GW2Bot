@@ -689,6 +689,27 @@ class NotiifiersMixin:
                 pass
 
     @tasks.loop(minutes=5)
+    async def coin_tracker(self):
+        cost = await self.get_coins_per_gem()
+        cost_per_250 = 2500000 // cost
+        cursor = self.bot.database.iter("users", {"cointrack": {
+            "$ne": None
+        }}, self)
+        async for doc in cursor:
+            try:
+                if cost < doc["cointrack"]:
+                    user = doc["_obj"]
+                    user_price = doc["cointrack"]
+                    msg = ("Hey, {.mention}! You asked to be notified "
+                           "when a stack of 250 gold was cheaper than {} gems. Guess "
+                           "what? They're now only "
+                           "{}!".format(user, user_price, cost_per_250))
+                    await user.send(msg)
+                    await self.bot.database.set(user, {"cointrack": None}, self)
+            except:
+                pass
+
+    @tasks.loop(minutes=5)
     async def boss_notifier(self):
         name = self.__class__.__name__
         boss = self.get_upcoming_bosses(1)[0]
