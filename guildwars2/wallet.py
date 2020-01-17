@@ -93,8 +93,9 @@ class WalletMixin:
         ids_raid = [28, 39]
         ids_l3 = [79280, 79469, 79899, 80332, 81127, 81706]
         ids_l4 = [86069, 86977, 87645, 88955, 89537, 90783]
+        ids_ibs = [92072, 92272]
         ids_wallet = [ids_cur, ids_keys, ids_maps, ids_token, ids_raid]
-        ids_items = [ids_l3, ids_l4, ids_maps_items]
+        ids_items = [ids_l3, ids_l4, ids_ibs, ids_maps_items]
 
         currencies_wallet = await self.get_wallet(ctx, ids_wallet)
         currencies_items = await self.get_item_currency(ctx, ids_items)
@@ -113,6 +114,8 @@ class WalletMixin:
             embed, currencies_items[0] + [currencies_wallet[2][0]], "> **LIVING SEASON 3**", inline=True)
         embed = embed_list_lines(
             embed, currencies_items[1] + [currencies_wallet[2][1]], "> **LIVING SEASON 4**", inline=True)
+        embed = embed_list_lines(
+            embed, currencies_items[2], "> **ICEBROOD SAGA**", inline=True)
         embed = embed_list_lines(
             embed, currencies_wallet[4], "> **RAIDS**", inline=True)
         embed.set_author(
