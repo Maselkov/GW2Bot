@@ -434,10 +434,9 @@ class AccountMixin:
     @commands.command()
     @commands.cooldown(1, 10, BucketType.user)
     async def nodes(self, ctx):
-        """Displays the nodes you've unlocked in your home, in addition
-        to what you still need.
+        """Displays the nodes you haven't unlocked.
         
-        Required permissions: account, progression, unlocks"""
+        Required permissions: progression"""
         user = ctx.message.author
         endpoint = "account/home/nodes"
         try:
