@@ -40,7 +40,7 @@ class DatabaseMixin:
         try:
             results = await self.db.titles.find_one({"_id": title_id})
             title = results["name"]
-        except KeyError:
+        except (KeyError, TypeError):
             return ""
         return title
 
