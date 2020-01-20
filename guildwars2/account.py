@@ -430,6 +430,32 @@ class AccountMixin:
             text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
         await ctx.send(
             "{.mention}, here are your cats:".format(user), embed=embed)
+            
+    @commands.command()
+    @commands.cooldown(1, 10, BucketType.user)
+    async def nodes(self, ctx):
+        """Displays the nodes you haven't unlocked.
+        
+        Required permissions: progression"""
+        user = ctx.message.author
+        endpoint = "account/home/nodes"
+        try:
+            doc = await self.fetch_key(user, ["progression"])
+            results = await self.call_api(endpoint, key=doc["key"])
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+        owned_nodes = results
+        lines = []
+        for nodes in self.gamedata["nodes"]:
+            if nodes["id"] not in owned_nodes:
+                lines.append(nodes["guide"])
+        if not lines:
+            return await ctx.send("You've collected all home instance nodes! Congratulations!")
+        embed = discord.Embed(color=await self.get_embed_color(ctx))
+        embed = embed_list_lines(embed, lines, "Nodes you haven't collected yet:")
+        embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
+        embed.set_footer(text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
+        await ctx.send("{.mention}, here are your nodes:".format(user), embed=embed)
 
     async def boss_embed(self, ctx, raids, results, account_name,
                          last_modified):

@@ -1201,6 +1201,208 @@
       "medium_health_potion"
     ]
   },
+  "nodes": [
+    {
+      "id": "advanced_cloth_rack",
+      "guide": "**Advanced Cloth Rack:** Bought on the TP."
+    },
+    {
+      "id": "advanced_leather_rack",
+      "guide": "**Advanced Leather Rack:** Bought on the TP."
+    },
+    {
+      "id": "airship_cargo",
+      "guide": "**Personal Airship Cargo Voucher:** Bought in Verdant Brink for 250 Airship Parts. WP: [&BN4HAAA=]"
+    },
+    {
+      "id": "ancient_wood_node",
+      "guide": "**Ancient Wood Node:** Bought on the TP or for 100 Statuettes."
+    },
+    {
+      "id": "aurilium_node",
+      "guide": "**Aurillium Node:** Acquired by completing the 'No Mask Left Behind' achievement."
+    },
+    {
+      "id": "bandit_chest",
+      "guide": "**Personal Bandit Chest:** Acquired by completing the LW2E08 'Point of No Return' achievement."
+    },
+    {
+      "id": "basic_cloth_rack",
+      "guide": "**Basic Cloth Rack:** Bought on the Gem Store."
+    },
+    {
+      "id": "basic_harvesting_nodes",
+      "guide": "**Basic Harvesting Nodes:** Bought on the Gem Store."
+    },
+    {
+      "id": "basic_leather_rack",
+      "guide": "**Basic Leather Nodes:** Bought on the Gem Store."
+    },
+    {
+      "id": "basic_lumber_nodes",
+      "guide": "**Basic Lumber Nodes:** Bought on the Gem Store."
+    },
+    {
+      "id": "basic_ore_nodes",
+      "guide": "**Basic Ore Nodes:** Bought on the Gem Store."
+    },
+    {
+      "id": "bauble_gathering_system",
+      "guide": "**Bauble Gathering System:** Bought from the SAB vendor for 32 Bauble Bubbles. WP: [&BBQEAAA=]"
+    },
+    {
+      "id": "black_lion_expedition_board",
+      "guide": "**Black Lion Expedition Boards:** Bought on the Gem Store."
+    },
+    {
+      "id": "black_lion_hunters_board",
+      "guide": "**Block Lion Hunters Board:** Bought on the Gem Store."
+    },
+    {
+      "id": "bloodstone_crystals",
+      "guide": "**Bloodstone Crystals Node:** Bought in Bloodstone Fen for 10,000 Unbound Magic + 50 gold. WP: [&BEsJAAA=]"
+    },
+    {
+      "id": "bound_hatched_chili_pepper_node",
+      "guide": "**Hatched Chili Pepper Node:** Bought on the TP or in Grothmar Valley for 5,000 Volatile Magic + 60 gold. WP: [&BBsMAAA=]"
+    },
+    {
+      "id": "brandstone_node",
+      "guide": "**Brandstone Node:** Bought in the Domain of Istan for 10,000 Volatile Magic + 50 gold. WP: [&BAkLAAA=]"
+    },
+    {
+      "id": "candy_corn_node",
+      "guide": "**Gift of Candy Corn:** Bought for 25 Laurels + 15 gold, or 400 Festival Tokens, or for 5 Candy Corn Cobs (only during halloween)."
+    },
+    {
+      "id": "crystallized_supply_cache",
+      "guide": "**Personal Crystallized Supply Cache Voucher:** Bought in Tangled Depths for 250 Ley-Line Crystals. WP: [&BA4IAAA=]"
+    },
+    {
+      "id": "difluorite_crystal_cluster_node",
+      "guide": "**Difuorite Crystal Cluster Node:** Bought in Sandswept Isles for 10,000 Volatile Magic + 50 gold. WP: [&BEMLAAA=]"
+    },
+    {
+      "id": "dragon_crystal",
+      "guide": "**Dragon Crystal Node:** Bought in Thunderhead Peaks for 10,000 Volatile Magic + 50 gold. WP: [&BLkLAAA=]"
+    },
+    {
+      "id": "elder_wood_node",
+      "guide": "**Elder Wood Node:** Bought on the TP or for 100 Statuettes."
+    },
+    {
+      "id": "enchanted_treasure_chest",
+      "guide": "**Enchanted Treasure Chest:** Acquired by completing the 'Treasure Hunter' achievement."
+    },
+    {
+      "id": "exalted_chest",
+      "guide": "**Personal Exalted Chest Voucher:** Bought in Auric Basic for 250 Aurillium. WP: [&BMYHAAA=]"
+    },
+    {
+      "id": "flaxseed_node",
+      "guide": "**Flaxseed Node:** Bought on the TP or for 100 Statuettes."
+    },
+    {
+      "id": "garden_plot_01",
+      "guide": "**Garden Plot #1:** Bought on the Gem Store."
+    },
+    {
+      "id": "garden_plot_02",
+      "guide": "**Garden Plot #2:** Bought on the Gem Store."
+    },
+    {
+      "id": "ghost_pepper_node",
+      "guide": "**Ghost Pepper Node:** Bought on the TP or for 100 Statuettes."
+    },
+    {
+      "id": "hard_wood_node",
+      "guide": "**Hard Wood Node:** Bought on the TP or for 100 Statuettes."
+    },
+    {
+      "id": "iron_ore_node",
+      "guide": "**Iron Ore Node:** Bought on the TP or for 100 Statuettes."
+    },
+    {
+      "id": "jade_fragment",
+      "guide": "**Jade Fragment Node:** Bought in Lake Doric for 10,000 Unbound Magic + 50 gold. WP: [&BK0JAAA=]"
+    },
+    {
+      "id": "king_sized_candy_corn",
+      "guide": "**Greater Gift of Candy Corn:** Bought for 5 Candy Corn Cobs (only during halloween)."
+    },
+    {
+      "id": "kournan_supply_cache",
+      "guide": "**Supply Cache:** Bought in the Domain of Kourna for 10,000 Volatile Magic + 50 gold. WP: [&BFcLAAA=]"
+    },
+    {
+      "id": "krait_obelisk",
+      "guide": "**Krait Obelisk Shard:** Bought for 25 Laurels + 15 gold, or for 400 Festival Tokens."
+    },
+    {
+      "id": "lotus_node",
+      "guide": "**Lotus Node:** Bought on the TP or for 100 Statuettes."
+    },
+    {
+      "id": "mistborn_mote",
+      "guide": "**Mistborn Mote Node:** Bought in Dragonfall for 10,000 Volatile Magic + 50 gold. WP: [&BN4LAAA=]"
+    },
+    {
+      "id": "mistonium_node",
+      "guide": "**Mistonium Node:** Bought in Jahai Bluffs for 10,000 Volatile Magic + 50 gold. WP: [&BH4LAAA=]"
+    },
+    {
+      "id": "mithril_ore_node",
+      "guide": "**Mithril Ore Node:** Bought on the TP or for 100 Statuettes."
+    },
+    {
+      "id": "omnomberry_node",
+      "guide": "**Omnomberry Node:** Bought on the TP or for 100 Statuettes."
+    },
+    {
+      "id": "orichalcum_ore_node",
+      "guide": "**Orichalcum Node:** Bought on the TP or for 100 Statuettes."
+    },
+    {
+      "id": "orrian_oyster_node",
+      "guide": "**Orrian Oyster Node:** Bought in Siren's Landing for 10,000 Unbound Magic + 50 gold. WP: [&BO8JAAA=]"
+    },
+    {
+      "id": "orrian_truffle_node",
+      "guide": "**Orrian Truffle Node:** Bought on the TP or for 100 Statuettes."
+    },
+    {
+      "id": "petrified_stump",
+      "guide": "**Petrified Stump Node:** Bought in Ember Bay for 10,000 Unbound Magic + 50 gold. WP: [&BF8JAAA=]"
+    },
+    {
+      "id": "platinum_ore_node",
+      "guide": "**Platinum Ore Node:** Bought on the TP or for 100 Statuettes."
+    },
+    {
+      "id": "primordial_orchid",
+      "guide": "**Primordal Orchid Node:** Bought in Draconis Mons for 10,000 Unbound Magic + 50 gold. WP: [&BL0JAAA=]"
+    },
+    {
+      "id": "quartz_node",
+      "guide": "**Gift of Quartz:** Bought for 25 Laurels + 15 gold, or for 400 Festival Tokens."
+    },
+    {
+      "id": "snow_truffle_node",
+      "guide": "**Snow Truffle Node:** Bought on the TP or for 100 Statuettes."
+    },
+    {
+      "id": "sprocket_generator",
+      "guide": "**Gift of Sprockets:** Bought for 25 Laurels + 15 gold, or for 400 Festival Tokens."
+    },
+    {
+      "id": "winterberry_bush",
+      "guide": "**Winterberry Bush Node:** Bought in Bitterfrost Frontier for 10,000 Unbound Magic + 50 gold. WP: [&BH0JAAA=]"
+    },
+    {
+      "id": "wintersday_tree",
+      "guide": "**Gift of Magnanimity:** Acquired by completing the 'For the Children!' festival achievement."
+    }
+  ],
   "attributes": {
     "AgonyResistance": "Agony Resistance",
     "CritDamage": "Ferocity",
