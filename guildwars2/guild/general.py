@@ -44,13 +44,16 @@ class GeneralGuild:
             description='General Info about {0}'.format(guild_name),
             colour=await self.get_embed_color(ctx))
         data.set_author(name="{} [{}]".format(results["name"], results["tag"]))
-        guild_currencies = ["influence", "aetherium", "resonance", "favor", "member_count"]
+        guild_currencies = [
+            "influence", "aetherium", "resonance", "favor", "member_count"
+        ]
         for cur in guild_currencies:
             if cur == "member_count":
                 data.add_field(
                     name='Members',
                     value="{} {}/{}".format(
-                        self.get_emoji(ctx, "friends"), results["member_count"],
+                        self.get_emoji(ctx,
+                                       "friends"), results["member_count"],
                         str(results["member_capacity"])))
             else:
                 data.add_field(
@@ -104,6 +107,22 @@ class GeneralGuild:
         # For each order the rank has, go through each member and add it with
         # the current order increment to the embed
         lines = []
+
+        async def get_guild_member_mention(account_name):
+            cursor = self.bot.database.iter(
+                "users", {
+                    "$or": [{
+                        "cogs.GuildWars2.key.account_name": account_name
+                    }, {
+                        "cogs.GuildWars2.keys.account_name": account_name
+                    }]
+                })
+            async for doc in cursor:
+                member = ctx.guild.get_member(doc["_id"])
+                if member:
+                    return member.mention
+            return ""
+
         for order in ranks:
             for member in results:
                 # Filter invited members
@@ -113,8 +132,12 @@ class GeneralGuild:
                     for rank in ranks:
                         if member_rank == rank['id']:
                             if rank['order'] == order_id:
-                                line = "**{}**\n*{}*".format(
-                                    member['name'], member['rank'])
+                                mention = await get_guild_member_mention(
+                                    member["name"])
+                                if mention:
+                                    mention = f" - {mention}"
+                                line = "**{}**{}\n*{}*".format(
+                                    member['name'], mention, member['rank'])
                                 if len(str(lines)) + len(line) < 6000:
                                     lines.append(line)
             order_id += 1
@@ -335,4 +358,3 @@ class GeneralGuild:
                        "invoked without a specified guild will default to "
                        "this guild. To reset, simply invoke this command "
                        "without specifying a guild".format(guild_name.title()))
-
