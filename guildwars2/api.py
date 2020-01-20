@@ -1,5 +1,6 @@
 import asyncio
-import datetime
+from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
+                      wait_chain, wait_fixed)
 
 from .exceptions import (APIBadRequest, APIConnectionError, APIForbidden,
                          APIInactiveError, APIInvalidKey, APINotFound,
@@ -37,6 +38,10 @@ class ApiMixin:
                 self.call_api(e, key=key, schema_version=schema_version))
         return await asyncio.gather(*tasks)
 
+    @retry(retry=retry_if_exception_type(APIBadRequest),
+           reraise=True,
+           stop=stop_after_attempt(4),
+           wait=wait_chain(wait_fixed(2), wait_fixed(4), wait_fixed(8)))
     async def call_api(self,
                        endpoint,
                        user=None,
