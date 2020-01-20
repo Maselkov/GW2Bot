@@ -4,6 +4,7 @@ from discord.ext.commands.cooldowns import BucketType
 import re
 
 from .exceptions import APIError
+from .utils.db import prepare_search
 from .utils.chat import embed_list_lines
 
 
@@ -42,8 +43,8 @@ class WalletMixin:
                         value = 0
                     if c_doc["name"] == "Coin":
                         lines[i].append("{} {} {}".format(
-                            emoji,
-                            self.gold_to_coins(ctx, value), c_doc["name"]))
+                            emoji, self.gold_to_coins(ctx, value),
+                            c_doc["name"]))
                     else:
                         lines[i].append("{} {} {}".format(
                             emoji, value, c_doc["name"]))
@@ -55,12 +56,10 @@ class WalletMixin:
         scopes = ["inventories", "characters"]
         lines = []
         flattened_ids = [y for x in ids for y in x]
-        try:
-            doc = await self.fetch_key(user, scopes)
-            search_results = await self.find_items_in_account(
-                ctx, flattened_ids, doc=doc)
-        except APIError as e:
-            return await self.error_handler(ctx, e)
+        doc = await self.fetch_key(user, scopes)
+        search_results = await self.find_items_in_account(
+            ctx, flattened_ids, doc=doc)
+
         for i in range(0, len(ids)):
             lines.append([])
             for k, v in search_results.items():
@@ -69,13 +68,13 @@ class WalletMixin:
                     name = doc["name"]
                     name = re.sub('^\d+ ', '', name)
                     emoji = self.get_emoji(ctx, name)
-                    lines[i].append("{} {} {}".format(emoji,
-                                                      sum(v.values()), name))
+                    lines[i].append("{} {} {}".format(emoji, sum(v.values()),
+                                                      name))
         return lines
 
-    @commands.command()
+    @commands.command(usage="<optional: specific currency>")
     @commands.cooldown(1, 10, BucketType.user)
-    async def wallet(self, ctx):
+    async def wallet(self, ctx, *, currency=None):
         """Shows your wallet
 
         Required permissions: wallet
@@ -84,6 +83,45 @@ class WalletMixin:
             doc = await self.fetch_key(ctx.author, ["wallet"])
         except APIError as e:
             return await self.error_handler(ctx, e)
+        if currency:
+            try:
+                results = await self.call_api("account/wallet", key=doc["key"])
+            except APIError as e:
+                return await self.error_handler(ctx, e)
+            currency = currency.lower()
+            if currency == "gold":
+                currency = "coin"
+            query = {"name": prepare_search(currency)}
+            count = await self.db.currencies.count_documents(query)
+            cursor = self.db.currencies.find(query)
+            choice = await self.selection_menu(ctx, cursor, count)
+            if choice:
+                embed = discord.Embed(
+                    title=choice["name"].title(),
+                    description=choice["description"],
+                    colour=await self.get_embed_color(ctx))
+                currency_id = choice["_id"]
+                for item in results:
+                    if item["id"] == currency_id == 1:
+                        count = self.gold_to_coins(ctx, item["value"])
+                        break
+                    elif item["id"] == currency_id:
+                        count = "{:,}".format(item["value"])
+                        break
+                    else:
+                        count = 0
+                embed.add_field(
+                    name="Amount in wallet", value=count, inline=False)
+                embed.set_thumbnail(url=choice["icon"])
+                embed.set_author(
+                    name=doc["account_name"], icon_url=ctx.author.avatar_url)
+                embed.set_footer(
+                    text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
+                try:
+                    await ctx.send(embed=embed)
+                except discord.Forbidden:
+                    await ctx.send("Need permission to embed links")
+                return
         await ctx.trigger_typing()
         ids_cur = [1, 4, 2, 3, 18, 23, 15, 16, 50, 47]
         ids_keys = [43, 40, 41, 37, 42, 38, 44, 49]
@@ -96,9 +134,11 @@ class WalletMixin:
         ids_wallet = [ids_cur, ids_keys, ids_maps, ids_token, ids_raid]
         ids_items = [ids_l3, ids_l4, ids_maps_items]
 
-        currencies_wallet = await self.get_wallet(ctx, ids_wallet)
-        currencies_items = await self.get_item_currency(ctx, ids_items)
-
+        try:
+            currencies_wallet = await self.get_wallet(ctx, ids_wallet)
+            currencies_items = await self.get_item_currency(ctx, ids_items)
+        except APIError as e:
+            return await self.error_handler(ctx, e)
         embed = discord.Embed(
             description="Wallet", colour=await self.get_embed_color(ctx))
         embed = embed_list_lines(
@@ -108,11 +148,21 @@ class WalletMixin:
         embed = embed_list_lines(
             embed, currencies_wallet[1], "> **KEYS**", inline=True)
         embed = embed_list_lines(
-            embed, currencies_wallet[2][2:5] + currencies_items[2] + currencies_wallet[2][5:], "> **MAP CURRENCIES**", inline=True)
+            embed,
+            currencies_wallet[2][2:5] + currencies_items[2] +
+            currencies_wallet[2][5:],
+            "> **MAP CURRENCIES**",
+            inline=True)
         embed = embed_list_lines(
-            embed, currencies_items[0] + [currencies_wallet[2][0]], "> **LIVING SEASON 3**", inline=True)
+            embed,
+            currencies_items[0] + [currencies_wallet[2][0]],
+            "> **LIVING SEASON 3**",
+            inline=True)
         embed = embed_list_lines(
-            embed, currencies_items[1] + [currencies_wallet[2][1]], "> **LIVING SEASON 4**", inline=True)
+            embed,
+            currencies_items[1] + [currencies_wallet[2][1]],
+            "> **LIVING SEASON 4**",
+            inline=True)
         embed = embed_list_lines(
             embed, currencies_wallet[4], "> **RAIDS**", inline=True)
         embed.set_author(
