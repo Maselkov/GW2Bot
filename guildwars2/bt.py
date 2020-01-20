@@ -93,6 +93,8 @@ class BtMixin():
         pipeline = [{"$match": match}] + BT_PIPELINE
         results = await self.db.bosskills.aggregate(pipeline).to_list(None)
         first = await self.db.bosskills.find_one(match, sort=[("week", 1)])
+        if not first:
+            first = {}
         recording_since = first.get("week")
         for index, wing in enumerate(wings):
             value = []
