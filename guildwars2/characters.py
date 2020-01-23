@@ -375,14 +375,14 @@ class CharactersMixin:
                 for rune, count in runes.items():
                     lines.append(f"*{rune}* ({count}/6)")
             embed.add_field(name="> **ARMOR**", value="\n".join(lines))
-            embed.add_field(name="> **TRINKETS**",
-                            value="\n".join(trinket_lines))
             if any(weapon_sets["A"]):
                 embed.add_field(name="> **WEAPON SET #1**",
                                 value="\n".join(weapon_sets["A"]))
             if any(weapon_sets["B"]):
                 embed.add_field(name="> **WEAPON SET #2**",
                                 value="\n".join(weapon_sets["B"]))
+            embed.add_field(name="> **TRINKETS**",
+                            value="\n".join(trinket_lines), inline=False)
             upgrade_lines = []
             for bonus, count in bonuses.items():
                 bonus = self.readable_attribute(bonus)
