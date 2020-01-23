@@ -475,6 +475,8 @@ class SyncGuild:
         async for doc in cursor:
             try:
                 await self.sync_guild_ranks(doc)
+            except asyncio.CancelledError:
+                return
             except Exception:
                 pass
             await asyncio.sleep(5)

@@ -17,14 +17,13 @@ class EventsMixin:
                    "**{0}et hot | h**: Event timer for HoT maps and Dry top\n"
                    "**{0}et pof | p**: Event timer for PoF and LS4 maps\n"
                    "**{0}et day | d** Current day/night\n\n"
-                   "**{0}et reminder** Enable automatic reminders for events"
-                   .format(ctx.prefix))
-            embed = discord.Embed(
-                title="Event Timer help",
-                description=msg,
-                color=await self.get_embed_color(ctx))
-            embed.set_footer(
-                text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
+                   "**{0}et reminder** Enable automatic reminders for events".
+                   format(ctx.prefix))
+            embed = discord.Embed(title="Event Timer help",
+                                  description=msg,
+                                  color=await self.get_embed_color(ctx))
+            embed.set_footer(text=self.bot.user.name,
+                             icon_url=self.bot.user.avatar_url)
             info = None
             if ctx.invoked_with.lower() == "hotet":
                 info = ("**{0}hotet** has evolved into **{0}et**, use "
@@ -109,34 +108,32 @@ class EventsMixin:
         if time > 60:
             return await ctx.send("Time can't be greater than one hour")
         reminder["time"] = time * 60
-        await self.bot.database.set(
-            ctx.author, {"event_reminders": reminder}, self, operator="push")
+        await self.bot.database.set(ctx.author, {"event_reminders": reminder},
+                                    self,
+                                    operator="push")
         await ctx.send("Reminder set succesfully")
 
     async def et_reminder_settings_menu(self, ctx):
         user = ctx.author
-        embed_templates = [
-            {
-                "setting":
-                "online_only",
-                "title":
-                "Online only",
-                "description":
-                "Enable to have reminders sent only when you're online on Discord",
-                "footer":
-                "Note that the bot can't distinguish whether you're invisible or offline"
-            },
-            {
-                "setting":
-                "ingame_only",
-                "title":
-                "Ingame only",
-                "description":
-                "Enable to have reminders sent only while you're in game",
-                "footer":
-                "This works based off your Discord game status. Make sure to enable it"
-            }
-        ]
+        embed_templates = [{
+            "setting":
+            "online_only",
+            "title":
+            "Online only",
+            "description":
+            "Enable to have reminders sent only when you're online on Discord",
+            "footer":
+            "Note that the bot can't distinguish whether you're invisible or offline"
+        }, {
+            "setting":
+            "ingame_only",
+            "title":
+            "Ingame only",
+            "description":
+            "Enable to have reminders sent only while you're in game",
+            "footer":
+            "This works based off your Discord game status. Make sure to enable it"
+        }]
         doc = await self.bot.database.get(user, self)
         doc = doc.get("et_reminder_settings", {})
         settings = [t["setting"] for t in embed_templates]
@@ -152,10 +149,9 @@ class EventsMixin:
                 template["setting"]] else "disabled"
             description = (f"**{template['description']}**\n"
                            f"Current state: **{enabled}**")
-            embed = discord.Embed(
-                title=template["title"],
-                description=description,
-                color=self.embed_color)
+            embed = discord.Embed(title=template["title"],
+                                  description=description,
+                                  color=self.embed_color)
             if template["footer"]:
                 embed.set_footer(text=template["footer"])
             return embed
@@ -179,19 +175,21 @@ class EventsMixin:
 
         while True:
             try:
-                reaction, _ = await self.bot.wait_for(
-                    "reaction_add", check=check, timeout=120)
+                reaction, _ = await self.bot.wait_for("reaction_add",
+                                                      check=check,
+                                                      timeout=120)
             except asyncio.TimeoutError:
                 break
             setting = next(m["setting"] for m in messages
                            if m["message"].id == reaction.message.id)
             settings[setting] = reactions[reaction.emoji]
-            template = next(
-                t for t in embed_templates if t["setting"] == setting)
+            template = next(t for t in embed_templates
+                            if t["setting"] == setting)
             embed = setting_embed(template)
             asyncio.create_task(reaction.message.edit(embed=embed))
-            await self.bot.database.set(
-                user, {"et_reminder_settings": settings}, self)
+            await self.bot.database.set(user,
+                                        {"et_reminder_settings": settings},
+                                        self)
         for message in to_cleanup:
             asyncio.create_task(message.delete())
 
@@ -203,14 +201,16 @@ class EventsMixin:
         counter = 0
         while counter < 12:
             for boss in normal:
-                increment = datetime.timedelta(
-                    hours=boss["interval"] * counter)
+                increment = datetime.timedelta(hours=boss["interval"] *
+                                               counter)
                 time = (datetime.datetime(
                     1, 1, 1, *boss["start_time"], tzinfo=UTC_TZ) + increment)
                 if time.day != 1:
                     continue
-                time = time.replace(
-                    year=now.year, month=now.month, day=now.day, tzinfo=UTC_TZ)
+                time = time.replace(year=now.year,
+                                    month=now.month,
+                                    day=now.day,
+                                    tzinfo=UTC_TZ)
                 output = {
                     "name": boss["name"],
                     "time": time,
@@ -245,14 +245,11 @@ class EventsMixin:
                 boss_time = boss_time + datetime.timedelta(days=day)
                 if time < boss_time:
                     output = {
-                        "name":
-                        boss["name"],
+                        "name": boss["name"],
                         "time":
                         boss_time.astimezone(tz=timezone).strftime("%H:%M"),
-                        "waypoint":
-                        boss["waypoint"],
-                        "diff":
-                        boss_time - time
+                        "waypoint": boss["waypoint"],
+                        "diff": boss_time - time
                     }
                     upcoming_bosses.append(output)
                     counter += 1
@@ -261,19 +258,17 @@ class EventsMixin:
 
     def schedule_embed(self, limit=8, *, timezone=UTC_TZ):
         schedule = self.get_upcoming_bosses(limit, timezone=timezone)
-        data = discord.Embed(
-            title="Upcoming world bosses", color=self.embed_color)
+        data = discord.Embed(title="Upcoming world bosses",
+                             color=self.embed_color)
         for boss in schedule:
             value = "Time: {}\nWaypoint: {}".format(boss["time"],
                                                     boss["waypoint"])
-            data.add_field(
-                name="{} in {}".format(boss["name"],
-                                       self.format_timedelta(boss["diff"])),
-                value=value,
-                inline=False)
-        data.set_footer(
-            text="Timezone: {}".format(timezone.tzname(None)),
-            icon_url=self.bot.user.avatar_url)
+            data.add_field(name="{} in {}".format(
+                boss["name"], self.format_timedelta(boss["diff"])),
+                           value=value,
+                           inline=False)
+        data.set_footer(text="Timezone: {}".format(timezone.tzname(None)),
+                        icon_url=self.bot.user.avatar_url)
         return data
 
     def format_timedelta(self, td):
@@ -295,8 +290,8 @@ class EventsMixin:
             "pof": "PoF Event Timer",
             "day": "Day/Night cycle"
         }.get(group)
-        embed = discord.Embed(
-            title=title, color=await self.get_embed_color(ctx))
+        embed = discord.Embed(title=title,
+                              color=await self.get_embed_color(ctx))
         for location in maps:
             duration_so_far = 0
             current_phase = None
@@ -321,8 +316,8 @@ class EventsMixin:
                      "\nNext phase: **{}** in **{}** minutes".format(
                          current_phase, next_phase, time_until))
             embed.add_field(name=location["name"], value=value, inline=False)
-        embed.set_footer(
-            text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
+        embed.set_footer(text=self.bot.user.name,
+                         icon_url=self.bot.user.avatar_url)
         return embed
 
     async def get_timezone(self, guild):
@@ -348,9 +343,9 @@ class EventsMixin:
                     boss_time = boss_time + datetime.timedelta(days=day)
                     if time < boss_time:
                         if boss["name"] == reminder["name"]:
-                            return int(
-                                (boss_time - datetime.datetime.now(UTC_TZ)
-                                 ).total_seconds())
+                            return int((
+                                boss_time -
+                                datetime.datetime.now(UTC_TZ)).total_seconds())
                 day += 1
         time = datetime.datetime.utcnow()
         position = (60 * time.hour + time.minute) % 120
@@ -402,10 +397,9 @@ class EventsMixin:
             else:
                 time_string = f"{seconds} seconds"
             description = (f"{reminder['name']} will begin in {time_string}")
-            embed = discord.Embed(
-                title="Event reminder",
-                description=description,
-                color=self.embed_color)
+            embed = discord.Embed(title="Event reminder",
+                                  description=description,
+                                  color=self.embed_color)
             embed.set_footer(
                 icon_url=self.bot.user.avatar_url,
                 text="Click on the reaction below to unsubscribe to "
@@ -416,8 +410,9 @@ class EventsMixin:
                 return
             reminder["last_reminded"] = msg.created_at
             reminder["last_message"] = msg.id
-            await self.bot.database.set(
-                user, {f"event_reminders.{i}": reminder}, self)
+            await self.bot.database.set(user,
+                                        {f"event_reminders.{i}": reminder},
+                                        self)
             await msg.add_reaction("❌")
 
     @tasks.loop(seconds=10)
@@ -433,6 +428,8 @@ class EventsMixin:
                 for i, reminder in enumerate(doc["event_reminders"]):
                     asyncio.create_task(
                         self.process_reminder(user, reminder, i))
+            except asyncio.CancelledError:
+                return
             except Exception as e:
                 pass
 

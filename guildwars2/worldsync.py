@@ -18,7 +18,6 @@ class WorldsyncMixin:
     @worldsync.command(name="toggle")
     async def worldsync_toggle(self, ctx):
         """Enable automatic world roles"""
-
         def check(m):
             return m.author == ctx.author and m.channel == ctx.channel
 
@@ -170,10 +169,13 @@ class WorldsyncMixin:
 
     @tasks.loop(minutes=5)
     async def worldsync_task(self):
-        cursor = self.bot.database.iter(
-            "guilds", {"worldsync.enabled": True}, self, subdocs=["worldsync"])
+        cursor = self.bot.database.iter("guilds", {"worldsync.enabled": True},
+                                        self,
+                                        subdocs=["worldsync"])
         async for doc in cursor:
             try:
                 await self.sync_worlds(doc, doc["_obj"])
+            except asyncio.CancelledError:
+                return
             except Exception as e:
                 pass

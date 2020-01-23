@@ -120,8 +120,9 @@ class NotiifiersMixin:
                 ]
                 break
         embed = await self.daily_embed(categories)
-        await self.bot.database.set_guild(
-            guild, {"daily.categories": categories}, self)
+        await self.bot.database.set_guild(guild,
+                                          {"daily.categories": categories},
+                                          self)
         await ctx.send(
             "Your categories have been saved. Here's an example of "
             "your daily notifs:",
@@ -214,8 +215,9 @@ class NotiifiersMixin:
         if not guild.me.permissions_in(channel).send_messages:
             return await ctx.send("I do not have permissions to send "
                                   "messages to {.mention}".format(channel))
-        await self.bot.database.set_guild(
-            guild, {"updates.channel": channel.id}, self)
+        await self.bot.database.set_guild(guild,
+                                          {"updates.channel": channel.id},
+                                          self)
         doc = await self.bot.database.get_guild(guild, self)
         enabled = doc["updates"].get("on", False)
         if enabled:
@@ -285,8 +287,9 @@ class NotiifiersMixin:
         if mention_type not in valid_types:
             return await ctx.send_help(ctx.command)
         guild = ctx.guild
-        await self.bot.database.set_guild(
-            guild, {"updates.mention": mention_type}, self)
+        await self.bot.database.set_guild(guild,
+                                          {"updates.mention": mention_type},
+                                          self)
         await ctx.send("Mention type set")
 
     @commands.group(case_insensitive=True)
@@ -306,8 +309,9 @@ class NotiifiersMixin:
         if not guild.me.permissions_in(channel).send_messages:
             return await ctx.send("I do not have permissions to send "
                                   "messages to {.mention}".format(channel))
-        await self.bot.database.set_guild(
-            guild, {"bossnotifs.channel": channel.id}, self)
+        await self.bot.database.set_guild(guild,
+                                          {"bossnotifs.channel": channel.id},
+                                          self)
         doc = await self.bot.database.get_guild(guild, self)
         enabled = doc["bossnotifs"].get("on", False)
         if enabled:
@@ -408,10 +412,9 @@ class NotiifiersMixin:
             title = topic["Name"]
         except Exception as e:
             self.log.exception(e)
-        embed = discord.Embed(
-            title="**{}**".format(title),
-            url=url_topic,
-            color=self.embed_color)
+        embed = discord.Embed(title="**{}**".format(title),
+                              url=url_topic,
+                              color=self.embed_color)
         if patch_notes:
             embed = patchnotes_embed(embed, patch_notes)
         embed.set_footer(text="Build: {}".format(new_build))
@@ -451,10 +454,10 @@ class NotiifiersMixin:
         soup = BeautifulSoup(item["description"], 'html.parser')
         description = "[Click here]({0})\n{1}".format(item["link"],
                                                       soup.get_text())
-        data = discord.Embed(
-            title=unicodedata.normalize("NFKD", item["title"]),
-            description=description,
-            color=0xc12d2b)
+        data = discord.Embed(title=unicodedata.normalize(
+            "NFKD", item["title"]),
+                             description=description,
+                             color=0xc12d2b)
         return data
 
     async def check_day(self):
@@ -495,12 +498,13 @@ class NotiifiersMixin:
     async def send_daily_notifs(self):
         try:
             name = self.__class__.__name__
-            cursor = self.bot.database.get_guilds_cursor({
-                "daily.on": True,
-                "daily.channel": {
-                    "$ne": None
-                }
-            }, self)
+            cursor = self.bot.database.get_guilds_cursor(
+                {
+                    "daily.on": True,
+                    "daily.channel": {
+                        "$ne": None
+                    }
+                }, self)
             daily_doc = await self.bot.database.get_cog_config(self)
             sent = 0
             deleted = 0
@@ -548,8 +552,8 @@ class NotiifiersMixin:
                             await message.pin()
                             pinned += 1
                             try:
-                                async for m in channel.history(
-                                        after=message, limit=3):
+                                async for m in channel.history(after=message,
+                                                               limit=3):
                                     if (m.type == discord.MessageType.pins_add
                                             and m.author == self.bot.user):
                                         await m.delete()
@@ -614,12 +618,13 @@ class NotiifiersMixin:
             except:
                 text = ("Guild Wars 2 has just updated! New build: {}".format(
                     build))
-            cursor = self.bot.database.get_guilds_cursor({
-                "updates.on": True,
-                "updates.channel": {
-                    "$ne": None
-                }
-            }, self)
+            cursor = self.bot.database.get_guilds_cursor(
+                {
+                    "updates.on": True,
+                    "updates.channel": {
+                        "$ne": None
+                    }
+                }, self)
             sent = 0
             async for doc in cursor:
                 try:
@@ -685,6 +690,8 @@ class NotiifiersMixin:
                            "{}!".format(user, user_price, cost_coins))
                     await user.send(msg)
                     await self.bot.database.set(user, {"gemtrack": None}, self)
+            except asyncio.CancelledError:
+                return
             except:
                 pass
 
@@ -693,12 +700,13 @@ class NotiifiersMixin:
         name = self.__class__.__name__
         boss = self.get_upcoming_bosses(1)[0]
         await asyncio.sleep(boss["diff"].total_seconds() + 1)
-        cursor = self.bot.database.get_guilds_cursor({
-            "bossnotifs.on": True,
-            "bossnotifs.channel": {
-                "$ne": None
-            }
-        }, self)
+        cursor = self.bot.database.get_guilds_cursor(
+            {
+                "bossnotifs.on": True,
+                "bossnotifs.channel": {
+                    "$ne": None
+                }
+            }, self)
         async for doc in cursor:
             try:
                 doc = doc["cogs"][name]["bossnotifs"]
@@ -719,6 +727,8 @@ class NotiifiersMixin:
                 if old_message:
                     to_delete = await channel.fetch_message(old_message)
                     await to_delete.delete()
+            except asyncio.CancelledError:
+                return
             except:
                 pass
 
@@ -729,36 +739,36 @@ class NotiifiersMixin:
         await self.cache_endpoint("worlds", True)
 
     async def send_population_notifs(self):
-        async for world in self.db.worlds.find({
-                "population": {
-                    "$ne": "Full"
-                }
-        }):
+        async for world in self.db.worlds.find({"population": {
+                "$ne": "Full"
+        }}):
             world_name = world["name"]
             wid = world["_id"]
             msg = (
                 "{} is no longer full! [populationtrack]".format(world_name))
-            cursor = self.bot.database.get_users_cursor({
-                "poptrack": wid
-            }, self)
+            cursor = self.bot.database.get_users_cursor({"poptrack": wid},
+                                                        self)
             async for doc in cursor:
                 try:
                     user = await self.bot.fetch_user(doc["_id"])
-                    await self.bot.database.set_user(
-                        user, {"poptrack": wid}, self, operator="$pull")
+                    await self.bot.database.set_user(user, {"poptrack": wid},
+                                                     self,
+                                                     operator="$pull")
                     await user.send(msg)
+                except asyncio.CancelledError:
+                    return
                 except:
                     pass
 
     @tasks.loop(minutes=5)
     async def forced_account_names(self):
         cursor = self.bot.database.get_guilds_cursor(
-            {
-                "force_account_names": True
-            }, self)
+            {"force_account_names": True}, self)
         async for doc in cursor:
             try:
                 guild = self.bot.get_guild(doc["_id"])
                 await self.force_guild_account_names(guild)
+            except asyncio.CancelledError:
+                return
             except:
                 pass

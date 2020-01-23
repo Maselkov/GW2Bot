@@ -35,10 +35,8 @@ class Character:
                 return self.profession.title()
             spec = self.specializations[mode][2]
             if spec:
-                spec = await self.cog.db.specializations.find_one({
-                    "_id":
-                    spec["id"]
-                })
+                spec = await self.cog.db.specializations.find_one(
+                    {"_id": spec["id"]})
                 if spec is None or not spec["elite"]:
                     return self.profession.title()
                 return spec["name"]
@@ -135,9 +133,9 @@ class CharactersMixin:
                 value = zero_width_space
             embed.add_field(name=info["name"], value=value, inline=False)
         embed.set_author(name=character)
-        embed.set_footer(
-            text="A level {} {} ".format(level, profession.name.lower()),
-            icon_url=profession.icon)
+        embed.set_footer(text="A level {} {} ".format(level,
+                                                      profession.name.lower()),
+                         icon_url=profession.icon)
         try:
             await ctx.send(embed=embed)
         except discord.Forbidden as e:
@@ -188,8 +186,9 @@ class CharactersMixin:
             gtag = guild["tag"]
             data.add_field(name="Guild", value="[{}] {}".format(gtag, gname))
         data.add_field(name="Deaths", value=deaths)
-        data.add_field(
-            name="Deaths per hour", value=str(deathsperhour), inline=False)
+        data.add_field(name="Deaths per hour",
+                       value=str(deathsperhour),
+                       inline=False)
         craft_list = self.get_crafting(results)
         if craft_list:
             data.add_field(name="Crafting", value="\n".join(craft_list))
@@ -201,8 +200,8 @@ class CharactersMixin:
         except discord.Forbidden:
             await ctx.send("Need permission to embed links")
 
-    @character.command(
-        name="list", usage="<sort (name|profession|created|age)>")
+    @character.command(name="list",
+                       usage="<sort (name|profession|created|age)>")
     @commands.cooldown(1, 5, BucketType.user)
     async def character_list(self, ctx, sort="name"):
         """Lists all your characters, with extra info (age|created|profession)
@@ -223,9 +222,8 @@ class CharactersMixin:
             if sort == "age":
                 return lambda k: (-k.age, k.name)
             if sort == "created":
-                return lambda k: (-(
-                    datetime.datetime.utcnow() - k.created).total_seconds(),
-                    k.name)
+                return lambda k: (-(datetime.datetime.utcnow() - k.created).
+                                  total_seconds(), k.name)
             return lambda k: k.name
 
         def extra_info(char):
@@ -244,16 +242,17 @@ class CharactersMixin:
             characters = await self.get_all_characters(user)
         except APIError as e:
             return await self.error_handler(ctx, e)
-        embed = discord.Embed(
-            title="Your characters", colour=await self.get_embed_color(ctx))
+        embed = discord.Embed(title="Your characters",
+                              colour=await self.get_embed_color(ctx))
         embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
         output = []
         for character in sorted(characters, key=get_sort_key()):
             spec = await character.get_spec_info()
             output.append("{}**{}**{}".format(
-                self.get_emoji(
-                    ctx, spec["name"], fallback=True,
-                    fallback_fmt="**({})** "), character.name,
+                self.get_emoji(ctx,
+                               spec["name"],
+                               fallback=True,
+                               fallback_fmt="**({})** "), character.name,
                 extra_info(character)))
         sort = {
             "created": "date of creation",
@@ -376,16 +375,14 @@ class CharactersMixin:
                 for rune, count in runes.items():
                     lines.append(f"*{rune}* ({count}/6)")
             embed.add_field(name="> **ARMOR**", value="\n".join(lines))
-            embed.add_field(
-                name="> **TRINKETS**", value="\n".join(trinket_lines))
+            embed.add_field(name="> **TRINKETS**",
+                            value="\n".join(trinket_lines))
             if any(weapon_sets["A"]):
-                embed.add_field(
-                    name="> **WEAPON SET #1**",
-                    value="\n".join(weapon_sets["A"]))
+                embed.add_field(name="> **WEAPON SET #1**",
+                                value="\n".join(weapon_sets["A"]))
             if any(weapon_sets["B"]):
-                embed.add_field(
-                    name="> **WEAPON SET #2**",
-                    value="\n".join(weapon_sets["B"]))
+                embed.add_field(name="> **WEAPON SET #2**",
+                                value="\n".join(weapon_sets["B"]))
             upgrade_lines = []
             for bonus, count in bonuses.items():
                 bonus = self.readable_attribute(bonus)
@@ -393,10 +390,9 @@ class CharactersMixin:
                 upgrade_lines.append(f"{emoji}**{bonus}**: {count}")
             if not upgrade_lines:
                 upgrade_lines = ["None found"]
-            embed.add_field(
-                name="> **BONUSES FROM UPGRADES**",
-                value="\n".join(upgrade_lines),
-                inline=False)
+            embed.add_field(name="> **BONUSES FROM UPGRADES**",
+                            value="\n".join(upgrade_lines),
+                            inline=False)
             attributes = await self.calculate_character_attributes(results)
             column_1 = []
             column_2 = [zero_width_space,
@@ -430,10 +426,9 @@ class CharactersMixin:
             embed.set_image(url=f"attachment://{file.filename}")
         except AttributeError:
             file = None
-        embed.set_footer(
-            text=("Colors of emojis represent item rarity. "
-                  "Attributes aren't guaranteed to be accurate."),
-            icon_url=self.bot.user.avatar_url)
+        embed.set_footer(text=("Colors of emojis represent item rarity. "
+                               "Attributes aren't guaranteed to be accurate."),
+                         icon_url=self.bot.user.avatar_url)
         try:
             await ctx.send(embed=embed, file=file)
         except discord.Forbidden as e:
@@ -476,7 +471,6 @@ class CharactersMixin:
 
         Required permissions: characters
         """
-
         def suffix(year):
             if year == 1:
                 return 'st'
@@ -503,19 +497,20 @@ class CharactersMixin:
             next_bd = floor + 1
             fields.setdefault(next_bd, [])
             spec = await character.get_spec_info()
-            fields[next_bd].append(("{} {}".format(
-                self.get_emoji(ctx, spec["name"]), character.name), days_left))
+            fields[next_bd].append(
+                ("{} {}".format(self.get_emoji(ctx, spec["name"]),
+                                character.name), days_left))
         msg = "{.mention}, here are your upcoming birthdays:".format(user)
-        embed = discord.Embed(
-            title="Days until...", colour=await self.get_embed_color(ctx))
+        embed = discord.Embed(title="Days until...",
+                              colour=await self.get_embed_color(ctx))
         embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
         for k, v in sorted(fields.items(), reverse=True, key=lambda k: k[0]):
             lines = [
                 "{}: **{}**".format(*line)
                 for line in sorted(v, key=lambda l: l[1])
             ]
-            embed = embed_list_lines(embed, lines, "{}{} Birthday".format(
-                k, suffix(k)))
+            embed = embed_list_lines(embed, lines,
+                                     "{}{} Birthday".format(k, suffix(k)))
         await ctx.send(msg, embed=embed)
 
     def readable_attribute(self, attribute_name):
@@ -867,15 +862,14 @@ class CharactersMixin:
         profession = await self.get_profession(results, mode=mode)
         level = results["level"]
         specializations = results["specializations"][mode]
-        embed = discord.Embed(
-            title="{} build".format(mode.upper()), color=profession.color)
+        embed = discord.Embed(title="{} build".format(mode.upper()),
+                              color=profession.color)
         embed.set_author(name=results["name"])
         for spec in specializations:
             if spec is None:
                 continue
-            spec_doc = await self.db.specializations.find_one({
-                "_id": spec["id"]
-            })
+            spec_doc = await self.db.specializations.find_one(
+                {"_id": spec["id"]})
             spec_name = spec_doc["name"]
             traits = []
             for trait in spec["traits"]:
@@ -887,11 +881,12 @@ class CharactersMixin:
                 trait_index = 1 + trait_index - tier * 3
                 traits.append("{} ({})".format(trait_doc["name"], trait_index))
             if traits:
-                embed.add_field(
-                    name=spec_name, value="\n".join(traits), inline=False)
-            embed.set_footer(
-                text="A level {} {} ".format(level, profession.name.lower()),
-                icon_url=profession.icon)
+                embed.add_field(name=spec_name,
+                                value="\n".join(traits),
+                                inline=False)
+            embed.set_footer(text="A level {} {} ".format(
+                level, profession.name.lower()),
+                             icon_url=profession.icon)
         return embed
 
     @character.command(name="togglepublic")
@@ -949,19 +944,18 @@ class CharactersMixin:
             characters = await self.call_api(endpoint, key=doc["key"])
         except APIError as e:
             return await self.error_handler(ctx, e)
-        data = discord.Embed(
-            description='Crafting overview',
-            colour=await self.get_embed_color(ctx))
-        data.set_author(
-            name=doc["account_name"], icon_url=ctx.author.avatar_url)
+        data = discord.Embed(description='Crafting overview',
+                             colour=await self.get_embed_color(ctx))
+        data.set_author(name=doc["account_name"],
+                        icon_url=ctx.author.avatar_url)
         counter = 0
         for character in characters:
             if counter == 25:
                 break
             craft_list = self.get_crafting(character)
             if craft_list:
-                data.add_field(
-                    name=character["name"], value="\n".join(craft_list))
+                data.add_field(name=character["name"],
+                               value="\n".join(craft_list))
                 counter += 1
         try:
             await ctx.send(embed=data)
@@ -978,7 +972,6 @@ class CharactersMixin:
     @commands.cooldown(1, 10, BucketType.user)
     async def sab_unlocks(self, ctx, *, character):
         """Displays missing SAB unlocks for specified character"""
-
         def readable(_id):
             return _id.replace("_", " ").title()
 
@@ -1008,7 +1001,6 @@ class CharactersMixin:
     @commands.cooldown(1, 10, BucketType.user)
     async def sab_zones(self, ctx, *, character):
         """Displays missing SAB zones for specified character"""
-
         def missing_zones(zones):
             modes = ["infantile", "normal", "tribulation"]
             worlds = 1, 2
@@ -1087,9 +1079,8 @@ class CharactersMixin:
         async def get_elite_spec(character):
             spec = character["specializations"][mode][2]
             if spec:
-                spec = await self.db.specializations.find_one({
-                    "_id": spec["id"]
-                })
+                spec = await self.db.specializations.find_one(
+                    {"_id": spec["id"]})
                 if spec is None or not spec["elite"]:
                     return None
                 return spec["name"]
