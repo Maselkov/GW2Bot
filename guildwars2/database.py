@@ -29,11 +29,10 @@ class DatabaseMixin:
     @database.command(name="statistics")
     async def db_stats(self, ctx):
         """Some statistics   """
-        result = await self.bot.database.users.count_documents({
-            "cogs.GuildWars2.key": {
+        result = await self.bot.database.users.count_documents(
+            {"cogs.GuildWars2.key": {
                 "$ne": None
-            }
-        }, self)
+            }}, self)
         await ctx.send("{} registered users".format(result))
 
     async def get_title(self, title_id):
@@ -97,21 +96,19 @@ class DatabaseMixin:
 
     async def cache_dailies(self):
         try:
-            results = await self.call_api("achievements/daily")
             await self.cache_endpoint("achievements")
-        except:
-            return
+        except Exception:
+            pass
         try:
+            results = await self.call_api("achievements/daily")
             doc = {}
             for category, dailies in results.items():
                 daily_list = []
                 for daily in dailies:
                     if not daily["level"]["max"] == 80:
                         continue
-                    daily_doc = await self.db.achievements.find_one({
-                        "_id":
-                        daily["id"]
-                    })
+                    daily_doc = await self.db.achievements.find_one(
+                        {"_id": daily["id"]})
                     if not daily_doc:
                         continue
                     name = daily_doc["name"]
@@ -146,14 +143,12 @@ class DatabaseMixin:
             for item in itemgroup:
                 item["_id"] = item.pop("id")
                 requests.append(
-                    ReplaceOne({
-                        "_id": item["_id"]
-                    }, item, upsert=True))
+                    ReplaceOne({"_id": item["_id"]}, item, upsert=True))
             try:
                 await self.db[endpoint.replace("/", "_")].bulk_write(requests)
             except BulkWriteError as e:
-                self.log.exception(
-                    "BWE while caching {}".format(endpoint), exc_info=e)
+                self.log.exception("BWE while caching {}".format(endpoint),
+                                   exc_info=e)
 
         items = await self.call_api(endpoint)
         if not all_at_once:
@@ -180,9 +175,9 @@ class DatabaseMixin:
         await self.bot.change_presence(
             activity=discord.Game(name="Rebuilding API cache"),
             status=discord.Status.dnd)
-        endpoints = [["items"], ["achievements"], ["itemstats", True], [
-            "titles", True
-        ], ["recipes"], ["skins"], ["currencies", True], ["skills", True],
+        endpoints = [["items"], ["achievements"], ["itemstats", True],
+                     ["titles", True], ["recipes"], ["skins"],
+                     ["currencies", True], ["skills", True],
                      ["specializations", True], ["traits", True],
                      ["worlds", True], ["minis", True], ["pvp/amulets", True]]
         for e in endpoints:
@@ -206,8 +201,8 @@ class DatabaseMixin:
         await self.bot.change_presence()
         self.bot.available = True
         print("Done")
-        self.log.info(
-            "Database done! Time elapsed: {} seconds".format(end - start))
+        self.log.info("Database done! Time elapsed: {} seconds".format(end -
+                                                                       start))
 
     async def itemname_to_id(self,
                              destination,
@@ -253,8 +248,9 @@ class DatabaseMixin:
                                    "Try exact match "
                                    "search? `Y/N`".format(number))
             try:
-                answer = await self.bot.wait_for(
-                    "message", timeout=120, check=check)
+                answer = await self.bot.wait_for("message",
+                                                 timeout=120,
+                                                 check=check)
             except asyncio.TimeoutError:
                 return None
             if answer.content.lower() != "y":
@@ -271,9 +267,9 @@ class DatabaseMixin:
                 )
                 return None
             if number > 25:
-                await destination.send(
-                    "Your search gave me {} item results. "
-                    "Please be more specific".format(number))
+                await destination.send("Your search gave me {} item results. "
+                                       "Please be more specific".format(number)
+                                       )
                 return None
         items = []
         async for item in cursor:
@@ -301,8 +297,9 @@ class DatabaseMixin:
             msg.append("```")
             message = await destination.send("\n".join(msg))
             try:
-                answer = await self.bot.wait_for(
-                    "message", timeout=120, check=check)
+                answer = await self.bot.wait_for("message",
+                                                 timeout=120,
+                                                 check=check)
             except asyncio.TimeoutError:
                 await message.edit(content="No response in time")
                 return None
@@ -372,8 +369,9 @@ class DatabaseMixin:
             msg.append("```")
             message = await ctx.send("\n".join(msg))
             try:
-                answer = await self.bot.wait_for(
-                    "message", timeout=120, check=check)
+                answer = await self.bot.wait_for("message",
+                                                 timeout=120,
+                                                 check=check)
             except asyncio.TimeoutError:
                 await message.edit(content="No response in time")
                 return None
