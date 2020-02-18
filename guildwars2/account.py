@@ -45,11 +45,10 @@ class AccountMixin:
                 return await self.error_handler(ctx, e)
             possible_ap = await self.total_possible_ap()
             user_ap = await self.calculate_user_ap(achievements, account)
-            data.add_field(
-                name="Achievement Points",
-                value="{} earned out of {} possible".format(
-                    user_ap, possible_ap),
-                inline=False)
+            data.add_field(name="Achievement Points",
+                           value="{} earned out of {} possible".format(
+                               user_ap, possible_ap),
+                           inline=False)
         data.add_field(name="Commander tag", value=hascommander, inline=False)
         if "fractal_level" in results:
             fractallevel = results["fractal_level"]
@@ -70,10 +69,9 @@ class AccountMixin:
                 total_played = 0
                 for character in characters:
                     total_played += character.age
-                data.add_field(
-                    name="Total time played",
-                    value=self.format_age(total_played),
-                    inline=False)
+                data.add_field(name="Total time played",
+                               value=self.format_age(total_played),
+                               inline=False)
             except APIError as e:
                 return await self.error_handler(ctx, e)
         if "access" in results:
@@ -85,13 +83,13 @@ class AccountMixin:
                         access.remove(d)
 
             def format_name(name):
-                return " ".join(re.findall('[A-Z\d][^A-Z\d]*', name))
+                return " ".join(re.findall(r'[A-Z\d][^A-Z\d]*', name))
 
             access = "\n".join([format_name(e) for e in access])
             data.add_field(name="Expansion access", value=access)
         data.set_author(name=accountname, icon_url=user.avatar_url)
-        data.set_footer(
-            text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
+        data.set_footer(text=self.bot.user.name,
+                        icon_url=self.bot.user.avatar_url)
         try:
             await ctx.send(embed=data)
         except discord.Forbidden:
@@ -117,8 +115,9 @@ class AccountMixin:
                 ids += items["items"]
         try:
             doc = await self.fetch_key(user, scopes)
-            search_results = await self.find_items_in_account(
-                ctx, ids, doc=doc)
+            search_results = await self.find_items_in_account(ctx,
+                                                              ids,
+                                                              doc=doc)
         except APIError as e:
             return await self.error_handler(ctx, e)
         embed = discord.Embed(color=0x4C139D)
@@ -165,8 +164,9 @@ class AccountMixin:
                         breakdown.append(line)
             if trophy_total:
                 name = f"{trophy_total} Legendary {trophy['name']} earned"
-                embed.add_field(
-                    name=name, value="\n".join(breakdown), inline=False)
+                embed.add_field(name=name,
+                                value="\n".join(breakdown),
+                                inline=False)
                 total += trophy_total
         trophy_names = [trophy["name"] for trophy in trophies]
         embed.title = "{} Legendary {} and {} earned".format(
@@ -176,8 +176,8 @@ class AccountMixin:
         embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
         embed.set_thumbnail(
             url="https://api.gw2bot.info/resources/icons/lild.png")
-        embed.set_footer(
-            text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
+        embed.set_footer(text=self.bot.user.name,
+                         icon_url=self.bot.user.avatar_url)
         await ctx.send(
             "{.mention}, here are your Legendary Insights and Divinations".
             format(user),
@@ -235,8 +235,8 @@ class AccountMixin:
                         return "-✖"
                 return "+✔"
 
-        embed = discord.Embed(
-            title="Kill Proof", color=await self.get_embed_color(ctx))
+        embed = discord.Embed(title="Kill Proof",
+                              color=await self.get_embed_color(ctx))
         embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
         for area in areas:
             value = ["```diff"]
@@ -251,8 +251,8 @@ class AccountMixin:
         embed.set_footer(text="Green (+) means completed. Red (-) means not. "
                          "CM stands for Challenge Mode.")
 
-        await ctx.send(
-            "{.mention}, here is your kill proof.".format(user), embed=embed)
+        await ctx.send("{.mention}, here is your kill proof.".format(user),
+                       embed=embed)
 
     @commands.command()
     @commands.cooldown(1, 10, BucketType.user)
@@ -267,8 +267,9 @@ class AccountMixin:
         try:
             doc = await self.fetch_key(user, scopes)
             schema = datetime.datetime(2019, 2, 21)
-            results, account = await self.call_multiple(
-                endpoints, key=doc["key"], schema_version=schema)
+            results, account = await self.call_multiple(endpoints,
+                                                        key=doc["key"],
+                                                        schema_version=schema)
         except APIError as e:
             return await self.error_handler(ctx, e)
         last_modified = datetime.datetime.strptime(account["last_modified"],
@@ -279,8 +280,8 @@ class AccountMixin:
         embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
         if not self.can_embed_links(ctx):
             return await ctx.send("Need permission to embed links")
-        await ctx.send(
-            "{.mention}, here are your raid bosses:".format(user), embed=embed)
+        await ctx.send("{.mention}, here are your raid bosses:".format(user),
+                       embed=embed)
 
     @commands.command(aliases=["find"])
     @commands.cooldown(1, 5, BucketType.user)
@@ -295,15 +296,19 @@ class AccountMixin:
             doc = await self.fetch_key(user, ["inventories", "characters"])
         except APIError as e:
             await self.error_handler(ctx, e)
-        choice = await self.itemname_to_id(
-            ctx, item, user, group_duplicates=True)
+        choice = await self.itemname_to_id(ctx,
+                                           item,
+                                           user,
+                                           group_duplicates=True)
         if not choice:
             ctx.command.reset_cooldown(ctx)
             return
         await ctx.trigger_typing()
         try:
-            search_results = await self.find_items_in_account(
-                ctx, choice["ids"], flatten=True, search=True)
+            search_results = await self.find_items_in_account(ctx,
+                                                              choice["ids"],
+                                                              flatten=True,
+                                                              search=True)
         except APIError as e:
             return await self.error_handler(ctx, e)
         seq = [k for k, v in search_results.items() if v]
@@ -352,8 +357,9 @@ class AccountMixin:
                 else:
                     total += v[0]
                     total += v[1]
-                    output.append("{} {} | {}".format(
-                        k.upper(), " " * (longest - len(k)), v[0] + v[1]))
+                    output.append("{} {} | {}".format(k.upper(),
+                                                      " " * (longest - len(k)),
+                                                      v[0] + v[1]))
         output.append("--------{}------".format("-" * (longest - 5)))
         output.append("TOTAL:{}{}".format(" " * (longest - 2), total))
         message = ("{.mention}, here are your search results".format(user))
@@ -363,8 +369,8 @@ class AccountMixin:
         item_doc = await self.fetch_item(choice["ids"][0])
         icon_url = item_doc["icon"]
         data = discord.Embed(
-            description="Search results".format(item_doc["name"]) + " " * align
-            + u'\u200b',
+            description="Search results".format(item_doc["name"]) +
+            " " * align + u'\u200b',
             color=color)
         value = "\n".join(output)
 
@@ -378,26 +384,24 @@ class AccountMixin:
                 value += line + "\n"
             if value:
                 values.append(value)
-            data.add_field(
-                name=choice["name"],
-                value="```ml\n{}```".format(values[0]),
-                inline=False)
+            data.add_field(name=choice["name"],
+                           value="```ml\n{}```".format(values[0]),
+                           inline=False)
             for v in values[1:]:
                 data.add_field(
                     name=u'\u200b',  # Zero width space
                     value="```ml\n{}```".format(v),
                     inline=False)
         else:
-            data.add_field(
-                name=choice["name"], value="```ml\n{}\n```".format(value))
+            data.add_field(name=choice["name"],
+                           value="```ml\n{}\n```".format(value))
         data.set_author(name=doc["account_name"], icon_url=user.avatar_url)
         if 'is_upgrade' in choice and choice['is_upgrade']:
-            data.set_footer(
-                text="Amount in inventory / Amount in gear",
-                icon_url=self.bot.user.avatar_url)
+            data.set_footer(text="Amount in inventory / Amount in gear",
+                            icon_url=self.bot.user.avatar_url)
         else:
-            data.set_footer(
-                text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
+            data.set_footer(text=self.bot.user.name,
+                            icon_url=self.bot.user.avatar_url)
         data.set_thumbnail(url=icon_url)
         await ctx.send(message, embed=data)
 
@@ -426,16 +430,16 @@ class AccountMixin:
         embed = embed_list_lines(embed, lines,
                                  "Cats you haven't collected yet")
         embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
-        embed.set_footer(
-            text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
-        await ctx.send(
-            "{.mention}, here are your cats:".format(user), embed=embed)
-            
+        embed.set_footer(text=self.bot.user.name,
+                         icon_url=self.bot.user.avatar_url)
+        await ctx.send("{.mention}, here are your cats:".format(user),
+                       embed=embed)
+
     @commands.command()
     @commands.cooldown(1, 10, BucketType.user)
     async def nodes(self, ctx):
         """Displays the nodes you haven't unlocked.
-        
+
         Required permissions: progression"""
         user = ctx.message.author
         endpoint = "account/home/nodes"
@@ -450,12 +454,16 @@ class AccountMixin:
             if nodes["id"] not in owned_nodes:
                 lines.append(nodes["guide"])
         if not lines:
-            return await ctx.send("You've collected all home instance nodes! Congratulations!")
+            return await ctx.send(
+                "You've collected all home instance nodes! Congratulations!")
         embed = discord.Embed(color=await self.get_embed_color(ctx))
-        embed = embed_list_lines(embed, lines, "Nodes you haven't collected yet:")
+        embed = embed_list_lines(embed, lines,
+                                 "Nodes you haven't collected yet:")
         embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
-        embed.set_footer(text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
-        await ctx.send("{.mention}, here are your nodes:".format(user), embed=embed)
+        embed.set_footer(text=self.bot.user.name,
+                         icon_url=self.bot.user.avatar_url)
+        await ctx.send("{.mention}, here are your nodes:".format(user),
+                       embed=embed)
 
     async def boss_embed(self, ctx, raids, results, account_name,
                          last_modified):
@@ -481,8 +489,11 @@ class AccountMixin:
             if last_modified < last_modified.replace(
                     hour=7, minute=30, second=0, microsecond=0):
                 monday = last_modified - datetime.timedelta(weeks=1)
-        reset_time = datetime.datetime(
-            monday.year, monday.month, monday.day, hour=7, minute=30)
+        reset_time = datetime.datetime(monday.year,
+                                       monday.month,
+                                       monday.day,
+                                       hour=7,
+                                       minute=30)
         next_reset_time = reset_time + datetime.timedelta(weeks=1)
 
         async def get_dps_reports(boss_id):
@@ -501,8 +512,8 @@ class AccountMixin:
             return await cursor.to_list(None)
 
         not_completed = []
-        embed = discord.Embed(
-            title="Bosses", color=await self.get_embed_color(ctx))
+        embed = discord.Embed(title="Bosses",
+                              color=await self.get_embed_color(ctx))
         wings = [wing for raid in raids for wing in raid["wings"]]
         cotm = self.get_emoji(ctx, "call_of_the_mists")
         start_date = datetime.date(year=2019, month=1, day=21)
@@ -559,11 +570,10 @@ class AccountMixin:
             description += ("\n❗Warning❗\n Data outdated for this week. Log "
                             "into GW2 in order to update.")
         embed.description = description
-        embed.set_footer(
-            text=f"Logs uploaded via {ctx.prefix}evtc will "
-            "appear here with links - they don't have to be "
-            "uploaded by you",
-            icon_url=self.bot.user.avatar_url)
+        embed.set_footer(text=f"Logs uploaded via {ctx.prefix}evtc will "
+                         "appear here with links - they don't have to be "
+                         "uploaded by you",
+                         icon_url=self.bot.user.avatar_url)
         return embed
 
     async def find_items_in_account(self,
@@ -576,11 +586,14 @@ class AccountMixin:
         user = ctx.author
         if not doc:
             doc = await self.fetch_key(user, ["inventories", "characters"])
+        schema = datetime.datetime(2019, 12, 19)
         endpoints = [
             "account/bank", "account/inventory", "account/materials",
             "characters?page=0&page_size=200"
         ]
-        results = await self.call_multiple(endpoints, key=doc["key"])
+        results = await self.call_multiple(endpoints,
+                                           key=doc["key"],
+                                           schema_version=schema)
         bank, shared, materials, characters = results
         spaces = {
             "bank": bank,
@@ -642,8 +655,8 @@ class AccountMixin:
             amounts_in_space(character["equipment"], character["name"], True)
         try:
             if "tradingpost" in doc["permissions"]:
-                result = await self.call_api(
-                    "commerce/delivery", key=doc["key"])
+                result = await self.call_api("commerce/delivery",
+                                             key=doc["key"])
                 delivery = result.get("items", [])
                 amounts_in_space(delivery, "TP delivery", False)
         except APIError:
