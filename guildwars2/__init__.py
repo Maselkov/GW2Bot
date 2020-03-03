@@ -35,14 +35,11 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
                  GuildManageMixin, KeyMixin, MiscMixin, NotiifiersMixin,
                  PvpMixin, SkillsMixin, WalletMixin, WorldsyncMixin, WvwMixin):
     """Guild Wars 2 commands"""
-
     def __init__(self, bot):
-
         self.bot = bot
         self.db = self.bot.database.db.gw2
-        with open(
-                "cogs/guildwars2/gamedata.json", encoding="utf-8",
-                mode="r") as f:
+        with open("cogs/guildwars2/gamedata.json", encoding="utf-8",
+                  mode="r") as f:
             self.gamedata = json.load(f)
         self.session = bot.session
         self.boss_schedule = self.generate_schedule()
@@ -51,10 +48,16 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
         self.tasks = []
         self.waiting_for = []
         self.emojis = {}
+        self.chatcode_preview_opted_out_guilds = set()
         try:
             self.font = ImageFont.truetype("GWTwoFont1p1.ttf", size=30)
         except IOError:
             self.font = ImageFont.load_default()
+        setup_tasks = [
+            self.prepare_emojis, self.prepare_linkpreview_guild_cache
+        ]
+        for task in setup_tasks:
+            bot.loop.create_task(task())
         self.tasks = [
             self.game_update_checker, self.daily_checker, self.news_checker,
             self.gem_tracker, self.world_population_checker,
@@ -94,9 +97,7 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
         return ctx.channel.permissions_for(ctx.me).embed_links
 
     async def get_embed_color(self, ctx):
-        doc = await self.bot.database.users.find_one({
-            "_id": ctx.author.id
-        }, {
+        doc = await self.bot.database.users.find_one({"_id": ctx.author.id}, {
             "embed_color": 1,
             "_id": 0
         })
@@ -119,5 +120,4 @@ def setup(bot):
                 },
                 "emojis": {}
             }))
-    loop.create_task(cog.prepare_emojis())
     bot.add_cog(cog)

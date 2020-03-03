@@ -49,22 +49,19 @@ class GeneralGuild:
         ]
         for cur in guild_currencies:
             if cur == "member_count":
-                data.add_field(
-                    name='Members',
-                    value="{} {}/{}".format(
-                        self.get_emoji(ctx,
-                                       "friends"), results["member_count"],
-                        str(results["member_capacity"])))
+                data.add_field(name='Members',
+                               value="{} {}/{}".format(
+                                   self.get_emoji(ctx, "friends"),
+                                   results["member_count"],
+                                   str(results["member_capacity"])))
             else:
-                data.add_field(
-                    name=cur.capitalize(),
-                    value='{} {}'.format(
-                        self.get_emoji(ctx, cur), results[cur]))
+                data.add_field(name=cur.capitalize(),
+                               value='{} {}'.format(self.get_emoji(ctx, cur),
+                                                    results[cur]))
         if "motd" in results:
-            data.add_field(
-                name='Message of the day:',
-                value=results["motd"],
-                inline=False)
+            data.add_field(name='Message of the day:',
+                           value=results["motd"],
+                           inline=False)
         data.set_footer(text='A level {} guild'.format(results["level"]))
         try:
             await ctx.send(embed=data)
@@ -99,9 +96,8 @@ class GeneralGuild:
                 "use this command")
         except APIError as e:
             return await self.error_handler(ctx, e)
-        data = discord.Embed(
-            description=zero_width_space,
-            colour=await self.get_embed_color(ctx))
+        data = discord.Embed(description=zero_width_space,
+                             colour=await self.get_embed_color(ctx))
         data.set_author(name=guild_name.title())
         order_id = 1
         # For each order the rank has, go through each member and add it with
@@ -170,9 +166,8 @@ class GeneralGuild:
                 "use this command")
         except APIError as e:
             return await self.error_handler(ctx, e)
-        data = discord.Embed(
-            description=zero_width_space,
-            colour=await self.get_embed_color(ctx))
+        data = discord.Embed(description=zero_width_space,
+                             colour=await self.get_embed_color(ctx))
         data.set_author(name=guild_name.title())
         item_counter = 0
         amount = 0
@@ -234,9 +229,8 @@ class GeneralGuild:
         except APIError as e:
             return await self.error_handler(ctx, e)
 
-        data = discord.Embed(
-            description=zero_width_space,
-            colour=await self.get_embed_color(ctx))
+        data = discord.Embed(description=zero_width_space,
+                             colour=await self.get_embed_color(ctx))
         data.set_author(name=guild_name.title())
         lines = []
         length_lines = 0
@@ -248,7 +242,7 @@ class GeneralGuild:
                 user = entry["user"]
                 if state == "stash" or state == "treasury":
                     quantity = entry["count"]
-                    if entry["item_id"] is 0:
+                    if entry["item_id"] == 0:
                         item_name = self.gold_to_coins(ctx, entry["coins"])
                         quantity = ""
                         multiplier = ""

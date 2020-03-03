@@ -1,5 +1,6 @@
 import asyncio
 import collections
+import datetime
 import re
 import time
 
@@ -133,6 +134,32 @@ class DatabaseMixin:
             raids.append(await self.call_api("raids/" + raid))
         await self.bot.database.set_cog_config(self, {"cache.raids": raids})
 
+    async def cache_pois(self):
+        async def bulk_write(group):
+            requests = []
+            for item in group:
+                item["_id"] = item.pop("id")
+                requests.append(
+                    ReplaceOne({"_id": item["_id"]}, item, upsert=True))
+            try:
+                await self.db.pois.bulk_write(requests)
+            except BulkWriteError as e:
+                self.log.exception("BWE while caching continents")
+
+        continents = await self.call_api("continents/1/floors?ids=all")
+        pois = []
+        for continent in continents:
+            for region in continent["regions"].values():
+                for game_map in region["maps"].values():
+                    for poi in game_map["points_of_interest"].values():
+                        del poi["chat_link"]
+                        poi["continent_id"] = continent["id"]
+                        pois.append(poi)
+                        if len(pois) > 200:
+                            await bulk_write(pois)
+                            pois = []
+        print("Continents done")
+
     async def get_raids(self):
         config = await self.bot.database.get_cog_config(self)
         return config["cache"].get("raids")
@@ -150,7 +177,8 @@ class DatabaseMixin:
                 self.log.exception("BWE while caching {}".format(endpoint),
                                    exc_info=e)
 
-        items = await self.call_api(endpoint)
+        schema = datetime.datetime(2019, 12, 19)
+        items = await self.call_api(endpoint, schema_version=schema)
         if not all_at_once:
             counter = 0
             total = len(items)
@@ -161,12 +189,13 @@ class DatabaseMixin:
                 if not ids:
                     print("{} done".format(endpoint))
                     break
-                itemgroup = await self.call_api("{}?ids={}".format(
-                    endpoint, ids))
+                itemgroup = await self.call_api(f"{endpoint}?ids={ids}",
+                                                schema_version=schema)
                 await bulk_write(itemgroup)
                 counter += 200
         else:
-            itemgroup = await self.call_api("{}?ids=all".format(endpoint))
+            itemgroup = await self.call_api("{}?ids=all".format(endpoint),
+                                            schema_version=schema)
             await bulk_write(itemgroup)
 
     async def rebuild_database(self):
@@ -179,7 +208,9 @@ class DatabaseMixin:
                      ["titles", True], ["recipes"], ["skins"],
                      ["currencies", True], ["skills", True],
                      ["specializations", True], ["traits", True],
-                     ["worlds", True], ["minis", True], ["pvp/amulets", True]]
+                     ["worlds", True], ["minis", True], ["pvp/amulets", True],
+                     ["professions", True], ["legends", True], ["pets", True],
+                     ["outfits", True]]
         for e in endpoints:
             try:
                 await self.cache_endpoint(*e)
@@ -197,6 +228,7 @@ class DatabaseMixin:
         await self.db.skills.create_index("name")
         await self.db.worlds.create_index("name")
         await self.cache_raids()
+        await self.cache_pois()
         end = time.time()
         await self.bot.change_presence()
         self.bot.available = True

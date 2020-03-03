@@ -728,6 +728,7 @@ class NotiifiersMixin:
                     to_delete = await channel.fetch_message(old_message)
                     await to_delete.delete()
             except asyncio.CancelledError:
+                self.log.error("Big dead")
                 return
             except:
                 pass
