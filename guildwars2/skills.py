@@ -750,6 +750,13 @@ class SkillsMixin:
         async for doc in cursor:
             self.chatcode_preview_opted_out_guilds.add(doc["_id"])
 
+    async def get_wiki_url(self, name):
+        url = "https://wiki.guildwars2.com/wiki/" + name.replace(' ', '_')
+        async with self.session.head(url) as r:
+            if not r.status == 200:
+                url = None
+        return url
+
     @commands.Cog.listener("on_message")
     async def find_chatcodes(self, message):
         if message.guild:
@@ -798,6 +805,9 @@ class SkillsMixin:
                     self.gamedata["items"]["rarity_colors"][
                         item_doc["rarity"]], 16)
                 suffix = ""
+                wiki_url = await self.get_wiki_url(item_doc["name"])
+                if wiki_url:
+                    embed.url = wiki_url
                 if len(data) > 5:
                     bitfield = struct.unpack("<B", data[5:6])
                     bitfield = bitfield[0]
