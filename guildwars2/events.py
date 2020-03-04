@@ -425,6 +425,8 @@ class EventsMixin:
         async for doc in cursor:
             try:
                 user = doc["_obj"]
+                if not user:
+                    continue
                 for i, reminder in enumerate(doc["event_reminders"]):
                     asyncio.create_task(
                         self.process_reminder(user, reminder, i))
