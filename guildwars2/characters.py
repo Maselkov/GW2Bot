@@ -418,7 +418,7 @@ class CharactersMixin:
         try:
             file, = await asyncio.gather(task)
             embed.set_image(url=f"attachment://{file.filename}")
-        except AttributeError:
+        except:
             file = None
         embed.set_footer(text=("Colors of emojis represent item rarity. "
                                "Attributes aren't guaranteed to be accurate."),

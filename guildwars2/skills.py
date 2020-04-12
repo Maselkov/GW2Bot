@@ -290,7 +290,11 @@ class Build:
         return file
 
     async def render(self):
-        return await self.cog.bot.loop.run_in_executor(None, self.__render)
+        # TODO Handle this properly
+        try:
+            return await self.cog.bot.loop.run_in_executor(None, self.__render)
+        except Exception:
+            return None
 
     @staticmethod
     def render_specialization(specialization, active_traits, trait_docs,
