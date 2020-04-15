@@ -2,12 +2,19 @@ import discord
 from discord.ext import commands
 import re
 
+
 class EmojiMixin:
     async def prepare_emojis(self):
         doc = await self.bot.database.get_cog_config(self)
         self.emojis = doc.get("emojis", {})
 
-    def get_emoji(self, ctx, emoji, *, fallback=False, fallback_fmt="{}"):
+    def get_emoji(self,
+                  ctx,
+                  emoji,
+                  *,
+                  fallback=False,
+                  fallback_fmt="{}",
+                  return_obj=False):
         if isinstance(ctx, discord.Message):
             if ctx.guild:
                 me = ctx.guild.me
@@ -25,6 +32,8 @@ class EmojiMixin:
             if emoji_id:
                 emoji_obj = self.bot.get_emoji(emoji_id)
                 if emoji_obj:
+                    if return_obj:
+                        return emoji_obj
                     return str(emoji_obj)
         if fallback:
             return fallback_fmt.format(emoji)
@@ -45,7 +54,7 @@ class EmojiMixin:
         for emoji in ctx.guild.emojis:
             name = emoji.name
             await self.bot.database.set_cog_config(
-                self, {"emojis." + name: emoji.id})
+                self, {"emojis." + name.lower(): emoji.id})
             registered.append(emoji.name)
         if not registered:
             return await ctx.send("No emojis were registered")

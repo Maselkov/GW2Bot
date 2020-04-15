@@ -87,9 +87,9 @@ class Build:
         return cls(cog, profession, specializations, skills, chatcode)
 
     @classmethod
-    async def from_character(cls, cog, character):
+    async def from_build_tab(cls, cog, build_tab):
         profession_doc = await cog.db.professions.find_one(
-            {"_id": character["profession"]})
+            {"_id": build_tab["build"]["profession"]})
 
         async def get_skills(tab, terrestrial=True):
             skills_key = "skills"
@@ -149,15 +149,8 @@ class Build:
                 ["skill_docs", "legend_docs", "swap_skill_docs", "pet_docs"])
             return Skills(skill_docs, legend_docs, swap_skill_docs, pet_docs)
 
-        active_tab = None
-        for tab in character["build_tabs"]:
-            if tab["is_active"]:
-                active_tab = tab
-                break
-        if not active_tab:
-            return None
-        active_tab = active_tab["build"]
-        specializations = active_tab["specializations"]
+        build = build_tab["build"]
+        specializations = build["specializations"]
         if not specializations:
             return None
         specs = []
@@ -179,13 +172,11 @@ class Build:
                 "trait_docs": trait_docs,
                 "active_traits": spec["traits"]
             })
-        profession = await cog.get_profession(character["profession"],
+        profession = await cog.get_profession(build["profession"],
                                               [x["spec_doc"] for x in specs])
-        profession_doc = await cog.db.professions.find_one(
-            {"_id": character["profession"]})
         profession_code = profession_doc["code"]
-        terrestrial = await get_skills(active_tab)
-        aquatic = await get_skills(active_tab, False)
+        terrestrial = await get_skills(build)
+        aquatic = await get_skills(build, False)
         fields = [13, profession_code]
         for spec in specs + [None] * (3 - len(specs)):
             if not spec:
@@ -243,7 +234,9 @@ class Build:
 
         return cls(cog, profession, specs, skills, code)
 
-    def __render(self):
+    def __render(self, filename):
+        if not self.skills and not self.specializations:
+            return None
         session = requests.Session()
         image = None
         draw = None
@@ -266,6 +259,8 @@ class Build:
                       font=self.cog.font)
         #try:
         crop_amount = 6
+        if not image:
+            image = Image.new("RGBA", (645, skills_size))
         for i, skill in enumerate(self.skills, start=0):
             resp = session.get(skill["icon"])
             skill_icon = Image.open(io.BytesIO(resp.content))
@@ -286,15 +281,12 @@ class Build:
         output = io.BytesIO()
         image.save(output, "png")
         output.seek(0)
-        file = discord.File(output, "specializations.png")
+        file = discord.File(output, filename)
         return file
 
-    async def render(self):
-        # TODO Handle this properly
-        try:
-            return await self.cog.bot.loop.run_in_executor(None, self.__render)
-        except Exception:
-            return None
+    async def render(self, *, filename="specializations.png"):
+        return await self.cog.bot.loop.run_in_executor(None, self.__render,
+                                                       filename)
 
     @staticmethod
     def render_specialization(specialization, active_traits, trait_docs,

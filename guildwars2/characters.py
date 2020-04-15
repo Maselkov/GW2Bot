@@ -1,5 +1,6 @@
 import asyncio
 import collections
+import copy
 import datetime
 import re
 
@@ -10,6 +11,8 @@ from discord.ext.commands.cooldowns import BucketType
 from .exceptions import APIError, APINotFound
 from .skills import Build
 from .utils.chat import embed_list_lines, zero_width_space
+
+LETTERS = ["🇦", "🇧", "🇨", "🇩", "🇪", "🇫", "🇬", "🇭", "🇮", "🇯"]
 
 
 class Character:
@@ -264,171 +267,6 @@ class CharactersMixin:
                          format(ctx.prefix))
         await ctx.send("{.mention}".format(user), embed=embed)
 
-    async def display_gear(self, ctx, character):
-        character = character.title()
-        await ctx.trigger_typing()
-        try:
-            results = await self.get_character(ctx, character)
-        except APINotFound:
-            return await ctx.send("Invalid character name")
-        except APIError as e:
-            return await self.error_handler(ctx, e)
-        build = await Build.from_character(self, results)
-        task = asyncio.create_task(build.render())
-        eq = [x for x in results["equipment"] if x["location"] == "Equipped"]
-        profession = build.profession
-        description = "Build"
-        embed = discord.Embed(description=description, colour=profession.color)
-        runes = collections.defaultdict(int)
-        bonuses = collections.defaultdict(int)
-        can_use_emojis = ctx.channel.permissions_for(ctx.me).external_emojis
-        armor_lines = []
-        trinket_lines = []
-        weapon_sets = {"A": [], "B": []}
-        armors = ["Helm", "Shoulders", "Coat", "Gloves", "Leggings", "Boots"]
-        trinkets = [
-            "Ring1", "Ring2", "Amulet", "Accessory1", "Accessory2", "Backpack"
-        ]
-        weapons = ["WeaponA1", "WeaponA2", "WeaponB1", "WeaponB2"]
-        pieces = armors + trinkets + weapons
-        for piece in pieces:
-            piece_name = piece
-            if piece[-1].isdigit():
-                piece_name = piece[:-1]
-            line = ""
-            stat_name = ""
-            upgrades_to_display = []
-            for item in eq:
-                if item["slot"] == piece:
-                    item_doc = await self.fetch_item(item["id"])
-                    if can_use_emojis:
-                        line = self.get_emoji(
-                            ctx, f"{item_doc['rarity']}_{piece_name}")
-                    else:
-                        if piece.startswith("Weapon"):
-                            if piece.endswith("1"):
-                                piece_name = "Main hand"
-                            else:
-                                piece_name = "Off hand"
-                        line = f"**{piece_name}**: {item_doc['rarity']} "
-                    for upgrade_type in "infusions", "upgrades":
-                        if upgrade_type in item:
-                            for upgrade in item[upgrade_type]:
-                                upgrade_doc = await self.fetch_item(upgrade)
-                                if not upgrade_doc:
-                                    upgrades_to_display.append(
-                                        "Unknown upgrade")
-                                    continue
-                                details = upgrade_doc["details"]
-                                if details["type"] == "Rune":
-                                    runes[upgrade_doc["name"]] += 1
-                                if details["type"] == "Sigil":
-                                    upgrades_to_display.append(
-                                        upgrade_doc["name"])
-                                if "infix_upgrade" in details:
-                                    if "attributes" in details[
-                                            "infix_upgrade"]:
-                                        for attribute in details[
-                                                "infix_upgrade"]["attributes"]:
-                                            bonuses[attribute[
-                                                "attribute"]] += attribute[
-                                                    "modifier"]
-                    if "stats" in item:
-                        stat_name = await self.fetch_statname(
-                            item["stats"]["id"])
-                    else:
-                        try:
-                            stat_id = item_doc["details"]["infix_upgrade"][
-                                "id"]
-                            stat_name = await self.fetch_statname(stat_id)
-                        except KeyError:
-                            pass
-                    line += stat_name
-                    if piece.startswith("Weapon"):
-                        line += " " + self.readable_attribute(
-                            item_doc["details"]["type"])
-                    if upgrades_to_display:
-                        line += "\n*{}*".format("\n".join(upgrades_to_display))
-            if not line and not piece.startswith("Weapon"):
-                if can_use_emojis:
-                    line = self.get_emoji(ctx, f"basic_{piece_name}") + "NONE"
-                else:
-                    line = f"**{piece_name}**: NONE"
-            if piece in armors:
-                armor_lines.append(line)
-            elif piece in weapons:
-                if line:
-                    weapon_sets[piece[-2]].append(line)
-            elif piece in trinkets:
-                trinket_lines.append(line)
-        lines = []
-        lines.append("\n".join(armor_lines))
-        if runes:
-            for rune, count in runes.items():
-                lines.append(f"*{rune}* ({count}/6)")
-        embed.add_field(name="> **ARMOR**", value="\n".join(lines))
-        if any(weapon_sets["A"]):
-            embed.add_field(name="> **WEAPON SET #1**",
-                            value="\n".join(weapon_sets["A"]))
-        if any(weapon_sets["B"]):
-            embed.add_field(name="> **WEAPON SET #2**",
-                            value="\n".join(weapon_sets["B"]))
-        embed.add_field(name="> **TRINKETS**",
-                        value="\n".join(trinket_lines),
-                        inline=False)
-        upgrade_lines = []
-        for bonus, count in bonuses.items():
-            bonus = self.readable_attribute(bonus)
-            emoji = self.get_emoji(ctx, f"attribute_{bonus}")
-            upgrade_lines.append(f"{emoji}**{bonus}**: {count}")
-        if not upgrade_lines:
-            upgrade_lines = ["None found"]
-        embed.add_field(name="> **BONUSES FROM UPGRADES**",
-                        value="\n".join(upgrade_lines),
-                        inline=False)
-        attributes = await self.calculate_character_attributes(results)
-        column_1 = []
-        column_2 = [zero_width_space,
-                    zero_width_space]  # cause power is in a different row
-        for index, (name, value) in enumerate(attributes.items()):
-            line = self.get_emoji(ctx, f"attribute_{name}")
-            line += f"**{name}**: {value}"
-            if index < 9:
-                column_1.append(line)
-            else:
-                column_2.append(line)
-        embed.add_field(name="> **ATTRIBUTES**", value="\n".join(column_1))
-        embed.add_field(name=zero_width_space, value="\n".join(column_2))
-        # else:
-        #     if "equipment_pvp" not in results:
-        #         return await ctx.send("API key missing pvp permission")
-        #     amulet = results["equipment_pvp"]["amulet"]
-        #     amulet_doc = await self.db.pvp_amulets.find_one({"_id": amulet})
-        #     if amulet_doc:
-        #         lines = [f"**{amulet_doc['name']}"]
-        #         attributes = amulet_doc["attributes"]
-        #         for name, value in attributes.items():
-        #             name = self.readable_attribute(name)
-        #             line = self.get_emoji(ctx, f"attribute_{name}")
-        #             line += f"**{name}**: {value}"
-        #             lines.append(line)
-        #         embed.add_field(name="> **AMULET**", value="\n".join(lines))
-        embed.set_author(name=character, icon_url=profession.icon)
-        embed.add_field(name="Build code", value=build.code, inline=False)
-        try:
-            file, = await asyncio.gather(task)
-            embed.set_image(url=f"attachment://{file.filename}")
-        except:
-            file = None
-        embed.set_footer(text=("Colors of emojis represent item rarity. "
-                               "Attributes aren't guaranteed to be accurate."),
-                         icon_url=self.bot.user.avatar_url)
-        try:
-            await ctx.send(embed=embed, file=file)
-        except discord.Forbidden as e:
-            await ctx.send(
-                "Missing permission to embed links or to upload images")
-
     @character.command(name="gear")
     @commands.cooldown(1, 10, BucketType.user)
     async def character_gear(self, ctx, *, character: str):
@@ -437,7 +275,363 @@ class CharactersMixin:
 
         Required permissions: characters
         """
-        await self.display_gear(ctx, character)
+        perms = ctx.channel.permissions_for(ctx.me)
+        can_use_emojis = perms.external_emojis
+        can_react = perms.read_message_history and perms.add_reactions
+        numbers = []
+        letters = []
+
+        async def get_equipment_fields(tab, eq):
+            fields = []
+            runes = collections.defaultdict(int)
+            bonuses = collections.defaultdict(int)
+            armor_lines = []
+            trinket_lines = []
+            weapon_sets = {"A": [], "B": []}
+            armors = [
+                "Helm", "Shoulders", "Coat", "Gloves", "Leggings", "Boots"
+            ]
+            trinkets = [
+                "Ring1", "Ring2", "Amulet", "Accessory1", "Accessory2",
+                "Backpack"
+            ]
+            weapons = ["WeaponA1", "WeaponA2", "WeaponB1", "WeaponB2"]
+            pieces = armors + trinkets + weapons
+            for piece in pieces:
+                piece_name = piece
+                if piece[-1].isdigit():
+                    piece_name = piece[:-1]
+                line = ""
+                stat_name = ""
+                upgrades_to_display = []
+                for item in eq:
+                    if item["slot"] == piece:
+                        item_doc = await self.fetch_item(item["id"])
+                        if can_use_emojis:
+                            line = self.get_emoji(
+                                ctx, f"{item_doc['rarity']}_{piece_name}")
+                        else:
+                            if piece.startswith("Weapon"):
+                                if piece.endswith("1"):
+                                    piece_name = "Main hand"
+                                else:
+                                    piece_name = "Off hand"
+                            line = f"**{piece_name}**: {item_doc['rarity']} "
+                        for upgrade_type in "infusions", "upgrades":
+                            if upgrade_type in item:
+                                for upgrade in item[upgrade_type]:
+                                    upgrade_doc = await self.fetch_item(upgrade
+                                                                        )
+                                    if not upgrade_doc:
+                                        upgrades_to_display.append(
+                                            "Unknown upgrade")
+                                        continue
+                                    details = upgrade_doc["details"]
+                                    if details["type"] == "Rune":
+                                        runes[upgrade_doc["name"]] += 1
+                                    if details["type"] == "Sigil":
+                                        upgrades_to_display.append(
+                                            upgrade_doc["name"])
+                                    if "infix_upgrade" in details:
+                                        if "attributes" in details[
+                                                "infix_upgrade"]:
+                                            for attribute in details[
+                                                    "infix_upgrade"][
+                                                        "attributes"]:
+                                                bonuses[attribute[
+                                                    "attribute"]] += attribute[
+                                                        "modifier"]
+                        if "stats" in item:
+                            stat_name = await self.fetch_statname(
+                                item["stats"]["id"])
+                        else:
+                            try:
+                                stat_id = item_doc["details"]["infix_upgrade"][
+                                    "id"]
+                                stat_name = await self.fetch_statname(stat_id)
+                            except KeyError:
+                                pass
+                        line += stat_name
+                        if piece.startswith("Weapon"):
+                            line += " " + self.readable_attribute(
+                                item_doc["details"]["type"])
+                        if upgrades_to_display:
+                            line += "\n*{}*".format(
+                                "\n".join(upgrades_to_display))
+                if not line and not piece.startswith("Weapon"):
+                    if can_use_emojis:
+                        line = self.get_emoji(ctx,
+                                              f"basic_{piece_name}") + "NONE"
+                    else:
+                        line = f"**{piece_name}**: NONE"
+                if piece in armors:
+                    armor_lines.append(line)
+                elif piece in weapons:
+                    if line:
+                        weapon_sets[piece[-2]].append(line)
+                elif piece in trinkets:
+                    trinket_lines.append(line)
+            lines = []
+            lines.append("\n".join(armor_lines))
+            if runes:
+                for rune, count in runes.items():
+                    lines.append(f"*{rune}* ({count}/6)")
+            fields.append(("> **ARMOR**", "\n".join(lines), True))
+            if any(weapon_sets["A"]):
+                fields.append(
+                    ("> **WEAPON SET #1**", "\n".join(weapon_sets["A"]), True))
+            if any(weapon_sets["B"]):
+                fields.append(
+                    ("> **WEAPON SET #2**", "\n".join(weapon_sets["B"]), True))
+            fields.append(("> **TRINKETS**", "\n".join(trinket_lines), False))
+            upgrade_lines = []
+            for bonus, count in bonuses.items():
+                bonus = self.readable_attribute(bonus)
+                emoji = self.get_emoji(ctx, f"attribute_{bonus}")
+                upgrade_lines.append(f"{emoji}**{bonus}**: {count}")
+            if not upgrade_lines:
+                upgrade_lines = ["None found"]
+            fields.append(("> **BONUSES FROM UPGRADES**",
+                           "\n".join(upgrade_lines), False))
+            attributes = await self.calculate_character_attributes(results, eq)
+            column_1 = []
+            column_2 = [zero_width_space,
+                        zero_width_space]  # cause power is in a different row
+            for index, (name, value) in enumerate(attributes.items()):
+                line = self.get_emoji(ctx, f"attribute_{name}")
+                line += f"**{name}**: {value}"
+                if index < 9:
+                    column_1.append(line)
+                else:
+                    column_2.append(line)
+            fields.append(("> **ATTRIBUTES**", "\n".join(column_1), True))
+            fields.append((zero_width_space, "\n".join(column_2), True))
+            return fields
+
+        if can_use_emojis:
+            emojis_cache = {
+                "build": {
+                    "inactive": [],
+                    "active": []
+                },
+                "equipment": {
+                    "inactive": [],
+                    "active": []
+                }
+            }
+            for i in range(1, 11):
+                emojis_cache["build"]["inactive"].append(
+                    self.get_emoji(ctx, f"build_{i}", return_obj=True))
+                emojis_cache["build"]["active"].append(
+                    self.get_emoji(ctx, f"active_build_{i}", return_obj=True))
+                letter = chr(64 + i)  # ord("A") == 65
+                emojis_cache["equipment"]["inactive"].append(
+                    self.get_emoji(ctx, f"equipment_{letter}",
+                                   return_obj=True))
+                emojis_cache["equipment"]["active"].append(
+                    self.get_emoji(ctx,
+                                   f"active_equipment_{letter}",
+                                   return_obj=True))
+
+        def generate_embed(builds, equipments, current_build,
+                           current_equipment):
+            build = builds[current_build]
+            equipment = equipments[current_equipment]
+            embed = discord.Embed()
+            for field in equipment["fields"]:
+                embed.add_field(name=field[0], value=field[1], inline=field[2])
+            profession = build["build"].profession
+            if can_use_emojis:
+                description = ["Build template:"]
+                line = ""
+                for i, emoji in enumerate(numbers):
+                    if i == current_build:
+                        key = "active"
+                    else:
+                        key = "inactive"
+                    line += str(emojis_cache["build"][key][i])
+                if build["name"]:
+                    line += f" *{build['name']}*"
+                description.append("> " + line)
+                description.append("Equipment template:")
+                line = ""
+                for i, emoji in enumerate(letters):
+                    if i == current_equipment:
+                        key = "active"
+                    else:
+                        key = "inactive"
+                    line += str(emojis_cache["equipment"][key][i])
+                if equipment["name"]:
+                    line += f" *{equipment['name']}*"
+                description.append("> " + line)
+                description = "\n".join(description)
+            else:
+                description = ("`Selected build template "
+                               f"{' '*4}`**{numbers[current_build]}**")
+                if build["name"]:
+                    description += f": `{build['name']}`"
+                description += ("\n`Selected equipment template "
+                                f"`**{letters[current_equipment]}**")
+                if equipment['name']:
+                    description += f": `{equipment['name']}`"
+            embed.description = description
+            embed.color = profession.color
+            if can_react:
+                embed.set_footer(
+                    text=("Numbers are used to switch build templates. "
+                          "Letters are used to switch equipment templates."),
+                    icon_url=self.bot.user.avatar_url)
+            else:
+                embed.set_footer(text=("Missing permission to add reaction - "
+                                       "cannot display other templates."),
+                                 icon_url=self.bot.user.avatar_url)
+            embed.set_author(name=character.title(), icon_url=profession.icon)
+            embed.add_field(name="Build code",
+                            value=build["build"].code,
+                            inline=False)
+            url = build["file"]
+            if not url:
+                url = ""
+            embed.set_image(url=url)
+            return embed
+
+        async with ctx.typing():
+            try:
+                results = await self.get_character(ctx, character)
+            except APINotFound:
+                return await ctx.send("Invalid character name")
+            except APIError as e:
+                return await self.error_handler(ctx, e)
+            cog_doc = await self.bot.database.get_cog_config(self)
+            if not cog_doc:
+                return await ctx.send("Eror reading configuration")
+            image_channel = self.bot.get_channel(cog_doc.get("image_channel"))
+            if not image_channel:
+                return await ctx.send("The owner must set the image"
+                                      " channel using $imagechannel command.")
+            build_tabs = results["build_tabs"]
+            equipment_tabs = results["equipment_tabs"]
+            builds = []
+            for tab in build_tabs:
+                build = await Build.from_build_tab(self, tab)
+                file = await build.render(filename=f"build_{tab['tab']}.png")
+                is_active = tab["is_active"]
+                name = tab["build"]["name"]
+                builds.append({
+                    "tab": tab["tab"],
+                    "file": file,
+                    "name": name,
+                    "is_active": is_active,
+                    "build": build
+                })
+            equipments = []
+            for tab in equipment_tabs:
+                eq = []
+                for item_1 in tab["equipment"]:
+                    for item_2 in results["equipment"]:
+                        if item_1["id"] != item_2["id"]:
+                            continue
+                        if tab["tab"] in item_2["tabs"]:
+                            item_copy = copy.copy(item_2)
+                            item_copy["slot"] = item_1["slot"]
+                            eq.append(item_copy)
+                            break
+                equipments.append({
+                    "fields": await get_equipment_fields(tab, eq),
+                    "name": tab["name"]
+                })
+            if can_use_emojis:
+                numbers = emojis_cache["build"]["active"][:len(builds)]
+                letters = emojis_cache["equipment"]["active"][:len(equipments)]
+            else:
+                letters = LETTERS[:len(equipments)]
+                for i in range(1, len(builds) + 1):
+                    emoji = f"{i}\N{combining enclosing keycap}"
+                    numbers.append(emoji)
+            current_build = results["active_build_tab"] - 1
+            current_equipment = results["active_equipment_tab"] - 1
+            images_msg = await image_channel.send(
+                files=[b["file"] for b in builds if b["file"]])
+            urls = [attachment.url for attachment in images_msg.attachments]
+            for url in urls:
+                tab_id = int("".join(c for c in url if c.isdigit()))
+                for tab in builds:
+                    if tab["tab"] == tab_id:
+                        tab["file"] == url
+                        break
+            for build, url in zip(builds, urls):
+                build["file"] = url
+            embed = generate_embed(builds, equipments, current_build,
+                                   current_equipment)
+            content = None
+            if not can_react:
+                content = (
+                    "Please ensure that the bot has `add reactions` and"
+                    " `read message history` permissions in order to use the "
+                    "entire functionality of this command. "
+                    "Otherwise, DMing the bot will work as well.")
+            message = await ctx.send(content, embed=embed)
+        if not can_react:
+            return
+        for number in numbers:
+            await message.add_reaction(number)
+        for letter in letters:
+            await message.add_reaction(letter)
+
+        can_delete = ctx.channel.permissions_for(ctx.me).manage_messages
+
+        async def reaction_handler(emoji):
+            nonlocal current_equipment, current_build
+
+            async def delete():
+                if can_delete:
+                    try:
+                        await reaction.remove(user)
+                    except discord.HTTPException:
+                        pass
+
+            asyncio.create_task(delete())
+            if (user != ctx.author or emoji not in numbers + letters):
+                return
+            if emoji in letters:
+                # For some reason list.index doesn't work with
+                # regional indicators
+                for i, letter in enumerate(letters):
+                    if emoji == letter:
+                        index = i
+                        break
+                if index >= len(equipments) or index == current_equipment:
+                    return
+                current_equipment = index
+            else:
+                index = numbers.index(emoji)
+                if index >= len(builds) or index == current_build:
+                    return
+                current_build = index
+            embed = generate_embed(builds, equipments, current_build,
+                                   current_equipment)
+            await message.edit(embed=embed)
+
+        def check(reaction, user):
+            return not user.bot and reaction.message.id == message.id
+
+        while True:
+            try:
+                reaction, user = await self.bot.wait_for("reaction_add",
+                                                         check=check,
+                                                         timeout=600)
+                emoji = reaction.emoji
+                asyncio.create_task(reaction_handler(emoji))
+            except asyncio.TimeoutError:
+                break
+        try:
+            embed = message.embeds[0]
+            embed.set_footer(text="Controls have expired due to inactivity.",
+                             icon_url=self.bot.user.avatar_url)
+            await message.edit(embed=embed)
+            await message.clear_reactions()
+        except discord.HTTPException:
+            return
 
     @character.command(name="birthdays")
     async def character_birthdays(self, ctx):
@@ -494,7 +688,8 @@ class CharactersMixin:
         attribute_sub = re.sub('defense', 'Armor', attribute_sub)
         return attribute_sub
 
-    async def calculate_character_attributes(self, character):
+    async def calculate_character_attributes(self, character, eq):
+        # TODO remove redundant database calls from eq
         def search_lvl_to_increase(level: int, lvl_dict):
             for increase, lvl in lvl_dict.items():
                 if lvl[0] <= level <= lvl[1]:
@@ -603,7 +798,6 @@ class CharactersMixin:
         attr_dict = {key: 0 for (key) in attr_list}
         runes = {}
         level = character["level"]
-        eq = [x for x in character["equipment"] if x["location"] == "Equipped"]
         for piece in eq:
             item = await self.fetch_item(piece["id"])
             # Gear with selectable values
@@ -980,6 +1174,15 @@ class CharactersMixin:
                 "zones:\n```fix\n{}\n```".format("\n".join(missing)))
         await ctx.send("You have unlocked all zones on "
                        "this character! Congratulations!")
+
+    @commands.command(name="imagechannel")
+    @commands.guild_only()
+    @commands.is_owner()
+    async def set_image_channel(self, ctx, channel: discord.TextChannel):
+        """Set image channel for build template switcher"""
+        await self.bot.database.set_cog_config(self,
+                                               {"image_channel": channel.id})
+        await ctx.send("Succesfully set")
 
     async def get_all_characters(self, user, scopes=None):
         endpoint = "characters?page=0&page_size=200"
