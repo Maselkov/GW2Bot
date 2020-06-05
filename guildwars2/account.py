@@ -517,7 +517,8 @@ class AccountMixin:
         wings = [wing for raid in raids for wing in raid["wings"]]
         cotm = self.get_emoji(ctx, "call_of_the_mists")
         start_date = datetime.date(year=2019, month=1, day=21)
-        seconds = int((datetime.date.today() - start_date).total_seconds())
+        seconds = int(
+            (datetime.datetime.utcnow().date() - start_date).total_seconds())
         weeks = seconds // (60 * 60 * 24 * 7 * 2)
         cotm_index = weeks % (len(wings) - 1)
         for index, wing in enumerate(wings):
