@@ -275,7 +275,7 @@ class DatabaseMixin:
                 "typos.\nAlways use singular forms, e.g. Legendary Insight")
             return None
         cursor = self.db[database].find(query)
-        if number > 25:
+        if number > 35:
             await destination.send("Your search gave me {} item results. "
                                    "Try exact match "
                                    "search? `Y/N`".format(number))
