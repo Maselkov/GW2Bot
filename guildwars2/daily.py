@@ -101,6 +101,8 @@ class DailyMixin:
         embed = discord.Embed(title="Dailies", color=color)
         dailies = doc["cache"]["dailies"]
         for category in categories:
+            if category == "pve":
+                dailies[category] += self.get_lw_dailies()
             if category == "psna" and datetime.datetime.utcnow().hour >= 8:
                 value = "\n".join(dailies["psna_later"])
             elif category == "fractals":
@@ -119,9 +121,26 @@ class DailyMixin:
                 except APIKeyError:
                     pass
             embed.add_field(name=category.upper(), value=value, inline=False)
-        embed.set_footer(
-            text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
+        embed.set_footer(text=self.bot.user.name,
+                         icon_url=self.bot.user.avatar_url)
         return embed
+
+    def get_lw_dailies(self):
+        LWS3_MAPS = [
+            "Bloodstone Fen", "Ember Bay", "Bitterfrost Frontier",
+            "Lake Doric", "Draconis Mons", "Siren's Landing"
+        ]
+        LWS4_MAPS = [
+            "Domain of Istan", "Sandswept Isles", "Domain of Kourna",
+            "Jahai Bluffs", "Thunderhead Peaks", "Dragonfall"
+        ]
+        start_date = datetime.date(year=2020, month=5, day=30)
+        days = (datetime.datetime.utcnow().date() - start_date).days
+        index = days % (len(LWS3_MAPS))
+        lines = []
+        lines.append(f"Daily Living World Season 3 - {LWS3_MAPS[index]}")
+        lines.append(f"Daily Living World Season 4 - {LWS4_MAPS[index]}")
+        return lines
 
     def get_fractals(self, fractals):
         daily_recs = []
