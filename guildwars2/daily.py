@@ -101,8 +101,6 @@ class DailyMixin:
         embed = discord.Embed(title="Dailies", color=color)
         dailies = doc["cache"]["dailies"]
         for category in categories:
-            if category == "pve":
-                dailies[category] += self.get_lw_dailies()
             if category == "psna" and datetime.datetime.utcnow().hour >= 8:
                 value = "\n".join(dailies["psna_later"])
             elif category == "fractals":

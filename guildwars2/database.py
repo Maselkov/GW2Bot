@@ -119,7 +119,10 @@ class DatabaseMixin:
                         ) and not name.startswith("Daily Tier 4"):
                             continue
                     daily_list.append(name)
-                doc[category] = sorted(daily_list)
+                daily_list.sort()
+                if category == "pve":
+                    daily_list.extend(self.get_lw_dailies())
+                doc[category] = daily_list
             doc["psna"] = [self.get_psna()]
             doc["psna_later"] = [self.get_psna(offset_days=1)]
             await self.bot.database.set_cog_config(self,
