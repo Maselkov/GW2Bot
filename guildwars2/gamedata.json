@@ -76,13 +76,13 @@
     }
   },
   "pact_supply": [
-    "[&BA8CAAA=][&BKYBAAA=][&BEwDAAA=][&BIcHAAA=][&BNIEAAA=][&BIMCAAA=]",
-    "[&BIMBAAA=][&BBkAAAA=][&BEgAAAA=][&BH8HAAA=][&BKgCAAA=][&BGQCAAA=]",
-    "[&BPEBAAA=][&BKYAAAA=][&BMIBAAA=][&BH4HAAA=][&BP0CAAA=][&BDgDAAA=]",
-    "[&BOcBAAA=][&BIMAAAA=][&BF0AAAA=][&BKsHAAA=][&BO4CAAA=][&BF0GAAA=]",
-    "[&BNMAAAA=][&BNUGAAA=][&BMwCAAA=][&BJQHAAA=][&BJsCAAA=][&BHsBAAA=]",
-    "[&BBABAAA=][&BJIBAAA=][&BLkCAAA=][&BH8HAAA=][&BBEDAAA=][&BEICAAA=]",
-    "[&BCECAAA=][&BC0AAAA=][&BDoBAAA=][&BIkHAAA=][&BO4CAAA=][&BIUCAAA=]"
+    "[&BIcHAAA=][&BEwDAAA=][&BNIEAAA=][&BKYBAAA=][&BIMCAAA=][&BA8CAAA=]",
+    "[&BH8HAAA=][&BEgAAAA=][&BKgCAAA=][&BBkAAAA=][&BGQCAAA=][&BIMBAAA=]",
+    "[&BH4HAAA=][&BMIBAAA=][&BP0CAAA=][&BKYAAAA=][&BDgDAAA=][&BPEBAAA=]",
+    "[&BKsHAAA=][&BE8AAAA=][&BP0DAAA=][&BIMAAAA=][&BF0GAAA=][&BOcBAAA=]",
+    "[&BJQHAAA=][&BMMCAAA=][&BJsCAAA=][&BNUGAAA=][&BHsBAAA=][&BNMAAAA=]",
+    "[&BH8HAAA=][&BLkCAAA=][&BBEDAAA=][&BJIBAAA=][&BEICAAA=][&BBABAAA=]",
+    "[&BIkHAAA=][&BDoBAAA=][&BO4CAAA=][&BC0AAAA=][&BIUCAAA=][&BCECAAA=]"
   ],
   "fractals": {
     "Aquatic Ruins": [
