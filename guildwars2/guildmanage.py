@@ -16,7 +16,6 @@ class GuildManageMixin:
     @commands.has_permissions(manage_nicknames=True)
     async def server_force_account_names(self, ctx, on_off: bool):
         """Automatically change nicknames to in-game names"""
-
         def check(m):
             return m.author == ctx.author and m.channel == ctx.channel
 
@@ -25,8 +24,9 @@ class GuildManageMixin:
         if doc and on_off and doc.get("forced_account_names"):
             return await ctx.send("Forced account names are already enabled")
         if not on_off:
-            await self.bot.database.set_guild(
-                guild, {"force_account_names": False}, self)
+            await self.bot.database.set_guild(guild,
+                                              {"force_account_names": False},
+                                              self)
             return await ctx.send("Forced account names disabled")
         if not ctx.guild.me.guild_permissions.manage_nicknames:
             return await ctx.send("I need the manage nicknames permissions "
@@ -36,8 +36,9 @@ class GuildManageMixin:
             "registered keys to their in game account names. This will wipe "
             "their existing nicknames.\nTo proceed, type `I agree`")
         try:
-            answer = await self.bot.wait_for(
-                "message", timeout=30, check=check)
+            answer = await self.bot.wait_for("message",
+                                             timeout=30,
+                                             check=check)
         except asyncio.TimeoutError:
             return await message.edit(content="No response in time")
         if answer.content.lower() != "i agree":
@@ -71,8 +72,8 @@ class GuildManageMixin:
             try:
                 key = await self.fetch_key(member)
                 name = key["account_name"]
-                if not member.nick == name:
-                    await member.edit(
-                        nick=name, reason="Force account names - $server")
+                if name.lower() not in member.display_name.lower():
+                    await member.edit(nick=name,
+                                      reason="Force account names - $server")
             except:
                 pass
