@@ -489,10 +489,7 @@ class CharactersMixin:
             embed.add_field(name="Build code",
                             value=build["build"].code,
                             inline=False)
-            url = build["file"]
-            if not url:
-                url = ""
-            embed.set_image(url=url)
+            embed.set_image(url=build["url"])
             return embed
 
         async with ctx.typing():
@@ -522,7 +519,8 @@ class CharactersMixin:
                     "file": file,
                     "name": name,
                     "is_active": is_active,
-                    "build": build
+                    "build": build,
+                    "url": ""
                 })
             equipments = []
             for tab in equipment_tabs:
@@ -554,13 +552,14 @@ class CharactersMixin:
                 files=[b["file"] for b in builds if b["file"]])
             urls = [attachment.url for attachment in images_msg.attachments]
             for url in urls:
-                tab_id = int("".join(c for c in url if c.isdigit()))
+                file_name = re.search(r"build_\d*\.png", url).group(0)
+                tab_id = int("".join(c for c in file_name if c.isdigit()))
                 for tab in builds:
                     if tab["tab"] == tab_id:
-                        tab["file"] == url
+                        tab["url"] = url
                         break
-            for build, url in zip(builds, urls):
-                build["file"] = url
+            # for build, url in zip(builds, urls):
+            #     build["file"] = url
             embed = generate_embed(builds, equipments, current_build,
                                    current_equipment)
             content = None
