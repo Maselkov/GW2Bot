@@ -234,13 +234,13 @@ class AccountMixin:
                     if not any(a["id"] == _id and a["done"] for a in results):
                         return "-✖"
                 return "+✔"
-			# Progress toward one achievement has to be reached
-			if encounter["type"] == "progressed_achievement":
-			    _id = encounter["id"]
-				_progress = encounter["progress"]
-				for achievement in results:
-					if achievement["id"] == _id and achievement["current"] >= _progress
-					    return "+✔"
+            # Progress toward one achievement has to be reached
+            if encounter["type"] == "progressed_achievement":
+                _id = encounter["id"]
+                _progress = encounter["progress"]
+                for achievement in results:
+                    if achievement["id"] == _id and achievement["current"] >= _progress
+                        return "+✔"
                 # The achievement is not in the list or player hasn't progressed far enough
                 return "-✖"
 
