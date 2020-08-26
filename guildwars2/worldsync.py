@@ -111,16 +111,17 @@ class WorldsyncMixin:
                 pass
             except APIError:
                 return
+            single_role = world_role == ally_role
             if on_world:
                 if world_role not in member.roles:
                     await member.add_roles(world_role)
-                if ally_role in member.roles:
+                if not single_role and ally_role in member.roles:
                     await member.remove_roles(ally_role)
                 return
             if on_linked:
                 if ally_role not in member.roles:
                     await member.add_roles(ally_role)
-                if world_role in member.roles:
+                if not single_role and world_role in member.roles:
                     await member.remove_roles(world_role)
                 return
             if world_role in member.roles:
