@@ -1035,6 +1035,47 @@
             "id": 3465
           }
         ]
+      },
+      {
+        "name": "Strike Missions",
+        "encounters": [
+          {
+            "name": "Shiverpeaks Pass",
+            "type": "single_achievement",
+            "id": 4979
+          },
+          {
+            "name": "Voice and Claw of the Fallen",
+            "type": "single_achievement",
+            "id": 5023
+          },
+          {
+            "name": "Fraenir of Jormag",
+            "type": "single_achievement",
+            "id": 5019
+          },
+          {
+            "name": "Boneskinner",
+            "type": "single_achievement",
+            "id": 5040
+          },
+          {
+            "name": "Whisper of Jormag",
+            "type": "single_achievement",
+            "id": 5118
+          },
+          {
+            "name": "Forging Steel",
+            "type": "single_achievement",
+            "id": 5178
+          },
+          {
+            "name": "Cold War",
+            "type": "progressed_achievement",
+            "id": 5247,
+            "progress": 1
+          }
+        ]
       }
     ]
   },

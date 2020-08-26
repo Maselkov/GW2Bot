@@ -198,7 +198,7 @@ class AccountMixin:
         areas = self.gamedata["killproofs"]["areas"]
         # Create a list of lists of all achievement ids we need to check.
         achievement_ids = [
-            [x["id"]] if x["type"] == "single_achievement" else x["ids"]
+            [x["id"]] if x["type"] == "single_achievement" or x["type"] == "progressed_achievement" else x["ids"]
             for x in chain.from_iterable(
                 [area["encounters"] for area in areas])
         ]
@@ -234,6 +234,15 @@ class AccountMixin:
                     if not any(a["id"] == _id and a["done"] for a in results):
                         return "-✖"
                 return "+✔"
+            # Progress toward one achievement has to be reached
+            if encounter["type"] == "progressed_achievement":
+                _id = encounter["id"]
+                _progress = encounter["progress"]
+                for achievement in results:
+                    if achievement["id"] == _id and achievement["current"] >= _progress:
+                        return "+✔"
+                # The achievement is not in the list or player hasn't progressed far enough
+                return "-✖"
 
         embed = discord.Embed(title="Kill Proof",
                               color=await self.get_embed_color(ctx))
