@@ -159,7 +159,6 @@ class WalletMixin:
                                  inline=True)
         embed = embed_list_lines(embed,
                                  currencies_wallet[2][2:5] +
-                                 currencies_items[2] +
                                  currencies_wallet[2][5:],
                                  "> **MAP CURRENCIES**",
                                  inline=True)
