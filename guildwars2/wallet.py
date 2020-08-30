@@ -28,7 +28,7 @@ class WalletMixin:
             results = await self.call_api("account/wallet", key=doc["key"])
         except APIError as e:
             return await self.error_handler(ctx, e)
-        lines = [[], [], [], [], []]
+        lines = [[] for i in range(len(ids))]
         found_ids = []
         for c in results:
             found_ids.append(c["id"])
@@ -127,7 +127,7 @@ class WalletMixin:
                 return
         await ctx.trigger_typing()
         ids_cur = [1, 4, 2, 3, 18, 23, 15, 16, 50, 47]
-        ids_keys = [43, 40, 41, 37, 42, 38, 44, 49]
+        ids_keys = [43, 40, 41, 37, 42, 38, 44, 49, 51]
         ids_maps = [32, 45, 25, 27, 19, 22, 20, 29, 34, 35]
         ids_maps_items = [46682]
         ids_token = [5, 9, 11, 10, 13, 12, 14, 6, 7, 24]
@@ -135,7 +135,9 @@ class WalletMixin:
         ids_l3 = [79280, 79469, 79899, 80332, 81127, 81706]
         ids_l4 = [86069, 86977, 87645, 88955, 89537, 90783]
         ids_ibs = [92072, 92272]
-        ids_wallet = [ids_cur, ids_keys, ids_maps, ids_token, ids_raid]
+        ids_ibs_cur = [58]
+        ids_strikes_cur = [52, 56, 53, 55, 57, 54]
+        ids_wallet = [ids_cur, ids_keys, ids_maps, ids_token, ids_raid, ids_ibs_cur, ids_strikes_cur]
         ids_items = [ids_l3, ids_l4, ids_ibs, ids_maps_items]
 
         try:
@@ -177,8 +179,13 @@ class WalletMixin:
         if expansion_content:
             saga_title = "EXPANSION LEVEL CONTENT"
         embed = embed_list_lines(embed,
-                                 currencies_items[2],
+                                 currencies_items[2] + 
+                                 currencies_wallet[5],
                                  f"> **{saga_title}**",
+                                 inline=True)
+        embed = embed_list_lines(embed,
+                                 currencies_wallet[6],
+                                 "> **STRIKE MISSIONS**",
                                  inline=True)
         embed = embed_list_lines(embed,
                                  currencies_wallet[4],
