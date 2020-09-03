@@ -84,6 +84,14 @@
     "[&BH8HAAA=][&BLkCAAA=][&BBEDAAA=][&BJIBAAA=][&BEICAAA=][&BBABAAA=]",
     "[&BIkHAAA=][&BDoBAAA=][&BO4CAAA=][&BC0AAAA=][&BIUCAAA=][&BCECAAA=]"
   ],
+  "strike_missions": [
+    "Voice of the Fallen and Claw of the Fallen",
+    "Whisper of Jormag",
+    "Boneskinner",
+    "Cold War",
+    "Fraenir of Jormag",
+    "Shiverpeaks Pass"
+  ],
   "fractals": {
     "Aquatic Ruins": [
       7,

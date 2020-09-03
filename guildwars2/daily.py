@@ -64,6 +64,20 @@ class DailyMixin:
         except discord.Forbidden:
             await ctx.send("Need permission to embed links")
 
+            
+    @daily.command(name="strikes", aliases=["s"])
+    @commands.cooldown(1, 2, BucketType.user)
+    async def daily_strikes(self, ctx):
+        """Show today's priority strike"""
+        embed = await self.daily_embed(["strikes"], ctx=ctx)
+        try:
+            embed.set_thumbnail(
+                url="https://render.guildwars2.com/file/"
+                "C34A20B86C73B0DCDC9401ECD22CE37C36B018A7/2271016.png")
+            await ctx.send(embed=embed)
+        except discord.Forbidden:
+            await ctx.send("Need permission to embed links")
+
     @daily.command(name="psna")
     @commands.cooldown(1, 2, BucketType.user)
     async def daily_psna(self, ctx):
@@ -82,7 +96,7 @@ class DailyMixin:
     async def daily_all(self, ctx):
         """Show today's all dailies"""
         embed = await self.daily_embed(
-            ["psna", "pve", "pvp", "wvw", "fractals"], ctx=ctx)
+            ["psna", "pve", "pvp", "wvw", "fractals", "strikes"], ctx=ctx)
         embed.set_thumbnail(
             url="https://wiki.guildwars2.com/images/1/14/Daily_Achievement.png"
         )
@@ -106,6 +120,10 @@ class DailyMixin:
             elif category == "fractals":
                 fractals = self.get_fractals(dailies["fractals"])
                 value = "\n".join(fractals)
+            elif category == "strikes":
+                category = "Priority Strike"
+                strikes = self.get_strike()
+                value = strikes
             else:
                 value = "\n".join(dailies[category])
             if category == "psna_later":
@@ -165,3 +183,9 @@ class DailyMixin:
         if day + offset_days > 6:
             offset_days = -6
         return self.gamedata["pact_supply"][day + offset_days]
+
+    def get_strike(self):
+        start_date = datetime.date(year=2020, month=8, day=30)
+        days = (datetime.datetime.utcnow().date() - start_date).days
+        index = days % len(self.gamedata["strike_missions"])
+        return self.gamedata["strike_missions"][index]
