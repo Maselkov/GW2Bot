@@ -294,7 +294,7 @@ class DatabaseMixin:
             search = re.compile(exact_match, re.IGNORECASE)
             query["name"] = search
             number = await self.db[database].count_documents(query)
-            cursor = self.db[database].find()
+            cursor = self.db[database].find(query)
             if not number:
                 await destination.send(
                     "Your search gave me no results, sorry. Check for "
