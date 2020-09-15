@@ -222,6 +222,8 @@ class SyncGuild:
                                               {"sync.purge": on_off}, self)
         else:
             await ctx.send("Disabled automatic purging.")
+            await self.bot.database.set_guild(ctx.guild,
+                                              {"sync.purge": on_off}, self)
 
     @commands.has_permissions(administrator=True)
     @guildsync.command(name="guildrole")
