@@ -172,8 +172,9 @@ class KeyMixin:
 
             try:
                 self.waiting_for.append(ctx.author.id)
-                answer = await self.bot.wait_for(
-                    "message", timeout=120, check=check)
+                answer = await self.bot.wait_for("message",
+                                                 timeout=120,
+                                                 check=check)
             except asyncio.TimeoutError:
                 await message.edit(content="No response in time.")
                 return
@@ -214,12 +215,11 @@ class KeyMixin:
             return await ctx.send(
                 "You have no keys added, you can add one with {0}key add.".
                 format(ctx.prefix))
-        embed = await self.display_keys(
-            ctx,
-            doc,
-            display_active=True,
-            show_tokens=True,
-            reveal_tokens=True)
+        embed = await self.display_keys(ctx,
+                                        doc,
+                                        display_active=True,
+                                        show_tokens=True,
+                                        reveal_tokens=True)
         try:
             await ctx.author.send(embed=embed)
         except discord.HTTPException:
@@ -263,8 +263,9 @@ class KeyMixin:
 
             try:
                 self.waiting_for.append(ctx.author.id)
-                answer = await self.bot.wait_for(
-                    "message", timeout=120, check=check)
+                answer = await self.bot.wait_for("message",
+                                                 timeout=120,
+                                                 check=check)
             except asyncio.TimeoutError:
                 await message.edit(content="No response in time.")
                 return
@@ -302,12 +303,14 @@ class KeyMixin:
                 token = key["key"]
                 if not reveal_tokens:
                     token = token[:7] + re.sub("[a-zA-Z0-9]", "\*", token[8:])
+                else:
+                    token = f"||{token}||"
                 lines.append(token)
             return "\n".join(lines)
 
         keys = doc.get("keys", [])
-        embed = discord.Embed(
-            title="Your keys", color=await self.get_embed_color(ctx))
+        embed = discord.Embed(title="Your keys",
+                              color=await self.get_embed_color(ctx))
         embed.set_author(name=ctx.author.name, icon_url=ctx.author.avatar_url)
         if display_active:
             active_key = doc.get("key", {})
@@ -324,10 +327,10 @@ class KeyMixin:
                 name += " - " + token_name
             embed.add_field(name=name, value=get_value(key), inline=False)
         if show_tokens and not reveal_tokens:
-            embed.set_footer(
-                text="Use {}key info to see full API keys".format(ctx.prefix),
-                icon_url=self.bot.user.avatar_url)
+            embed.set_footer(text="Use {}key info to see full API keys".format(
+                ctx.prefix),
+                             icon_url=self.bot.user.avatar_url)
         else:
-            embed.set_footer(
-                text=self.bot.user.name, icon_url=self.bot.user.avatar_url)
+            embed.set_footer(text=self.bot.user.name,
+                             icon_url=self.bot.user.avatar_url)
         return embed
