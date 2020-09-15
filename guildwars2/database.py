@@ -27,6 +27,12 @@ class DatabaseMixin:
         """
         await self.rebuild_database()
 
+    @database.command(name="getwvwdata")
+    async def db_getwvwdata(self, ctx):
+        """Get historical wvw population data. Might not work"""
+        await self.get_historical_world_pop_data()
+        await ctx.send("Done")
+
     @database.command(name="statistics")
     async def db_stats(self, ctx):
         """Some statistics   """
@@ -424,3 +430,34 @@ class DatabaseMixin:
         else:
             choice = items[0]
         return choice
+
+    async def get_historical_world_pop_data(self):
+        # This might break in the future, but oh well
+        url = "https://pop.apfelcreme.net/serverinfo.php?id={}"
+        cursor = self.db.worlds.find({})
+        async for world in cursor:
+            try:
+                world_id = world["_id"]
+                async with self.session.get(url.format(world_id)) as r:
+                    data = await r.json()
+                    for entry in data:
+                        pop = self.population_to_int(entry["population"])
+                        if not entry["time_stamp"]:
+                            continue
+                        date = datetime.datetime.fromtimestamp(
+                            entry["time_stamp"] / 1000)
+                        doc = {
+                            "population": pop,
+                            "world_id": world_id,
+                            "date": date
+                        }
+                        await self.db.worldpopulation.replace_one(
+                            {
+                                "world_id": world_id,
+                                "date": date
+                            },
+                            doc,
+                            upsert=True)
+                        print("added " + world["name"] + ": " + str(pop))
+            except Exception as e:
+                print(f"Unable to get data for world: {world['name']}\n{e}")

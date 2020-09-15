@@ -2,3 +2,4 @@ beautifulsoup4
 pillow
 requests
 tenacity
+matplotlib

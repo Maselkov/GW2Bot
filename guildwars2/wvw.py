@@ -1,8 +1,63 @@
 import discord
+import io
+try:
+    import matplotlib
+    matplotlib.use("agg")
+    import matplotlib.pyplot as plt
+    import matplotlib.patheffects as pe
+    import matplotlib.dates as mdates
+    MATPLOTLIB_AVAILABLE = True
+except ImportError:
+    MATPLOTLIB_AVAILABLE = False
+
 from discord.ext import commands
 from discord.ext.commands.cooldowns import BucketType
 
 from .exceptions import APIError, APIKeyError
+import datetime
+
+
+def generate_population_graph(data):
+    fig = plt.figure()
+    path_effects = [pe.withStroke(linewidth=1, foreground="black")]
+    ax = fig.add_subplot(111)
+    ax.set_yticks([0, 1, 2, 3, 4])
+    ax.set_yticklabels(["Low", "Medium", "High", "Very High", "Full"])
+    ax.set_title('Population over time',
+                 color="#ffa600",
+                 path_effects=path_effects)
+    ax.tick_params(axis='y', which='major', length=2)
+    ax.step(*zip(*data), where="post", color="#c12d2b")
+    ax.tick_params(axis="x", which="major", pad=0)
+    ax.tick_params(axis="both", labelcolor="#ffa600", color="#c12d2b")
+    ax.grid(b=True,
+            which='both',
+            color='black',
+            linestyle='-',
+            alpha=0.2,
+            path_effects=[
+                pe.withStroke(linewidth=1, foreground="white", alpha=0.2)
+            ])
+    ax.set_aspect(0.2 / ax.get_data_ratio())
+    plt.setp([ax.get_xticklines(), ax.get_yticklines()], color="#ffa600")
+    for spine in ax.spines.values():
+        spine.set_edgecolor("#e7691e")
+        spine.set_path_effects(path_effects)
+    locator = mdates.AutoDateLocator(maxticks=10)
+    formatter = mdates.ConciseDateFormatter(locator)
+    ax.xaxis.set_major_locator(locator)
+    ax.xaxis.set_major_formatter(formatter)
+    for tick in ax.xaxis.get_major_ticks() + ax.yaxis.get_major_ticks():
+        tick.label.set_path_effects(path_effects)
+    buf = io.BytesIO()
+    fig.savefig(buf,
+                format="png",
+                transparent=True,
+                bbox_inches='tight',
+                dpi=300)
+    plt.close(fig)
+    buf.seek(0)
+    return buf
 
 
 class WvwMixin:
@@ -87,6 +142,16 @@ class WvwMixin:
         data.add_field(name="K/D ratio", value=str(kd), inline=False)
         data.add_field(name="Population", value=population, inline=False)
         data.set_author(name=worldinfo["name"])
+        if MATPLOTLIB_AVAILABLE:
+            graph = await self.get_population_graph(worldinfo)
+            data.set_image(url=f"attachment://{graph.filename}")
+            try:
+                await ctx.send(embed=data, file=graph)
+            except discord.Forbidden:
+                await ctx.send("Missing permission to embed links or "
+                               "upload images")
+                # TODO automate giving exact error
+            return
         try:
             await ctx.send(embed=data)
         except discord.Forbidden:
@@ -119,6 +184,25 @@ class WvwMixin:
             return await ctx.send("Couldn't send a DM to you. Either you have "
                                   "me blocked, or disabled DMs in this "
                                   "server. Aborting.")
-        await self.bot.database.set_user(
-            user, {"poptrack": wid}, self, operator="$push")
+        await self.bot.database.set_user(user, {"poptrack": wid},
+                                         self,
+                                         operator="$push")
         await ctx.send("Successfully set")
+
+    def population_to_int(self, pop):
+        pops = ["low", "medium", "high", "veryhigh", "full"]
+        return pops.index(pop.lower().replace("_", ""))
+
+    async def get_population_graph(self, world):
+        cursor = self.db.worldpopulation.find({"world_id": world["id"]})
+        data = []
+        async for doc in cursor:
+            data.append((doc["date"], doc["population"]))
+        data.append((datetime.datetime.utcnow(),
+                     self.population_to_int(world["population"])))
+        data.sort(key=lambda x: x[0])
+        graph = await self.bot.loop.run_in_executor(None,
+                                                    generate_population_graph,
+                                                    data)
+        file = discord.File(graph, "graph.png")
+        return file

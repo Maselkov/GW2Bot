@@ -733,11 +733,26 @@ class NotiifiersMixin:
             except:
                 pass
 
-    @tasks.loop(minutes=5)
+    @tasks.loop(minutes=15)
     async def world_population_checker(self):
         await self.send_population_notifs()
         await asyncio.sleep(300)
         await self.cache_endpoint("worlds", True)
+        cursor = self.db.worlds.find({})
+        date = datetime.datetime.utcnow()
+        async for world in cursor:
+            doc = await self.db.worldpopulation.find_one(
+                {"world_id": world["_id"]}, sort=[("date", -1)])
+            current_pop = self.population_to_int(world["population"])
+            if not doc or current_pop != doc["population"]:
+                await self.db.worldpopulation.insert_one({
+                    "population":
+                    current_pop,
+                    "world_id":
+                    world["_id"],
+                    "date":
+                    date
+                })
 
     async def send_population_notifs(self):
         async for world in self.db.worlds.find({"population": {
