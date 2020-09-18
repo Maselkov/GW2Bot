@@ -5,8 +5,6 @@ import discord
 from discord.ext import commands
 from discord.ext.commands.cooldowns import BucketType
 
-from .exceptions import APIKeyError
-
 
 class DailyMixin:
     @commands.group(aliases=["d"], case_insensitive=True)
@@ -104,7 +102,111 @@ class DailyMixin:
         except discord.Forbidden:
             await ctx.send("Need permission to embed links")
 
-    async def daily_embed(self, categories, *, doc=None, ctx=None):
+    @commands.group(name="dt",
+                    aliases=["dailytomorrow", "tomorrow"],
+                    case_insensitive=True)
+    async def dailytomorrow(self, ctx):
+        """Commands showing the tomorrow's dailies"""
+        if ctx.invoked_subcommand is None:
+            await ctx.send_help(ctx.command)
+
+    @dailytomorrow.command(name="pve", aliases=["e"])
+    @commands.cooldown(1, 2, BucketType.user)
+    async def dailytomorrow_pve(self, ctx):
+        """Show tomorrow's PvE dailies"""
+        embed = await self.daily_embed(["pve"], ctx=ctx, tomorrow=True)
+        try:
+            await ctx.send(embed=embed)
+        except discord.Forbidden:
+            await ctx.send("Need permission to embed links")
+
+    @dailytomorrow.command(name="wvw", aliases=["w"])
+    @commands.cooldown(1, 2, BucketType.user)
+    async def dailytomorrow_wvw(self, ctx):
+        """Show tomorrow's WvW dailies"""
+        embed = await self.daily_embed(["wvw"], ctx=ctx, tomorrow=True)
+        embed.set_thumbnail(
+            url="https://render.guildwars2.com/file/"
+            "2BBA251A24A2C1A0A305D561580449AF5B55F54F/338457.png")
+        try:
+            await ctx.send(embed=embed)
+        except discord.Forbidden:
+            await ctx.send("Need permission to embed links")
+
+    @dailytomorrow.command(name="pvp", aliases=["p"])
+    @commands.cooldown(1, 2, BucketType.user)
+    async def dailytomorrow_pvp(self, ctx):
+        """Show tomorrow's PvP dailies"""
+        embed = await self.daily_embed(["pvp"], ctx=ctx, tomorrow=True)
+        try:
+            embed.set_thumbnail(
+                url="https://render.guildwars2.com/file/"
+                "FE01AF14D91F52A1EF2B22FE0A552B9EE2E4C3F6/511340.png")
+            await ctx.send(embed=embed)
+        except discord.Forbidden:
+            await ctx.send("Need permission to embed links")
+
+    @dailytomorrow.command(name="fractals", aliases=["f"])
+    @commands.cooldown(1, 2, BucketType.user)
+    async def dailytomorrow_fractals(self, ctx):
+        """Show tomorrow's fractal dailies"""
+        embed = await self.daily_embed(["fractals"], ctx=ctx, tomorrow=True)
+        try:
+            embed.set_thumbnail(
+                url="https://render.guildwars2.com/file/"
+                "4A5834E40CDC6A0C44085B1F697565002D71CD47/1228226.png")
+            await ctx.send(embed=embed)
+        except discord.Forbidden:
+            await ctx.send("Need permission to embed links")
+
+    @dailytomorrow.command(name="strikes", aliases=["s"])
+    @commands.cooldown(1, 2, BucketType.user)
+    async def dailytomorrow_strikes(self, ctx):
+        """Show tomorrow's priority strike"""
+        embed = await self.daily_embed(["strikes"], ctx=ctx, tomorrow=True)
+        try:
+            embed.set_thumbnail(
+                url="https://render.guildwars2.com/file/"
+                "C34A20B86C73B0DCDC9401ECD22CE37C36B018A7/2271016.png")
+            await ctx.send(embed=embed)
+        except discord.Forbidden:
+            await ctx.send("Need permission to embed links")
+
+    @dailytomorrow.command(name="psna")
+    @commands.cooldown(1, 2, BucketType.user)
+    async def dailytomorrow_psna(self, ctx):
+        """Show tomorrow's Pact Supply Network Agent locations"""
+        embed = await self.daily_embed(["psna"], ctx=ctx, tomorrow=True)
+        embed.set_thumbnail(
+            url="https://wiki.guildwars2.com/images/1/14/Daily_Achievement.png"
+        )
+        try:
+            await ctx.send(embed=embed)
+        except discord.Forbidden:
+            await ctx.send("Need permission to embed links")
+
+    @dailytomorrow.command(name="all", aliases=["a"])
+    @commands.cooldown(1, 2, BucketType.user)
+    async def dailytomorrow_all(self, ctx):
+        """Show tomorrow's all dailies"""
+        embed = await self.daily_embed(
+            ["psna", "pve", "pvp", "wvw", "fractals", "strikes"],
+            ctx=ctx,
+            tomorrow=True)
+        embed.set_thumbnail(
+            url="https://wiki.guildwars2.com/images/1/14/Daily_Achievement.png"
+        )
+        try:
+            await ctx.send(embed=embed)
+        except discord.Forbidden:
+            await ctx.send("Need permission to embed links")
+
+    async def daily_embed(self,
+                          categories,
+                          *,
+                          doc=None,
+                          ctx=None,
+                          tomorrow=False):
         if not doc:
             doc = await self.bot.database.get_cog_config(self)
         if ctx:
@@ -112,7 +214,8 @@ class DailyMixin:
         else:
             color = self.embed_color
         embed = discord.Embed(title="Dailies", color=color)
-        dailies = doc["cache"]["dailies"]
+        key = "dailies" if not tomorrow else "dailies_tomorrow"
+        dailies = doc["cache"][key]
         for category in categories:
             if category == "psna" and datetime.datetime.utcnow().hour >= 8:
                 value = "\n".join(dailies["psna_later"])

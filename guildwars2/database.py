@@ -101,13 +101,17 @@ class DatabaseMixin:
                     "checked".format(user, missing))
         return doc["key"]
 
-    async def cache_dailies(self):
+    async def cache_dailies(self, *, tomorrow=False):
+        if not tomorrow:
+            try:
+                await self.cache_endpoint("achievements")
+            except Exception:
+                pass
         try:
-            await self.cache_endpoint("achievements")
-        except Exception:
-            pass
-        try:
-            results = await self.call_api("achievements/daily")
+            ep = "achievements/daily"
+            if tomorrow:
+                ep += "/tomorrow"
+            results = await self.call_api(ep)
             doc = {}
             for category, dailies in results.items():
                 daily_list = []
@@ -129,12 +133,20 @@ class DatabaseMixin:
                 if category == "pve":
                     daily_list.extend(self.get_lw_dailies())
                 doc[category] = daily_list
-            doc["psna"] = [self.get_psna()]
-            doc["psna_later"] = [self.get_psna(offset_days=1)]
-            await self.bot.database.set_cog_config(self,
-                                                   {"cache.dailies": doc})
+            offset = 0
+            if tomorrow:
+                offset = 1
+            doc["psna"] = [self.get_psna(offset_days=offset)]
+            doc["psna_later"] = [self.get_psna(offset_days=1 + offset)]
+            key = "cache.dailies"
+            if tomorrow:
+                key += "_tomorrow"
+            await self.bot.database.set_cog_config(
+                self, {key: doc})
         except Exception as e:
             self.log.exception("Exception caching dailies: ", exc_info=e)
+        if not tomorrow:
+            await self.cache_dailies(tomorrow=True)
 
     async def cache_raids(self):
         raids = []
