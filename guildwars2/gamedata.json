@@ -93,41 +93,76 @@
     "Shiverpeaks Pass"
   ],
   "fractals": {
+    "Aetherblade": [
+      14,
+      46,
+      65,
+      71,
+      96
+    ],
     "Aquatic Ruins": [
       7,
       26,
       61,
       76
     ],
-    "Swampland": [
-      5,
+    "Captain Mai Trin Boss": [
+      18,
+      42,
+      72,
+      95
+    ],
+    "Chaos": [
+      13,
+      30,
+      38,
+      63,
+      88,
+      97
+    ],
+    "Cliffside": [
+      6,
       21,
-      32,
-      56,
-      77,
-      89
+      47,
+      69,
+      94
     ],
-    "Uncategorized": [
-      2,
-      36,
-      44,
-      62,
-      79,
-      91
+    "Deepstone": [
+      11,
+      33,
+      67,
+      84
     ],
-    "Urban Battleground": [
-      4,
-      31,
-      57,
-      66,
-      85
+    "Molten Boss": [
+      10,
+      40,
+      70,
+      90
     ],
     "Molten Furnace": [
       9,
-      23,
+      22,
       39,
       58,
       83
+    ],
+    "Nightmare": [
+      23,
+      48,
+      73,
+      98
+    ],
+    "Shattered Observatory": [
+      24,
+      49,
+      74,
+      99
+    ],
+    "Siren's Reef": [
+      12,
+      37,
+      54,
+      78
     ],
     "Snowblind": [
       3,
@@ -137,57 +172,6 @@
       86,
       93
     ],
-    "Cliffside": [
-      6,
-      22,
-      47,
-      69,
-      82,
-      94
-    ],
-    "Underground Facility": [
-      8,
-      17,
-      29,
-      43,
-      53,
-      81
-    ],
-    "Aetherblade": [
-      14,
-      46,
-      65,
-      71,
-      96
-    ],
-    "Thaumanova Reactor": [
-      15,
-      34,
-      48,
-      55,
-      64,
-      97
-    ],
-    "Volcanic": [
-      1,
-      19,
-      28,
-      52,
-      72,
-      92
-    ],
-    "Captain Mai Trin Boss": [
-      18,
-      42,
-      73,
-      95
-    ],
-    "Molten Boss": [
-      10,
-      40,
-      70,
-      90
-    ],
     "Solid Ocean": [
       20,
       35,
@@ -195,25 +179,27 @@
       60,
       80
     ],
-    "Chaos Isles": [
-      13,
-      30,
-      38,
-      63,
-      88,
-      98
-    ],
-    "Nightmare": [
-      24,
-      49,
-      74,
-      99
-    ],
-    "Shattered Observatory": [
+    "Sunqua Peak": [
       25,
       50,
       75,
       100
+    ],
+    "Swampland": [
+      5,
+      17,
+      32,
+      56,
+      77,
+      89
+    ],
+    "Thaumanova Reactor": [
+      15,
+      34,
+      43,
+      55,
+      64,
+      82
     ],
     "Twilight Oasis": [
       16,
@@ -221,17 +207,33 @@
       59,
       87
     ],
-    "Deepstone": [
-      11,
-      33,
-      67,
-      84
+    "Uncategorized": [
+      2,
+      36,
+      44,
+      62,
+      79,
+      91
     ],
-    "Siren's Reef": [
-      12,
-      37,
-      54,
-      78
+    "Underground Facility": [
+      8,
+      29,
+      53,
+      81
+    ],
+    "Urban Battleground": [
+      4,
+      31,
+      57,
+      66,
+      85
+    ],
+    "Volcanic": [
+      1,
+      19,
+      28,
+      52,
+      92
     ]
   },
   "event_timers": {
