@@ -119,7 +119,7 @@ class NotiifiersMixin:
                     "psna", "psna_later", "pve", "pvp", "wvw", "fractals"
                 ]
                 break
-        embed = await self.daily_embed(categories)
+        embed = await self.daily_embed(categories, ctx)
         await self.bot.database.set_guild(guild,
                                           {"daily.categories": categories},
                                           self)
@@ -519,8 +519,10 @@ class NotiifiersMixin:
                             "psna", "psna_later", "pve", "pvp", "wvw",
                             "fractals"
                         ]
-                    embed = await self.daily_embed(categories, doc=daily_doc)
                     channel = self.bot.get_channel(guild["channel"])
+                    embed = await self.daily_embed(categories,
+                                                   doc=daily_doc,
+                                                   ctx=channel)
                     try:
                         embed.set_thumbnail(
                             url="https://wiki.guildwars2.com/images/"

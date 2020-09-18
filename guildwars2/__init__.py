@@ -97,6 +97,8 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
         return ctx.channel.permissions_for(ctx.me).embed_links
 
     async def get_embed_color(self, ctx):
+        if not hasattr(ctx, "author"):
+            return self.embed_color
         doc = await self.bot.database.users.find_one({"_id": ctx.author.id}, {
             "embed_color": 1,
             "_id": 0

@@ -64,7 +64,6 @@ class DailyMixin:
         except discord.Forbidden:
             await ctx.send("Need permission to embed links")
 
-            
     @daily.command(name="strikes", aliases=["s"])
     @commands.cooldown(1, 2, BucketType.user)
     async def daily_strikes(self, ctx):
@@ -118,24 +117,29 @@ class DailyMixin:
             if category == "psna" and datetime.datetime.utcnow().hour >= 8:
                 value = "\n".join(dailies["psna_later"])
             elif category == "fractals":
-                fractals = self.get_fractals(dailies["fractals"])
+                fractals = self.get_fractals(dailies["fractals"], ctx)
                 value = "\n".join(fractals)
             elif category == "strikes":
                 category = "Priority Strike"
-                strikes = self.get_strike()
+                strikes = self.get_strike(ctx)
                 value = strikes
             else:
-                value = "\n".join(dailies[category])
+                lines = []
+                for i, d in enumerate(dailies[category]):
+                    # HACK handling for emojis for lws dailies. Needs rewrite
+                    emoji = self.get_emoji(ctx, f"daily {category}")
+                    if category == "pve":
+                        if i == 5:
+                            emoji = self.get_emoji(ctx, f"daily lws3")
+                        elif i == 6:
+                            emoji = self.get_emoji(ctx, f"daily lws4")
+                    lines.append(emoji + d)
+                value = "\n".join(lines)
             if category == "psna_later":
                 category = "psna in 8 hours"
             value = re.sub(r"(?:Daily|Tier 4|PvP|WvW) ", "", value)
-            if category == "psna" and ctx:
-                try:
-                    key = await self.fetch_key(ctx.author)
-                    whisper = f"/whisper {key['account_name']} "
-                    value = f"```\n{whisper}{value}```"
-                except APIKeyError:
-                    pass
+            if category.startswith("psna"):
+                category = self.get_emoji(ctx, "daily psna") + category
             embed.add_field(name=category.upper(), value=value, inline=False)
         embed.set_footer(text=self.bot.user.name,
                          icon_url=self.bot.user.avatar_url)
@@ -158,23 +162,26 @@ class DailyMixin:
         lines.append(f"Daily Living World Season 4 - {LWS4_MAPS[index]}")
         return lines
 
-    def get_fractals(self, fractals):
-        daily_recs = []
-        fractal_final = []
+    def get_fractals(self, fractals, ctx):
+        recommended_fractals = []
+        daily_fractals = []
         fractals_data = self.gamedata["fractals"]
         for fractal in fractals:
             fractal_level = fractal.replace("Daily Recommended Fractal—Scale ",
                                             "")
             if re.match("[0-9]{1,3}", fractal_level):
-                daily_recs.append(fractal_level)
+                recommended_fractals.append(fractal_level)
             else:
-                fractal_final.append(fractal)
-        for level in sorted(daily_recs, key=int):
+                daily_fractals.append(
+                    self.get_emoji(ctx, "daily fractal") + fractal)
+        for i, level in enumerate(sorted(recommended_fractals, key=int)):
             for k, v in fractals_data.items():
                 if int(level) in v:
-                    fractal_final.append("Recommended - {} {}".format(
-                        level, k))
-        return fractal_final
+                    recommended_fractals[i] = "{}{} {}".format(
+                        self.get_emoji(ctx, "daily recommended fractal"),
+                        level, k)
+        return ["> **DAILY**"] + daily_fractals + ["> **RECOMMENDED**"
+                                                   ] + recommended_fractals
 
     def get_psna(self, *, offset_days=0):
         offset = datetime.timedelta(hours=-8)
@@ -184,8 +191,9 @@ class DailyMixin:
             offset_days = -6
         return self.gamedata["pact_supply"][day + offset_days]
 
-    def get_strike(self):
+    def get_strike(self, ctx):
         start_date = datetime.date(year=2020, month=8, day=30)
         days = (datetime.datetime.utcnow().date() - start_date).days
         index = days % len(self.gamedata["strike_missions"])
-        return self.gamedata["strike_missions"][index]
+        return self.get_emoji(
+            ctx, "daily strike") + self.gamedata["strike_missions"][index]

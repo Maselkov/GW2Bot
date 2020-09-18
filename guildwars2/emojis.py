@@ -15,7 +15,7 @@ class EmojiMixin:
                   fallback=False,
                   fallback_fmt="{}",
                   return_obj=False):
-        if isinstance(ctx, discord.Message):
+        if isinstance(ctx, (discord.Message, discord.TextChannel)):
             if ctx.guild:
                 me = ctx.guild.me
             else:
@@ -24,17 +24,22 @@ class EmojiMixin:
             me = ctx.me
         else:
             me = None
-        if ctx and ctx.channel.permissions_for(me).external_emojis:
-            search_str = emoji.lower().replace(" ", "_")
-            # Remove illegal emoji characters
-            search_str = re.sub('[\.,\,,\',\:,\;,!\?]', '', search_str)
-            emoji_id = self.emojis.get(search_str)
-            if emoji_id:
-                emoji_obj = self.bot.get_emoji(emoji_id)
-                if emoji_obj:
-                    if return_obj:
-                        return emoji_obj
-                    return str(emoji_obj)
+        if ctx:
+            if isinstance(ctx, discord.TextChannel):
+                channel = ctx
+            else:
+                channel = ctx.channel
+            if channel.permissions_for(me).external_emojis:
+                search_str = emoji.lower().replace(" ", "_")
+                # Remove illegal emoji characters
+                search_str = re.sub('[\.,\,,\',\:,\;,!\?]', '', search_str)
+                emoji_id = self.emojis.get(search_str)
+                if emoji_id:
+                    emoji_obj = self.bot.get_emoji(emoji_id)
+                    if emoji_obj:
+                        if return_obj:
+                            return emoji_obj
+                        return str(emoji_obj)
         if fallback:
             return fallback_fmt.format(emoji)
         return ""
