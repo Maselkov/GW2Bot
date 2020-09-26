@@ -90,7 +90,7 @@ class NotiifiersMixin:
         pvp
         wvw
         fractals
-
+        strikes
         psna_later is psna, 8 hours later
         PSNA changes 8 hours after dailies change.
 
@@ -101,7 +101,8 @@ class NotiifiersMixin:
             return
         guild = ctx.guild
         possible_values = [
-            "all", "psna", "psna_later", "pve", "pvp", "wvw", "fractals"
+            "all", "psna", "psna_later", "pve", "pvp", "wvw", "fractals",
+            "strikes"
         ]
         categories = [x.lower() for x in categories]
         if len(categories) > 6:
@@ -116,10 +117,11 @@ class NotiifiersMixin:
                 return
             if category == "all":
                 categories = [
-                    "psna", "psna_later", "pve", "pvp", "wvw", "fractals"
+                    "psna", "psna_later", "pve", "pvp", "wvw", "fractals",
+                    "strikes"
                 ]
                 break
-        embed = await self.daily_embed(categories, ctx)
+        embed = await self.daily_embed(categories, ctx=ctx)
         await self.bot.database.set_guild(guild,
                                           {"daily.categories": categories},
                                           self)
@@ -517,7 +519,7 @@ class NotiifiersMixin:
                     if not categories:
                         categories = [
                             "psna", "psna_later", "pve", "pvp", "wvw",
-                            "fractals"
+                            "fractals", "strikes"
                         ]
                     channel = self.bot.get_channel(guild["channel"])
                     embed = await self.daily_embed(categories,
