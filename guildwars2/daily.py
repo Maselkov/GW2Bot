@@ -217,8 +217,11 @@ class DailyMixin:
         key = "dailies" if not tomorrow else "dailies_tomorrow"
         dailies = doc["cache"][key]
         for category in categories:
-            if category == "psna" and datetime.datetime.utcnow().hour >= 8:
-                value = "\n".join(dailies["psna_later"])
+            if category == "psna":
+                if datetime.datetime.utcnow().hour >= 8:
+                    value = "\n".join(dailies["psna_later"])
+                else:
+                    value = "\n".join(dailies["psna"])
             elif category == "fractals":
                 fractals = self.get_fractals(dailies["fractals"], ctx)
                 value = "\n".join(fractals)
