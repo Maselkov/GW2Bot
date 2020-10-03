@@ -1043,6 +1043,11 @@
             "name": "Shattered Observatory CM",
             "type": "single_achievement",
             "id": 3465
+          },
+          {
+            "name": "Sunqua Peak CM",
+            "type": "single_achievement",
+            "id": 5443
           }
         ]
       },
