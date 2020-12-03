@@ -44,3 +44,7 @@ If you were using the previous version, you can migrate your database by running
 * [Event timer](https://i.imgur.com/h4xrOAE.png)
 
 ... and more! You can see all available commands [on the website.](https://gw2bot.info/commands)
+
+
+### Licensed works used
+[gw2-fotm-instabilities](https://github.com/Invisi/gw2-fotm-instabilities) by Invisi which is licensed under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/)
