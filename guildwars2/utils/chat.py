@@ -3,7 +3,7 @@ import re
 zero_width_space = u'\u200b'
 magic_space = " "
 en_space = " "
-
+tab = u"\u0009"
 
 def embed_list_lines(embed,
                      lines,
@@ -11,11 +11,11 @@ def embed_list_lines(embed,
                      max_characters=1024,
                      inline=False):
     value = "\n".join(lines)
-    if len(value) > 1024:
+    if len(value) > max_characters:
         value = ""
         values = []
         for line in lines:
-            if len(value) + len(line) > 1024:
+            if len(value) + len(line) > max_characters:
                 values.append(value)
                 value = ""
             value += line + "\n"

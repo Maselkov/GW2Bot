@@ -41,6 +41,9 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
         with open("cogs/guildwars2/gamedata.json", encoding="utf-8",
                   mode="r") as f:
             self.gamedata = json.load(f)
+        with open("cogs/guildwars2/instabilities.json", encoding="utf-8",
+                  mode="r") as f:
+            self.instabilities = json.load(f)
         self.session = bot.session
         self.boss_schedule = self.generate_schedule()
         self.embed_color = 0xc12d2b
