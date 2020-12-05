@@ -110,18 +110,21 @@ class WvwMixin:
             matches, worldinfo = await self.call_multiple(endpoints)
         except APIError as e:
             return await self.error_handler(ctx, e)
+        linked_worlds = []
+        worldcolor = "green"
         for key, value in matches["all_worlds"].items():
             if wid in value:
                 worldcolor = key
-        if not worldcolor:
-            await ctx.send("Could not resolve world's color")
-            return
+                value.remove(wid)
+                linked_worlds = value
+                break
         if worldcolor == "red":
             color = discord.Colour.red()
         elif worldcolor == "green":
             color = discord.Colour.green()
         else:
             color = discord.Colour.blue()
+        linked_worlds = [await self.get_world_name(w) for w in linked_worlds]
         score = matches["scores"][worldcolor]
         ppt = 0
         victoryp = matches["victory_points"][worldcolor]
@@ -140,7 +143,9 @@ class WvwMixin:
         data.add_field(name="Points per tick", value=ppt)
         data.add_field(name="Victory Points", value=victoryp)
         data.add_field(name="K/D ratio", value=str(kd), inline=False)
-        data.add_field(name="Population", value=population, inline=False)
+        data.add_field(name="Population", value=population)
+        if linked_worlds:
+            data.add_field(name="Linked with", value=", ".join(linked_worlds))
         data.set_author(name=worldinfo["name"])
         if MATPLOTLIB_AVAILABLE:
             graph = await self.get_population_graph(worldinfo)
