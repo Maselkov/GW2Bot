@@ -135,7 +135,7 @@ class WalletMixin:
         ids_l3 = [79280, 79469, 79899, 80332, 81127, 81706]
         ids_l4 = [86069, 86977, 87645, 88955, 89537, 90783]
         ids_ibs = [92072, 92272]
-        ids_ibs_cur = [58]
+        ids_ibs_cur = [58, 60]
         ids_strikes_cur = [52, 56, 53, 55, 57, 54]
         ids_wallet = [ids_cur, ids_keys, ids_maps, ids_token, ids_raid, ids_ibs_cur, ids_strikes_cur]
         ids_items = [ids_l3, ids_l4, ids_ibs, ids_maps_items]
