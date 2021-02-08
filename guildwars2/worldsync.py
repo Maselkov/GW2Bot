@@ -100,6 +100,7 @@ class WorldsyncMixin:
             if world in worlds:
                 worlds.remove(world)
                 return worlds
+        return []
 
     async def worldsync_member(self, member, world_role, ally_role, world_id,
                                linked_worlds):
@@ -173,8 +174,6 @@ class WorldsyncMixin:
         try:
             linked_worlds = await self.get_linked_worlds(world_id)
         except APIError as e:
-            return
-        if not linked_worlds:
             return
         await self.worldsync_member(member, world_role, ally_role, world_id,
                                     linked_worlds)
