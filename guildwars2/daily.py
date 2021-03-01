@@ -1,9 +1,11 @@
+import calendar
 import datetime
 import re
 
 import discord
 from discord.ext import commands
 from discord.ext.commands.cooldowns import BucketType
+
 from .utils.chat import en_space, tab
 
 
@@ -342,6 +344,8 @@ class DailyMixin:
         if tomorrow:
             date += datetime.timedelta(days=1)
         day = (date - datetime.datetime(date.year, 1, 1)).days
+        if day >= 59 and not calendar.isleap(date.year):
+            day += 1
         if fractal_level not in self.instabilities["instabilities"]:
             return None
         levels = self.instabilities["instabilities"][fractal_level][day]
