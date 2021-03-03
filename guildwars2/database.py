@@ -131,7 +131,7 @@ class DatabaseMixin:
                     daily_list.append(name)
                 daily_list.sort()
                 if category == "pve":
-                    daily_list.extend(self.get_lw_dailies())
+                    daily_list.extend(self.get_lw_dailies(tomorrow=tomorrow))
                 doc[category] = daily_list
             offset = 0
             if tomorrow:
@@ -141,8 +141,7 @@ class DatabaseMixin:
             key = "cache.dailies"
             if tomorrow:
                 key += "_tomorrow"
-            await self.bot.database.set_cog_config(
-                self, {key: doc})
+            await self.bot.database.set_cog_config(self, {key: doc})
         except Exception as e:
             self.log.exception("Exception caching dailies: ", exc_info=e)
         if not tomorrow:
