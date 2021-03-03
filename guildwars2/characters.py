@@ -432,6 +432,8 @@ class CharactersMixin:
                     self.get_emoji(ctx,
                                    f"active_equipment_{letter}",
                                    return_obj=True))
+            if not all(emojis_cache["equipment"]["active"]):
+                can_use_emojis = False
 
         def generate_embed(builds, equipments, current_build,
                            current_equipment):
@@ -510,7 +512,13 @@ class CharactersMixin:
             equipment_tabs = results["equipment_tabs"]
             builds = []
             for tab in build_tabs:
+                # try:
                 build = await Build.from_build_tab(self, tab)
+                # except TypeError:
+                #     if results["profession"] == "Revenant":
+                #         return await ctx.send(
+                #             "Currently the API is experiencing some issues when it comes to revenants. The API dev is aware, and a workaround for the bot is being worked on. Sorry for the inconvenience!"
+                #         )
                 file = await build.render(filename=f"build_{tab['tab']}.png")
                 is_active = tab["is_active"]
                 name = tab["build"]["name"]
