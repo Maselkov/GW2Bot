@@ -275,7 +275,7 @@ class DailyMixin:
                              icon_url=self.bot.user.avatar_url)
         return embed
 
-    def get_lw_dailies(self):
+    def get_lw_dailies(self, tomorrow=False):
         LWS3_MAPS = [
             "Bloodstone Fen", "Ember Bay", "Bitterfrost Frontier",
             "Lake Doric", "Draconis Mons", "Siren's Landing"
@@ -284,8 +284,12 @@ class DailyMixin:
             "Domain of Istan", "Sandswept Isles", "Domain of Kourna",
             "Jahai Bluffs", "Thunderhead Peaks", "Dragonfall"
         ]
-        start_date = datetime.date(year=2020, month=5, day=30)
-        days = (datetime.datetime.utcnow().date() - start_date).days
+        date = datetime.datetime.utcnow().date()
+        if tomorrow:
+            date += datetime.timedelta(days=1)
+        days = (date - date.replace(month=1, day=1)).days
+        if days >= 59 and not calendar.isleap(date.year):
+            days += 1
         index = days % (len(LWS3_MAPS))
         lines = []
         lines.append(f"Daily Living World Season 3 - {LWS3_MAPS[index]}")
