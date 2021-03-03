@@ -125,6 +125,8 @@ class Build:
                     if legend:
                         legend_doc = await cog.db.legends.find_one(
                             {"_id": legend})
+                        if not legend_doc:
+                            continue
                         swap_skill_docs.append(await cog.db.skills.find_one(
                             {"_id": legend_doc["swap"]}))
                         utility_palettes = []
