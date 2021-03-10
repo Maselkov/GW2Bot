@@ -243,9 +243,9 @@ class DailyMixin:
                     emoji = self.get_emoji(ctx, f"daily {category}")
                     if category == "pve":
                         if i == 5:
-                            emoji = self.get_emoji(ctx, f"daily lws3")
+                            emoji = self.get_emoji(ctx, "daily lws3")
                         elif i == 6:
-                            emoji = self.get_emoji(ctx, f"daily lws4")
+                            emoji = self.get_emoji(ctx, "daily lws4")
                     lines.append(emoji + d)
                 value = "\n".join(lines)
             if category == "psna_later":
