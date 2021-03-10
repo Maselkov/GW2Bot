@@ -204,6 +204,15 @@ class DailyMixin:
         except discord.Forbidden:
             await ctx.send("Need permission to embed links")
 
+    def get_year_day(self, tomorrow=True):
+        date = datetime.datetime.utcnow().date()
+        if tomorrow:
+            date += datetime.timedelta(days=1)
+        day = (date - date.replace(month=1, day=1)).days
+        if day >= 59 and not calendar.isleap(date.year):
+            day += 1
+        return day
+
     async def daily_embed(self,
                           categories,
                           *,
@@ -234,7 +243,7 @@ class DailyMixin:
                 value = "\n".join(fractals[0])
             elif category == "strikes":
                 category = "Priority Strike"
-                strikes = self.get_strike(ctx)
+                strikes = self.get_strike(ctx, tomorrow=tomorrow)
                 value = strikes
             else:
                 lines = []
@@ -284,13 +293,8 @@ class DailyMixin:
             "Domain of Istan", "Sandswept Isles", "Domain of Kourna",
             "Jahai Bluffs", "Thunderhead Peaks", "Dragonfall"
         ]
-        date = datetime.datetime.utcnow().date()
-        if tomorrow:
-            date += datetime.timedelta(days=1)
-        days = (date - date.replace(month=1, day=1)).days
-        if days >= 59 and not calendar.isleap(date.year):
-            days += 1
-        index = days % (len(LWS3_MAPS))
+        day = self.get_year_day(tomorrow=tomorrow)
+        index = day % (len(LWS3_MAPS))
         lines = []
         lines.append(f"Daily Living World Season 3 - {LWS3_MAPS[index]}")
         lines.append(f"Daily Living World Season 4 - {LWS4_MAPS[index]}")
@@ -335,21 +339,15 @@ class DailyMixin:
             offset_days = -6
         return self.gamedata["pact_supply"][day + offset_days]
 
-    def get_strike(self, ctx):
-        start_date = datetime.date(year=2020, month=8, day=30)
-        days = (datetime.datetime.utcnow().date() - start_date).days
-        index = days % len(self.gamedata["strike_missions"])
+    def get_strike(self, ctx, tomorrow=False):
+        day = self.get_year_day(tomorrow=tomorrow)
+        index = day % len(self.gamedata["strike_missions"])
         return self.get_emoji(
             ctx, "daily strike") + self.gamedata["strike_missions"][index]
 
     def get_instabilities(self, fractal_level, *, tomorrow=False, ctx=None):
         fractal_level = str(fractal_level)
-        date = datetime.datetime.utcnow()
-        if tomorrow:
-            date += datetime.timedelta(days=1)
-        day = (date - datetime.datetime(date.year, 1, 1)).days
-        if day >= 59 and not calendar.isleap(date.year):
-            day += 1
+        day = self.get_year_day(tomorrow=tomorrow)
         if fractal_level not in self.instabilities["instabilities"]:
             return None
         levels = self.instabilities["instabilities"][fractal_level][day]
