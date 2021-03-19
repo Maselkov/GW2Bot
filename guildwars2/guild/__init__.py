@@ -1,6 +1,6 @@
 from .general import GeneralGuild
-from .sync import SyncGuild
+from .sync import GuildSync
 
 
-class GuildMixin(GeneralGuild, SyncGuild):
+class GuildMixin(GeneralGuild, GuildSync):
     pass

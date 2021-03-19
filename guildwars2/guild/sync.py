@@ -1,531 +1,862 @@
+from __future__ import annotations
+
 import asyncio
-import datetime
+from datetime import datetime
 
 import discord
+from discord.enums import Enum
+from discord.errors import HTTPException
 from discord.ext import commands, tasks
 from discord.ext.commands.cooldowns import BucketType
 
-from ..exceptions import APIError, APIForbidden, APIKeyError, APINotFound
+from ..exceptions import (APIError, APIForbidden, APIInvalidKey, APIKeyError,
+                          APINotFound)
+
+PROMPT_EMOJIS = ["✅", "❌"]
+GUILDSYNC_LIMIT = 8
+
+# GUILDSYNC SCHEMA
+#        guild_info = {
+#            "enabled": {"ranks" : Bool, "tag" : Bool},
+#            "name": str - guild name
+#            "tag": str - guild tag,
+#            "rank_roles": dict - mapping of ranks to role ids
+#            "gid": str - in game guild id
+#            "tag_role": int - role id of the tag role
+#            "guild_id" : int - discord guild id
+#            "key" : api key
+#        }
 
 
-class SyncGuild:
+class GuildSync:
+    # The good ol switcheroo
+    class SyncGuild:
+        def __init__(self, cog, doc, guild) -> None:
+            self.doc_id = doc["_id"]
+            self.guild = guild
+            self.cog = cog
+            self.ranks_to_role_ids = doc["rank_roles"]
+            self.roles = {}
+            # Reverse hashmap for performance
+            self.role_ids_to_ranks = {}
+            self.id = doc["gid"]
+            self.key = doc["key"]
+            self.tag_role_id = doc["tag_role"]
+            self.tag_role = None
+            self.tag_enabled = doc["enabled"]["tag"]
+            self.guild_name = f"{doc['name']} [{doc['tag']}]"
+            self.ranks_enabled = doc["enabled"]["ranks"]
+            self.base_ep = f"guild/{self.id}/"
+            self.ranks = None
+            self.members = None
+            self.error = None
+            self.last_error = doc.get("error")
+
+        async def fetch_members(self):
+            ep = self.base_ep + "members"
+            results = await self.cog.call_api(endpoint=ep, key=self.key)
+            self.members = {r["name"]: r["rank"] for r in results}
+
+        async def create_role(self, rank=None):
+            if rank:
+                name = rank
+            else:
+                name = self.guild_name
+            return await self.guild.create_role(name=name,
+                                                reason="$guildsync",
+                                                color=discord.Color(
+                                                    self.cog.embed_color))
+
+        async def save(self,
+                       *,
+                       ranks=False,
+                       tag_role=False,
+                       edited=False,
+                       error=False):
+            update = {}
+            if ranks:
+                roles = {rank: role.id for rank, role in self.roles.items()}
+                update["rank_roles"] = roles
+            if tag_role:
+                update["tag_role"] = self.tag_role_id
+            if edited:
+                update["key"] = self.key
+                update["enabled.ranks"] = self.ranks_enabled
+                update["enabled.tag"] = self.tag_enabled
+            if error:
+                update["error"] = self.error
+            await self.cog.db.guildsyncs.update_one({"_id": self.doc_id},
+                                                    {"$set": update})
+
+        async def delete(self):
+            await self.cog.db.guildsyncs.delete_one({"_id": self.doc_id})
+            for role_id in self.ranks_to_role_ids.values():
+                await self.safe_role_delete(self.guild.get_role(role_id))
+            await self.safe_role_delete(self.guild.get_role(self.tag_role_id))
+
+        async def safe_role_delete(self, role):
+            if role:
+                try:
+                    await role.delete(reason="$guildsync - role removed "
+                                      "or renamed in-game")
+                except HTTPException:
+                    pass
+
+        async def synchronize_roles(self):
+            if self.tag_enabled:
+                self.tag_role = self.guild.get_role(self.tag_role_id)
+                if not self.tag_role:
+                    try:
+                        role = await self.create_role()
+                        self.tag_role = role
+                        self.tag_role_id = role.id
+                        await self.save(tag_role=True)
+                    except discord.Forbidden:
+                        self.error = "Bot lacks permission to create roles."
+            else:
+                if self.tag_role_id:
+                    role = self.guild.get_role(self.tag_role_id)
+                    await self.safe_role_delete(role)
+                    self.tag_role = None
+                    self.tag_role_id = None
+                    await self.save(tag_role=True)
+            if self.ranks_enabled:
+                ep = f"guild/{self.id}/ranks"
+                try:
+                    ranks = await self.cog.call_api(ep, key=self.key)
+                except APIForbidden:
+                    self.error = "Key has in-game leader permissions"
+                    return
+                except APIInvalidKey:
+                    self.error = "Invalid key. Most likely deleted"
+                    return
+                except APIError:
+                    self.error = "API error"
+                    return
+                self.ranks = {r["id"]: r["order"] for r in ranks}
+                changed = False
+                for rank in self.ranks:
+                    if rank in self.ranks_to_role_ids:
+                        role = self.guild.get_role(
+                            self.ranks_to_role_ids[rank])
+                        if role:
+                            self.roles[rank] = role
+                            continue
+                    try:
+                        self.roles[rank] = await self.create_role(rank=rank)
+                    except discord.Forbidden:
+                        self.error = "Bot lacks permission to create roles."
+                    changed = True
+                orphaned = self.role_ids_to_ranks.keys() - self.roles
+                for orphan in orphaned:
+                    changed = True
+                    role = self.guild.get_role(self.ranks_to_role_ids[orphan])
+                    await self.safe_role_delete(role)
+                self.role_ids_to_ranks = {
+                    r.id: k
+                    for k, r in self.roles.items()
+                }
+                if changed:
+                    await self.save(ranks=True)
+                if self.last_error:
+                    self.error = None
+                    await self.save(error=True)
+            else:
+                for role_id in self.ranks_to_role_ids.values():
+                    role = self.guild.get_role(role_id)
+                    await self.safe_role_delete(role)
+
+    class SyncTarget:
+        @classmethod
+        async def create(cls, cog, member) -> GuildSync.SyncTarget:
+            self = cls()
+            self.member = member
+            doc = await cog.bot.database.get(member, cog)
+            keys = doc.get("keys", [])
+            if not keys:
+                key = doc.get("key")
+                if key:
+                    keys.append(key)
+            self.accounts = {key["account_name"] for key in keys}
+            self.is_in_any_guild = False
+            return self
+
+        async def add_roles(self, roles):
+            await self.member.add_roles(*roles, reason="$guildsync")
+
+        async def remove_roles(self, roles):
+            await self.member.remove_roles(*roles, reason="$guildsync")
+
+        async def sync_membership(self, sync_guild: GuildSync.SyncGuild):
+            lowest_order = float("inf")
+            highest_rank = None
+            to_add = []
+            belongs = False
+            current_rank_roles = {}
+            current_tag_role = None
+            for role in self.member.roles:
+                if role.id in sync_guild.role_ids_to_ranks:
+                    rank = sync_guild.role_ids_to_ranks[role.id]
+                    current_rank_roles[rank] = role
+                elif role.id == sync_guild.tag_role_id:
+                    current_tag_role = role
+            for account in self.accounts:
+                if account in sync_guild.members:
+                    belongs = True
+                    self.is_in_any_guild = True
+                    if not sync_guild.ranks_enabled:
+                        break
+                    if sync_guild.ranks_enabled:
+                        rank = sync_guild.members[account]
+                        order = sync_guild.ranks[rank]
+                        if order < lowest_order:
+                            lowest_order = order
+                            highest_rank = rank
+            if sync_guild.ranks_enabled and highest_rank:
+                if highest_rank not in current_rank_roles:
+                    to_add.append(sync_guild.roles[highest_rank])
+            if sync_guild.tag_enabled and sync_guild.tag_role:
+                if not current_tag_role and belongs:
+                    to_add.append(sync_guild.tag_role)
+            if to_add:
+                try:
+                    await self.add_roles(to_add)
+                except discord.Forbidden:
+                    pass
+                    # Notify code here
+            to_remove = []
+            for rank in current_rank_roles:
+                if rank != highest_rank:
+                    to_remove.append(current_rank_roles[rank])
+            if not belongs and current_tag_role:
+                to_remove.append(current_tag_role)
+            if to_remove:
+                try:
+                    await self.remove_roles(to_remove)
+                except discord.Forbidden:
+                    pass
+                    # Notify code here
+
     @commands.guild_only()
     @commands.has_permissions(manage_roles=True)
     @commands.group(name="guildsync", case_insensitive=True)
     async def guildsync(self, ctx):
         """In game guild rank to discord roles synchronization commands
-        This group allows you to set up a link between your ingame roster and discord.
+        This group allows you to set up a link between your roster and Discord.
         When enabled, new roles will be created for each of your ingame ranks,
         and ingame members are periodically synced to have the
         correct role in discord."""
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    async def clearsync(self, ctx):
-        doc = await self.bot.database.get_guild(ctx.guild, self)
-        ranks = doc["sync"].get("ranks")
-        for rank in ranks:
-            roleobject = discord.utils.get(ctx.guild.roles, id=ranks[rank])
-            try:
-                await roleobject.delete()
-            except discord.Forbidden:
-                await ctx.send(
-                    "Don't have permission to delete {0}".format(rank))
-            except AttributeError:
-                # role doesn't exist anymore?
-                pass
-        await self.bot.database.set_guild(
-            ctx.guild, {
-                "sync.ranks": {},
-                "sync.leader_key": None,
-                "sync.setupdone": False,
-                "sync.on": False,
-                "sync.guildrole": False,
-                "sync.name": None,
-                "sync.gid": None,
-                "sync.purge": False
-            }, self)
+    @guildsync.command(name="setup", hidden=True)
+    async def legacy_guildsync_setup(self, ctx):
+        return await ctx.send(
+            "*Guildsync now supports multiple guilds. "
+            f"This command has been deprecated\n\nUse **{ctx.prefix}guildsync "
+            "add** instead for setup")
 
+    @commands.bot_has_permissions(add_reactions=True, embed_links=True)
     @commands.has_permissions(administrator=True)
-    @guildsync.command(name="clear")
-    async def sync_clear(self, ctx):
-        """Wipes settings and created roles and turns sync off."""
-        doc = await self.bot.database.get_guild(ctx.guild, self)
-        enabled = self.sync_enabled(doc)
-        if not enabled:
-            return await ctx.send("No settings to clear.")
-        await self.clearsync(ctx)
-        await ctx.send("Your settings have been wiped, created roles deleted"
-                       " and sync disabled.")
+    @guildsync.command(name="edit", aliases=["clear"])
+    async def guildsync_edit(self, ctx):
+        """Change settings and delete guildsyncs."""
+        def bool_to_on(setting):
+            if setting:
+                return "**ON**"
+            return "**OFF**"
 
+        can_edit = ctx.channel.permissions_for(ctx.me).manage_messages
+        syncs = await self.db.guildsyncs.find({
+            "guild_id": ctx.guild.id
+        }).to_list(None)
+        if not syncs:
+            return await ctx.send(
+                "This server currently has no active guildsyncs.")
+        embed = discord.Embed(title="Currently synced guilds",
+                              color=self.embed_color)
+        syncs = [self.SyncGuild(self, doc, ctx.guild) for doc in syncs]
+        if len(syncs) != 1:
+            for i, sync in enumerate(syncs, start=1):
+                ranks = bool_to_on(sync.ranks_enabled)
+                tag = bool_to_on(sync.tag_enabled)
+                settings = (f"Syncing guild ranks: {ranks}\nGuild role for "
+                            f"members: {tag}")
+                if sync.last_error:
+                    settings += f"\n❗ERROR: {sync.last_error}"
+                embed.add_field(name=f"**{i}.** {sync.guild_name}",
+                                value=settings)
+            numbers = []
+            for i in range(1, i + 1):
+                emoji = f"{i}\N{combining enclosing keycap}"
+                numbers.append(emoji)
+
+            message = await ctx.send(embed=embed)
+            for number in numbers:
+                await message.add_reaction(number)
+            reaction = await ctx.get_reaction(message, numbers)
+            if not reaction:
+                return await message.edit(suppress=True)
+            option = numbers.index(reaction.emoji)
+            if can_edit:
+                await message.clear_reactions()
+        else:
+            option = 0
+            message = None
+        sync = syncs[option]
+
+        initial = True
+
+        class Option(Enum):
+            TOGGLE_RANKS = "📃"
+            TOGGLE_TAG = "📛"
+            CHANGE_KEY = "🔑"
+            DELETE = "❌"
+            SAVE = "✅"
+
+        emojis = [e.value for e in Option]
+        initial_ranks = sync.ranks_enabled
+        initial_tag = sync.tag_enabled
+        ranks_were_disabled = False
+        tag_was_disabled = False
+
+        while True:
+            role_warning = ranks_were_disabled or tag_was_disabled
+            embed = discord.Embed(title=f"Editing {sync.guild_name} sync",
+                                  color=self.embed_color)
+            description = (
+                f"Syncing ranks: {bool_to_on(sync.ranks_enabled)}\n"
+                f"Guild role for members: {bool_to_on(sync.tag_enabled)}")
+            if role_warning:
+                description += (
+                    "\n❗Toggling a setting off will delete existing roles "
+                    "that fall under that setting. They will be recreated if "
+                    "the setting is turned back on.")
+            if sync.last_error:
+                description += f"\n❗ERROR: {sync.last_error}"
+            embed.description = description
+            embed.add_field(name="Options",
+                            value="📃 - Toggle syncing ranks"
+                            "\n📛 - Toggle guild role"
+                            "\n🔑 - Change API key"
+                            "\n❌ - Delete this guildsync"
+                            "\n✅ - Close menu and save changes")
+            if can_edit and message:
+                asyncio.create_task(message.edit(embed=embed))
+            else:
+                if message:
+                    try:
+                        await message.delete()
+                    except discord.HTTPException:
+                        pass
+                message = await ctx.send(embed=embed)
+            if not can_edit or initial:
+
+                async def add_emojis():
+                    for emoji in emojis:
+                        await message.add_reaction(emoji)
+
+                asyncio.create_task(add_emojis())
+            initial = False
+            reaction = await ctx.get_reaction(message, emojis)
+            if not reaction:
+                try:
+                    return await message.delete()
+                except discord.HTTPException:
+                    try:
+                        return await message.edit(suppress=True)
+                    except discord.HTTPException:
+                        pass
+            option = Option(reaction.emoji)
+            if can_edit:
+                try:
+                    asyncio.create_task(reaction.remove(ctx.author))
+                except discord.HTTPException:
+                    pass
+            if option == Option.TOGGLE_RANKS:
+                sync.ranks_enabled = not sync.ranks_enabled
+                if not sync.ranks_enabled and initial_ranks:
+                    ranks_were_disabled = True
+            elif option == Option.TOGGLE_TAG:
+                sync.tag_enabled = not sync.tag_enabled
+                if not sync.tag_enabled and initial_tag:
+                    tag_was_disabled = True
+            elif option == Option.CHANGE_KEY:
+                key = await self.prompt_for_leader_key(ctx, sync.id)
+                if key:
+                    sync.key = key
+            elif option == Option.DELETE:
+                response = await ctx.get_answer("Are you sure you want to"
+                                                "delete this sync? To "
+                                                "confirm, type `yes` in chat.")
+                if not response:
+                    return
+                if response.lower().startswith("y"):
+                    await sync.delete()
+                    await ctx.send("Sync successfully deleted")
+                    if can_edit:
+                        try:
+                            await message.clear_reactions()
+                        except discord.HTTPException:
+                            pass
+                    return
+                await ctx.send("Unrecognized answer")
+            elif option == Option.SAVE:
+                await sync.save(edited=True)
+                await ctx.send("Successfully saved!")
+                if can_edit:
+                    await message.clear_reactions()
+                self.schedule_guildsync(ctx.guild, 1)
+                return
+
+    async def prompt_for_leader_key(self, ctx, guild_id):
+        response = await ctx.get_answer(
+            "Copy paste the API key you wish to use into the chat now. "
+            "The bot will delete your message (provided that enough "
+            "permissions have been given)",
+            return_full=True)
+        if not response:
+            return
+        try:
+            await response.delete()
+        except discord.HTTPException:
+            pass
+        if not response:
+            return None
+        verified = await self.verify_leader_permissions(
+            response.content, guild_id)
+        if not verified:
+            await ctx.send("This key is invalid or is missing permissions")
+            return None
+        if verified:
+            return response.content
+        return None
+
+    @commands.bot_has_permissions(manage_roles=True,
+                                  add_reactions=True,
+                                  embed_links=True)
     @commands.has_permissions(administrator=True)
-    @guildsync.command(name="setup")
-    async def sync_setup(self, ctx):
-        """Setup process for ingame ranks to discord member roles sync"""
-        def check(m):
+    @guildsync.command(name="add")
+    async def guildsync_add(self, ctx):
+        """Add a new guildsync. This is the setup command."""
+        def msg_check(m):
             return m.author == ctx.author and m.channel == ctx.channel
 
-        if not ctx.guild.me.guild_permissions.manage_roles:
-            await ctx.send(
-                "I require the 'Manage Roles' permission to do this.")
+        prompt = ("Please type the name of the in-game guild you wish to sync "
+                  "with. Ensure you respond exactly as it is written in-game.")
+        guild_name = await ctx.get_answer(prompt, timeout=260, check=msg_check)
+        if not guild_name:
             return
-        doc = await self.bot.database.get_guild(ctx.guild, self)
-        if not doc:
-            await self.bot.database.set_guild(ctx.guild, {
-                "sync.on": False,
-                "sync.setupdone": False
-            }, self)
-            doc = await self.bot.database.get_guild(ctx.guild, self)
-        enabled = self.sync_enabled(doc)
-        if enabled:
-            message = await ctx.send(
-                "You have already ran setup on this guild before, continuing "
-                "will reset existing settings and delete previously "
-                "created roles, reply Yes to confirm.")
-            try:
-                answer = await self.bot.wait_for("message",
-                                                 timeout=30,
-                                                 check=check)
-            except asyncio.TimeoutError:
-                return await message.edit(content="No response in time")
-            if answer.content.lower() != "yes":
-                return
-            else:
-                await self.clearsync(ctx)
-        message = await ctx.send(
-            "Please type the name of the in-game guild you want to sync "
-            "to into the chat now. Please ensure you respond with it "
-            "exactly as it is in-game.")
+        endpoint_id = "guild/search?name=" + guild_name.title().replace(
+            ' ', '%20')
+        can_edit = ctx.channel.permissions_for(ctx.me).manage_messages
         try:
-            answer = await self.bot.wait_for("message",
-                                             timeout=30,
-                                             check=check)
-        except asyncio.TimeoutError:
-            return await message.edit(content="No response in time")
-        scopes = ["guilds"]
-        endpoint_id = "guild/search?name=" + answer.content.replace(' ', '%20')
-        try:
-            guild_id = await self.call_api(endpoint_id)
-            guild_id = guild_id[0]
-            endpoints = [
-                "guild/{}/members".format(guild_id),
-                "guild/{}/ranks".format(guild_id), "guild/{}".format(guild_id)
-            ]
-            results, ranks, info = await self.call_multiple(
-                endpoints, ctx.author, scopes)
+            guild_ids = await self.call_api(endpoint_id)
+            guild_id = guild_ids[0]
+            base_ep = f"guild/{guild_id}"
+            info = await self.call_api(base_ep)
         except (IndexError, APINotFound):
             return await ctx.send("Invalid guild name")
-        except APIForbidden:
-            return await ctx.send(
-                "You need to have guild leader permissions ingame to be able "
-                "to use this synchronization.")
-        except APIKeyError:
-            return await ctx.send(
-                "You need to add an API key to your account first.")
         except APIError as e:
             return await self.error_handler(ctx, e)
-        roles = {}
-        for rank in ranks:
+        can_add = await self.can_add_sync(ctx.guild, guild_id)
+        if not can_add:
+            return await ctx.send(
+                "Cannot add this guildsync! You're either syncing with "
+                "this guild already, or you've hit the limit of "
+                f"{GUILDSYNC_LIMIT} active syncs. "
+                f"Check `{ctx.prefix}guildsync edit`")
+        embed = discord.Embed(title="Sync Type", color=self.embed_color)
+        embed.description = ("Select a sync type. You can always change this "
+                             "later using **$guildsync edit**")
+        fields = [
+            [
+                "**1.** Ranks and Guild Role",
+                "This option will sync in-game ranks Discord roles, as "
+                "well as give every member a guild-specific role for easy "
+                "permission management. The bot will create roles as needed."
+                "\n**Recommended if you are unsure**"
+            ],
+            [
+                "**2.** Ranks Only",
+                "The same as above, but without the Guild Role for all"
+                " members."
+            ],
+            [
+                "**3.** Guild Role Only",
+                "This option will not sync in-game ranks - it will only "
+                "grant all members the same, guild specific role\nRecommended "
+                "for large alliance servers spanning multiple guilds."
+            ]
+        ]
+        for name, value in fields:
+            embed.add_field(name=name, value=value, inline=False)
+        numbers = []
+        for i in range(1, 4):
+            emoji = f"{i}\N{combining enclosing keycap}"
+            numbers.append(emoji)
+        message = await ctx.send(embed=embed)
+
+        for number in numbers:
+            await message.add_reaction(number)
+        enabled = {"tag": False, "ranks": False}
+        reaction = await ctx.get_reaction(message, numbers, timeout=300)
+        if not reaction:
             try:
-                role = await ctx.guild.create_role(
-                    name=rank["id"],
-                    reason="GW2Bot Sync Role [$guildsync]",
-                    color=discord.Color(self.embed_color))
-                roles[rank["id"]] = role.id
-            except discord.Forbidden:
-                return await ctx.send("Couldn't create role {0}".format(
-                    rank["name"]))
-        leader_key_doc = await self.fetch_key(ctx.author)
-        await self.bot.database.set_guild(
-            ctx.guild, {
-                "sync.ranks": roles,
-                "sync.leader_key": leader_key_doc["key"],
-                "sync.setupdone": True,
-                "sync.on": True,
-                "sync.guildrole": False,
-                "sync.name": "[{0}]".format(info['tag']),
-                "sync.gid": guild_id
-            }, self)
-        guidelines = (
-            "Guild sync requires leader permissions in game\n"
-            "Guild sync is tied to the API key you currently have active, if you change your active "
-            "key with key switch this will not change the key used by guild sync.\n"
-            "Run this command again if you need to change the API key used by guild sync.\n"
-            "**Always ensure that GW2Bot is above the synced roles, or the "
-            "bot won't be able to assign them**\n"
-            "You can modify and change permissions of the roles created by "
-            "the bot.\n"
-            "Only server members with API key added to the bot will "
-            "participate in the sync, and no input is required from them. "
-            "New members which add their API key after sync is "
-            "setup will also be synced automatically.\n"
-            "Guild sync isn't instant - it can take even 30 minutes before "
-            "your settings are synced. To force a sync, you can use "
-            "**guildsync now**\n")
-        await ctx.send(
-            "Setup complete, you can toggle the synchronization on and off "
-            "at any time with $guildsync toggle on/off. Now, some guidelines. "
-            "In case of issues, refer to this message - you can also find it "
-            "on the website https://gw2bot.info under FAQ")
-        await ctx.send(guidelines)
-        doc = await self.bot.database.get_guild(ctx.guild)
-        await self.sync_guild_ranks(doc, True)
+                await ctx.send("No reaction in time")
+                return await message.delete()
+            except discord.HTTPException:
+                return
+        option = numbers.index(reaction.emoji)
+        if option == 0:
+            enabled["tag"] = True
+            enabled["ranks"] = True
+        elif option == 1:
+            enabled["ranks"] = True
+        else:
+            enabled["tag"] = True
+        try:
+            await message.clear_reactions()
+        except discord.HTTPException:
+            pass
+        embed = discord.Embed(title=info["name"], color=self.embed_color)
+        is_leader = True
+        try:
+            await self.call_api(base_ep + "/members", ctx.author, ["guilds"])
+        except (APIForbidden, APIKeyError):
+            is_leader = False
+        embed.description = (
+            "For the next step you will need to select how you wish to handle "
+            "the authentication, as checking the guild ranks requires an API "
+            "key with Guild Leader permissions.")
+        fields = [
+            [
+                "**1.** Use your own currently active API key",
+                "The bot will use your current API key to handle "
+                "authentication. You need to be an in-game leader and the "
+                "sync will stop working should the key be deleted. It is "
+                "therefore recommended that you make a separate API key "
+                "for Guildsync, but it is not requried.\n**This option is "
+                "most likely what you want if you don't know what to select.**"
+            ],
+            [
+                "**2.** Have the bot prompt another user for authorization",
+                "The bot will DM a server member that you point to and ask "
+                "them to allow Guildsync to access their currently active API "
+                "key. They need to have in-game Leader permissions and it is "
+                "recommended that they make a separate API key for Guildsync."
+                "\n**This option is most useful in case of alliance servers "
+                "that span multiple, separate guilds.**"
+            ],
+            [
+                "**3.** Enter a key",
+                "The bot will prompt you for an API key that will be used "
+                "for authorization."
+            ]
+        ]
+        if not is_leader:
+            fields[0][0] = f"~~{fields[0][0]}~~"
+            fields[0][1] = (
+                f"~~{fields[0][1]}~~\n\n**This option is unavailable since "
+                "you do not have enough in-game permissions.**")
+        for name, value in fields:
+            embed.add_field(name=name, value=value, inline=False)
+        if can_edit:
+            await message.edit(embed=embed)
+        else:
+            message = await ctx.send(embed=embed)
+        if not is_leader:
+            numbers.pop(0)
+        for number in numbers:
+            await message.add_reaction(number)
+        reaction = await ctx.get_reaction(message, numbers, timeout=300)
+        if not reaction:
+            try:
+                await ctx.send("No reaction in time")
+                return await message.delete()
+            except discord.HTTPException:
+                return
+        option = numbers.index(reaction.emoji)
+        if not is_leader:
+            option += 1
+        guild_info = {
+            "enabled": enabled,
+            "name": info["name"],
+            "tag": info["tag"]
+        }
+        try:
+            await message.clear_reactions()
+        except discord.HTTPException:
+            pass
+        if option == 0:
+            if not is_leader:
+                return await ctx.send(
+                    "You need to be a leader to select this option")
+            key_doc = await self.fetch_key(ctx.author)
+            key = key_doc["key"]
+        elif option == 2:
+            key = await self.prompt_for_leader_key(ctx, guild_id)
+            if not key:
+                return
+        elif option == 1:
+            prompt = (
+                "Please @mention the user that you wish the bot to prompt.")
+            answer = await ctx.get_answer(prompt,
+                                          timeout=260,
+                                          check=msg_check,
+                                          return_full=True)
+            if not answer:
+                return
+            if len(answer.mentions) != 1:
+                return await ctx.send("Invalid answer. Aborting.")
+            user = answer.mentions[0]
+            if user not in ctx.guild.members:
+                return await ctx.send("This user is not in this server")
+            try:
+                key_doc = await self.fetch_key(user, ["guilds"])
+            except APIKeyError:
+                return await ctx.send("The user does not have a valid key")
+            key = key_doc["key"]
+            try:
+                await self.call_api(base_ep + "/members", key=key)
+            except APIForbidden:
+                return await ctx.send("The user is missing leader permissions."
+                                      )
+
+            try:
+                embed = discord.Embed(title="Guildsync request",
+                                      embed=self.embed_color)
+                embed.description = (
+                    "User {0.name}#{0.discriminator} (`{0.id}`), an "
+                    "Administrator in {0.guild.name} server (`{0.guild.id}`) "
+                    "is requesting your authorization in order to enable "
+                    "Guildsync for the `{1}` guild, of which you are a leader "
+                    "of.\nShould you agree, the bot will use your the API key "
+                    "that you currently have active to enable Guildsync. If "
+                    "the key is deleted at any point the sync will stop "
+                    "working.\n**Your key will never be visible to the "
+                    "requesting user or anyone else**".format(
+                        ctx.author, info["name"]))
+                embed.set_footer(
+                    text="Use the reactions below to answer. "
+                    "If no response is given within three days this request "
+                    "will expire.")
+                msg = await user.send(embed=embed)
+                for emoji in PROMPT_EMOJIS:
+                    await msg.add_reaction(emoji)
+                prompt_doc = {
+                    "guildsync_id": guild_id,
+                    "guild_id": ctx.guild.id,
+                    "requester_id": ctx.author.id,
+                    "created_at": datetime.utcnow(),
+                    "message_id": msg.id,
+                    "options": guild_info
+                }
+                await self.db.guildsync_prompts.insert_one(prompt_doc)
+                await self.db.guildsync_prompts.create_index(
+                    "created_at", expireAfterSeconds=259200)
+                return await ctx.send("Message successfully sent. You will be "
+                                      "notified when the user replies.")
+            except discord.HTTPException:
+                return await ctx.send("Could not send a message to user - "
+                                      "they most likely have DMs disabled")
+        await self.guildsync_success(ctx.guild,
+                                     guild_id,
+                                     destination=ctx,
+                                     key=key,
+                                     options=guild_info)
+
+    async def can_add_sync(self, guild, in_game_guild_id):
+        result = await self.db.guildsyncs.find_one({
+            "guild_id": guild.id,
+            "gid": in_game_guild_id
+        })
+        if result:
+            return False
+        count = await self.db.guildsyncs.count_documents(
+            {"guild_id": guild.id})
+        if count > GUILDSYNC_LIMIT:
+            return False
+        return True
+
+    async def guildsync_success(self,
+                                guild,
+                                in_game_guild_id,
+                                *,
+                                destination,
+                                key,
+                                options,
+                                extra_message=None):
+        if extra_message:
+            await destination.send(extra_message)
+        doc = {
+            "guild_id": guild.id,
+            "gid": in_game_guild_id,
+            "key": key,
+            "rank_roles": {},
+            "tag_role": None
+        } | options
+        can_add = await self.can_add_sync(guild, in_game_guild_id)
+        if not can_add:
+            return await destination.send(
+                "Cannot add guildsync. You've either reached the limit "
+                f"of {GUILDSYNC_LIMIT} active syncs, or you're trying to add "
+                "one that already exists. See $guildsync edit.")
+        await self.db.guildsyncs.insert_one(doc)
+        guild_doc = await self.bot.database.get(guild, self)
+        sync_doc = guild_doc.get("guildsync", {})
+        enabled = sync_doc.get("enabled", None)
+        if enabled is None:
+            await self.bot.database.set(guild, {"guildsync.enabled": True},
+                                        self)
+        await destination.send("Guildsync succesfully added!")
+        self.schedule_guildsync(guild, 0)
 
     @commands.has_permissions(administrator=True)
     @guildsync.command(name="toggle")
     async def sync_toggle(self, ctx, on_off: bool):
-        """Toggles synchronization on/off - does not wipe settings"""
-        doc = await self.bot.database.get_guild(ctx.guild, self)
-        enabled = self.sync_enabled(doc)
-        if not enabled:
-            await ctx.send(
-                "You need to run setup before you can toggle synchronization")
-            return
-        await self.bot.database.set_guild(ctx.guild, {"sync.on": on_off}, self)
+        """Global toggle for synchronization - does not wipe the settings"""
+        guild = ctx.guild
+        await self.bot.database.set_guild(guild, {"guildsync.enabled": on_off},
+                                          self)
         if on_off:
-            msg = "Synchronization enabled."
+            msg = ("Guildsync is now enabled. You may still need to "
+                   "add guildsyncs using `guildsync add` before it "
+                   "is functional.")
         else:
-            msg = "Synchronization disabled."
-        await ctx.send(msg)
-
-    @commands.has_permissions(administrator=True)
-    @guildsync.command(name="purge")
-    async def sync_purge(self, ctx, on_off: bool):
-        """Toggles kicking of users that are not in the linked GW2 guild.
-        Discord users not in the guildsync GW2 guild are kicked if this is enabled unless they have any other
-        non-guildsync role or have been in the server for less than 48 hours."""
-        doc = await self.bot.database.get_guild(ctx.guild, self)
-        enabled = self.sync_enabled(doc)
-        if not enabled:
-            await ctx.send("You need to run setup before you can toggle this.")
-            return
-        if on_off:
-            await ctx.send(
-                "Members without any other role that have been in the server for longer than 48 hours"
-                " will be removed during guild syncs.")
-            message = await ctx.send(
-                "Are you sure you want to enable this? React ✔ to confirm.")
-            await message.add_reaction("✔")
-
-            def waitcheck(wait_react, wait_user):
-                return wait_react.emoji == "✔" and wait_user == ctx.author
-
-            try:
-                await self.bot.wait_for("reaction_add",
-                                        check=waitcheck,
-                                        timeout=30.0)
-            except asyncio.TimeoutError:
-                await message.clear_reactions()
-                await message.edit(content="You took too long.")
-                return
-            await message.clear_reactions()
-            await ctx.send("Enabled.")
-            await self.bot.database.set_guild(ctx.guild,
-                                              {"sync.purge": on_off}, self)
-        else:
-            await ctx.send("Disabled automatic purging.")
-            await self.bot.database.set_guild(ctx.guild,
-                                              {"sync.purge": on_off}, self)
-
-    @commands.has_permissions(administrator=True)
-    @guildsync.command(name="guildrole")
-    async def guildrole_toggle(self, ctx, on_off: bool):
-        """Adds a new role based on the guild tag for channel management."""
-        doc = await self.bot.database.get_guild(ctx.guild, self)
-        guilddoc = doc["sync"]
-        guild = self.bot.get_guild(doc["_id"])
-        enabled = self.sync_enabled(doc)
-        if not enabled:
-            await ctx.send(
-                "You need to run setup before you can toggle the guild role.")
-            return
-
-        # Find and create name if key doesn't exist.
-        if "name" not in guilddoc:
-            info = await self.call_api("guild/{0}".format(guilddoc["gid"]))
-            guilddoc["name"] = "[{0}]".format(info['tag'])
-            await self.bot.database.set_guild(guild,
-                                              {"sync.name": guilddoc["name"]},
-                                              self)
-
-        await self.bot.database.set_guild(ctx.guild,
-                                          {"sync.guildrole": on_off}, self)
-        if on_off:
-            # Create role if not enabled already.
-            if not guilddoc["guildrole"]:
-                try:
-                    role = await ctx.guild.create_role(
-                        name=guilddoc["name"],
-                        reason="GW2Bot Sync Role [$guildsync]",
-                        color=discord.Color(self.embed_color))
-                    guilddoc["ranks"][guilddoc["name"]] = role.id
-                except discord.Forbidden:
-                    return await ctx.send("Couldn't create role {0}".format(
-                        guilddoc["name"]))
-                await self.bot.database.set_guild(
-                    guild, {"sync.ranks": guilddoc["ranks"]}, self)
-            msg = ("Guild role enabled and created. Guild sync needs to "
-                   "run for members to be synced to the role.")
-        else:
-            # Force sync
-            doc = await self.bot.database.get_guild(ctx.guild)
-            await self.sync_guild_ranks(doc)
-            msg = ("Guild role disabled and cleared.")
+            msg = ("Guildsync is now disabled globally on this server. "
+                   "Run this command again to enable it.")
         await ctx.send(msg)
 
     @guildsync.command(name="now")
     @commands.cooldown(1, 60, BucketType.user)
     async def sync_now(self, ctx):
-        """Force a synchronization, also deletes or creates new ranks as needed."""
-        doc = await self.bot.database.get_guild(ctx.guild, self)
-        enabled = self.sync_enabled(doc)
-        if not enabled:
-            return await ctx.send(
-                "You need to run setup before you can synchronize.")
-        await ctx.trigger_typing()
-        doc = await self.bot.database.get_guild(ctx.guild)
-        await self.sync_guild_ranks(doc)
-        await ctx.send("Done.")
+        """Force a synchronization"""
+        await ctx.send("Ran guildsync.")
+        self.schedule_guildsync(ctx.guild, 0)
 
-    async def getmembers(self, leader, guild_id):
-        scopes = ["guilds"]
-        try:
-            endpoint = "guild/{}/members".format(guild_id)
-            results = await self.call_api(endpoint=endpoint,
-                                          key=leader,
-                                          scopes=scopes)
-            return results
-        except Exception as e:
-            return None
-
-    async def add_member_to_role(self, role, member, guild):
-        try:
-            await member.add_roles(role,
-                                   reason="GW2Bot Integration [$guildsync]")
-        except discord.Forbidden:
-            self.log.debug("Permissions error when trying to "
-                           "give {0} role to {1} user "
-                           "in {2} server.".format(role.name, member.name,
-                                                   guild.name))
-            return None
-        except AttributeError:
-            # role no longer exists - deleted?
-            return None
-
-    async def sync_guild_ranks(self, doc, initial=False):
-        name = self.__class__.__name__
-        guild_doc = doc["cogs"][name]["sync"]
-        enabled = guild_doc.get("on", False)
-        purge = guild_doc.get("purge", False)
-        guildrole = guild_doc["name"] if guild_doc.get("guildrole",
-                                                       False) else None
-        if not enabled:
-            return
-        guild = self.bot.get_guild(doc["_id"])
-        if guild is None:
-            return
-        # Dict of ranks - key is the in-game name of the rank, value is the discord role id
-        saved_ranks = guild_doc["ranks"]
-        # Guild id of the guild used when calling the API
-        gid = guild_doc["gid"]
-        endpoint = "guild/{0}/ranks".format(gid)
-        # Discord user ID of the guild leader (their key is used for API calls)
-        try:
-            leader_key = guild_doc["leader_key"]
-        # Legacy user that has their discord id saved in the guild doc rather than API key
-        except KeyError:
-            lid = guild_doc["leader"]
-            leader = await self.bot.fetch_user(lid)
-            try:
-                leader_key_doc = await self.fetch_key(leader)
-            except APIKeyError:
-                # User removed their key
-                await self.bot.database.set_guild(guild,
-                                                  {"sync.setupdone": False})
+    @commands.has_permissions(administrator=True)
+    @commands.bot_has_permissions(add_reactions=True)
+    @guildsync.command(name="purge")
+    async def sync_purge(self, ctx, on_off: bool):
+        """Toggles kicking of users that are not in any of the linked guilds.
+        Discord users not in the  are kicked if this is enabled unless they
+        have any other non-guildsync role or have been in the server for
+        less than 48 hours."""
+        if on_off:
+            await ctx.send(
+                "Members without any other role that have been in the "
+                "server for longer than 48 hourswill be kicked during guild "
+                "syncs.")
+            message = await ctx.send(
+                "Are you sure you want to enable this? React ✔ to confirm.")
+            await message.add_reaction("✔")
+            reaction = await ctx.get_reaction(message, ["✔"])
+            if not reaction:
+                await ctx.send("No response in time.")
                 return
-            # Get their API key and save it to the doc
-            leader_key = leader_key_doc["key"]
-            await self.bot.database.set_guild(guild,
-                                              {"sync.leader_key": leader_key},
-                                              self)
-        scopes = ["guilds"]
-        # Array to hold discord roles that the server currently has
-        current_ranks = []
-        # Array to hold discord roles that the server currently has that match up with a in-game rank
-        existing_ranks = []
-        # Array to hold new in-game ranks that don't have a discord role yet
-        new_ranks = []
-        # Dict to hold the new dict of ranks to be saved to the guild_doc
-        new_saved = {}
-        if not initial:
-            if len(guild.roles) <= 1:
-                return
-        # Collect ranks from API
-        try:
-            ranks = await self.call_api(endpoint=endpoint,
-                                        key=leader_key,
-                                        scopes=scopes)
-        except APIError:
-            return
-        # Add guild role to ranks dict from API
-        if guildrole:
-            ranks.append({'id': guildrole})
-        for rank in ranks:
+            await ctx.send("Enabled.")
+            await self.bot.database.set(ctx.guild, {"guildsync.purge": on_off},
+                                        self)
             try:
-                # Try to find a discord role that matches the rank from API
-                discord_role = discord.utils.get(
-                    guild.roles, id=guild_doc["ranks"][rank["id"]])
-                if discord_role:
-                    # Append it to our list of existing ranks and to the dict
-                    existing_ranks.append(discord_role)
-                    new_saved[rank["id"]] = discord_role.id
-                else:
-                    new_ranks.append(rank["id"])
-            except KeyError:
-                # Can't find it, so this is a new in-game rank.
-                new_ranks.append(rank["id"])
-        # For each role in our list of role ids from the guild doc, get the discord role
-        for role_id in saved_ranks.values():
-            discord_role = discord.utils.get(guild.roles, id=role_id)
-            current_ranks.append(discord_role)
-        # Delete roles that we have on discord that no longer exist in-game.
-        to_delete = set(current_ranks) - set(existing_ranks)
-        for rank in to_delete:
-            try:
-                await rank.delete()
-            # Not allowed to delete the role (permissions issue)
-            except discord.Forbidden:
+                await message.clear_reactions()
+            except discord.HTTPException:
                 pass
-            # Role doesn't exist somehow?
-            except AttributeError:
-                pass
-        # Create new roles from in-game.
-        for role in new_ranks:
-            new_role = await guild.create_role(
-                name=role,
-                reason="GW2Bot Sync Role [$guildsync]",
-                color=discord.Color(self.embed_color))
-            new_saved[role] = new_role.id
-
-        # Save the new rank dict to the guild_doc
-        guild_doc["ranks"] = new_saved
-        await self.bot.database.set_guild(guild, {"sync.ranks": new_saved},
-                                          self)
-        gw2members = await self.getmembers(leader_key, gid)
-        # Array to hold a role list from the roles we now have in the new dict
-        role_list = []
-        if guildrole:
-            guildrole = discord.utils.get(guild.roles,
-                                          id=guild_doc["ranks"][guildrole])
-        # Fill the role list
-        for role_id in new_saved.values():
-            discord_role = discord.utils.get(guild.roles, id=role_id)
-            role_list.append(discord_role)
-        if gw2members is not None:
-            # Iterate through discord's member list
-            for member in guild.members:
-                rank = None
-                if not await self.check_membership(member, gw2members):
-                    # If they have a key attached but aren't in the guild, remove any guild sync roles from them
-                    if guildrole:
-                        role_list.append(guildrole)
-                    await self.remove_sync_roles(member, role_list)
-                    if purge:
-                        membership_duration = (
-                            datetime.datetime.utcnow() -
-                            member.joined_at).total_seconds()
-                        if len(member.roles
-                               ) <= 1 and membership_duration > 172800:
-                            await member.guild.kick(
-                                user=member,
-                                reason="GW2Bot Integration Guildsync Purge")
-                else:
-                    key_doc = await self.fetch_key(member)
-                    name = key_doc["account_name"]
-                    # Find the name of their rank in-game
-                    for gw2user in gw2members:
-                        if gw2user["name"] == name:
-                            rank = gw2user["rank"]
-                    if rank:
-                        # Find the id of that rank in the guild_doc and get the discord role
-                        try:
-                            desired_role = discord.utils.get(
-                                member.guild.roles,
-                                id=guild_doc["ranks"][rank])
-                            # If they don't have that role add it and remove other roles.
-                            if desired_role not in member.roles:
-                                await self.remove_sync_roles(member, role_list)
-                                await self.add_member_to_role(
-                                    desired_role, member, guild)
-                            # If they don't have the guild role, and guild role is enabled, add it
-                            if guildrole:
-                                if guildrole not in member.roles:
-                                    await self.add_member_to_role(
-                                        guildrole, member, guild)
-                        except Exception as e:
-                            self.log.debug(
-                                "Couldn't get the role object for {0} user "
-                                "in {1} server {2}.".format(
-                                    member.name, guild.name, e))
         else:
-            self.log.debug(
-                "Unable to obtain member list for {0} server.".format(
-                    guild.name))
+            await self.bot.database.set(ctx.guild, {"guildsync.purge": on_off},
+                                        self)
+            await ctx.send("Disabled automatic purging.")
+
+    async def verify_leader_permissions(self, key, guild_id):
+        try:
+            await self.call_api(f"guild/{guild_id}/members", key=key)
+            return True
+        except APIError:
+            return False
+
+    async def run_guildsyncs(self, guild, *, sync_for=None):
+        guild_doc = await self.bot.database.get(guild, self)
+        guildsync_doc = guild_doc.get("guildsync", {})
+        enabled = guildsync_doc.get("enabled", False)
+        if not enabled:
+            return
+        purge = guildsync_doc.get("purge", False)
+        cursor = self.db.guildsyncs.find({"guild_id": guild.id})
+        targets = []
+        if sync_for:
+            target = targets.append(await
+                                    self.SyncTarget.create(self, sync_for))
+        else:
+            for member in guild.members:
+                target = await self.SyncTarget.create(self, member)
+                if target:
+                    targets.append(target)
+        async for doc in cursor:
+            try:
+                sync = self.SyncGuild(self, doc, guild)
+                await sync.synchronize_roles()
+                if sync.error:
+                    await sync.save(error=True)
+                    if sync.ranks_enabled and not sync.roles:
+                        continue
+                try:
+                    await sync.fetch_members()
+                except APIError:
+                    sync.error = "Couldn't fetch guild members."
+                    await sync.save(error=True)
+                    continue
+                for target in targets:
+                    await target.sync_membership(sync)
+
+            except Exception as e:
+                self.log.exception("Exception in guildsync", exc_info=e)
+        if purge:
+            for target in targets:
+                member = target.member
+                membership_duration = (datetime.datetime.utcnow() -
+                                       member.joined_at).total_seconds()
+                if not target.is_in_any_guild:
+                    if len(member.roles) == 1 and membership_duration > 172800:
+                        await member.guild.kick(user=member,
+                                                reason="$guildsync purge")
+
+    async def guildsync_consumer(self):
+        while True:
+            try:
+                _, coro = await self.guildsync_queue.get()
+                await coro
+            except Exception as e:
+                self.log.exception("Exception in guildsync consumer",
+                                   exc_info=e)
+            finally:
+                try:
+                    self.guildsync_queue.task_done()
+                except ValueError as e:
+                    self.log.exception("Error in guildsync consumer",
+                                       exc_info=e)
+            await asyncio.sleep(0.5)
 
     @tasks.loop(seconds=60)
     async def guild_synchronizer(self):
-        cursor = self.bot.database.get_guilds_cursor(
-            {
-                "sync.on": True,
-                "sync.setupdone": True
-            }, self, batch_size=30)
+        cursor = self.bot.database.iter("guilds", {"guildsync.enabled": True},
+                                        self,
+                                        batch_size=20,
+                                        subdocs=["sync"])
         async for doc in cursor:
             try:
-                await self.sync_guild_ranks(doc)
+                if doc["_obj"]:
+                    self.schedule_guildsync(doc["_obj"], 2)
             except asyncio.CancelledError:
                 return
             except Exception:
                 pass
-            await asyncio.sleep(5)
+        await self.guildsync_queue.join()
 
-    def sync_enabled(self, doc):
-        try:
-            enabled = doc["sync"].get("setupdone", False)
-        except KeyError:
-            enabled = False
-        return enabled
-
-    async def check_membership(self, member, member_list):
-        member_doc = await self.bot.database.get(member, self)
-        try:
-            keys = member_doc["keys"]
-        except KeyError:
-            keys = []
-            try:
-                keys[0] = await self.fetch_key(member)
-            except (APIKeyError, IndexError):
-                return False
-        for key in keys:
-            name = key["account_name"]
-            for user in member_list:
-                if user["name"] == name:
-                    return True
-        return False
-
-    async def remove_sync_roles(self, member, role_list):
-        for role in role_list:
-            try:
-                if role in member.roles:
-                    await member.remove_roles(
-                        role, reason="GW2Bot Integration [$guildsync]")
-            except discord.Forbidden:
-                self.log.debug("Permissions error when trying to "
-                               "remove {0} role from {1} "
-                               "user in {2} server.".format(
-                                   role.name, member.name, member.guild.name))
-            except discord.HTTPException:
-                # usually because user doesn't have the role
-                pass
+    def schedule_guildsync(self, guild, priority, *, member=None):
+        coro = self.run_guildsyncs(guild, sync_for=member)
+        self.guildsync_entry_number += 1
+        self.guildsync_queue.put_nowait(
+            ((priority, self.guildsync_entry_number), coro))
 
     @commands.Cog.listener("on_member_join")
     async def guildsync_on_member_join(self, member):
@@ -533,8 +864,67 @@ class SyncGuild:
             return
         guild = member.guild
         doc = await self.bot.database.get(guild, self)
-        guild_doc = doc.get("sync", {})
-        enabled = guild_doc.get("on", False)
-        setupdone = guild_doc.get("setupdone", False)
-        if enabled and setupdone:
-            await self.sync_guild_ranks(doc)
+        sync = doc.get("guildsync", {})
+        enabled = sync.get("enabled", False)
+        if enabled:
+            self.schedule_guildsync(guild, 1, member=member)
+
+    @commands.Cog.listener("on_raw_reaction_add")
+    async def handle_guildsync_prompt_answers(
+            self, payload: discord.RawReactionActionEvent):
+        if payload.guild_id:
+            return
+        if payload.user_id == self.bot.user.id:
+            return
+        emoji = payload.emoji
+        if not emoji.is_unicode_emoji():
+            return
+        if str(emoji) not in PROMPT_EMOJIS:
+            return
+        emoji = str(emoji)
+        answer = not PROMPT_EMOJIS.index(emoji)
+        query = {"message_id": payload.message_id}
+        doc = await self.db.guildsync_prompts.find_one(query)
+        if not doc:
+            return
+        user = self.bot.get_user(payload.user_id)
+        if not answer:
+            await self.db.guildsync_prompts.delete_one(query)
+            return await user.send(
+                "Noted, request rejected.\nNote that only "
+                "admins can send guildsync requests - if you're being "
+                "harassed then it is recommended to report them or to leave "
+                "the server.")
+        try:
+            key = await self.fetch_key(user, scopes=["guilds"])
+            key = key["key"]
+        except APIKeyError:
+            return await user.send(
+                "It seems like your key is invalid. Try switching your key "
+                "and then try again by removing your reaction and adding "
+                "it back.")
+        in_game_guild_id = doc["guildsync_id"]
+        is_leader = await self.verify_leader_permissions(key, in_game_guild_id)
+        if not is_leader:
+            return await user.send(
+                "It seems like your key does not have the necessary in-game "
+                "permissions. Try switching your key, then try again by "
+                "removing and adding the reaction")
+        guild = self.bot.get_guild(doc["guild_id"])
+        if not guild:
+            return await user.send("It seems like the server no longer exists")
+        requesting_user = self.bot.get_user(doc["requester_id"])
+        if not requesting_user:
+            return await user.send("It seems like the requesting user no "
+                                   "longer exists")
+        await self.guildsync_success(
+            guild,
+            in_game_guild_id,
+            key=key,
+            destination=requesting_user,
+            options=doc["options"],
+            extra_message="User {0.name}#{0.discriminator} has accepted your "
+            "request for Guildsync authorization in {1.name}. "
+            "Guild: {2}".format(user, guild, doc["options"]["name"]))
+        await user.send("Guildsync successfully enabled! Thank you.")
+        await self.db.guildsync_prompts.delete_one(query)

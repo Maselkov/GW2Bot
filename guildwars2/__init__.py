@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import json
 import logging
@@ -41,7 +42,8 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
         with open("cogs/guildwars2/gamedata.json", encoding="utf-8",
                   mode="r") as f:
             self.gamedata = json.load(f)
-        with open("cogs/guildwars2/instabilities.json", encoding="utf-8",
+        with open("cogs/guildwars2/instabilities.json",
+                  encoding="utf-8",
                   mode="r") as f:
             self.instabilities = json.load(f)
         self.session = bot.session
@@ -59,6 +61,9 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
         setup_tasks = [
             self.prepare_emojis, self.prepare_linkpreview_guild_cache
         ]
+        self.guildsync_entry_number = 0
+        self.guildsync_queue = asyncio.PriorityQueue()
+        self.bot.loop.create_task(self.guildsync_consumer())
         for task in setup_tasks:
             bot.loop.create_task(task())
         self.tasks = [
