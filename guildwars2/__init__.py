@@ -63,7 +63,6 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
         ]
         self.guildsync_entry_number = 0
         self.guildsync_queue = asyncio.PriorityQueue()
-        self.bot.loop.create_task(self.guildsync_consumer())
         for task in setup_tasks:
             bot.loop.create_task(task())
         self.tasks = [
@@ -71,7 +70,7 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
             self.gem_tracker, self.world_population_checker,
             self.guild_synchronizer, self.boss_notifier,
             self.forced_account_names, self.event_reminder_task,
-            self.worldsync_task
+            self.worldsync_task, self.guildsync_consumer
         ]
         for task in self.tasks:
             task.start()

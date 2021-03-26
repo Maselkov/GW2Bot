@@ -5,7 +5,6 @@ from datetime import datetime
 
 import discord
 from discord.enums import Enum
-from discord.errors import HTTPException
 from discord.ext import commands, tasks
 from discord.ext.commands.cooldowns import BucketType
 
@@ -51,21 +50,13 @@ class GuildSync:
             self.members = None
             self.error = None
             self.last_error = doc.get("error")
+            self.create_roles = guild.me.guild_permissions.manage_roles
+            self.delete_roles = self.create_roles
 
         async def fetch_members(self):
             ep = self.base_ep + "members"
             results = await self.cog.call_api(endpoint=ep, key=self.key)
             self.members = {r["name"]: r["rank"] for r in results}
-
-        async def create_role(self, rank=None):
-            if rank:
-                name = rank
-            else:
-                name = self.guild_name
-            return await self.guild.create_role(name=name,
-                                                reason="$guildsync",
-                                                color=discord.Color(
-                                                    self.cog.embed_color))
 
         async def save(self,
                        *,
@@ -94,32 +85,59 @@ class GuildSync:
                 await self.safe_role_delete(self.guild.get_role(role_id))
             await self.safe_role_delete(self.guild.get_role(self.tag_role_id))
 
+        async def create_role(self, rank=None):
+            if not self.create_roles:
+                return
+            if rank:
+                name = rank
+            else:
+                name = self.guild_name
+            coro = self.guild.create_role(name=name,
+                                          reason="$guildsync",
+                                          color=discord.Color(
+                                              self.cog.embed_color))
+            try:
+                return await asyncio.wait_for(coro, timeout=5)
+            except discord.Forbidden:
+                self.error = "Bot lacks permission to create roles."
+                self.create_roles = False
+            except asyncio.TimeoutError:
+                self.create_roles = False
+            except discord.HTTPException:
+                pass
+
         async def safe_role_delete(self, role):
+            if not self.delete_roles:
+                return
             if role:
                 try:
-                    await role.delete(reason="$guildsync - role removed "
-                                      "or renamed in-game")
-                except HTTPException:
+                    coro = role.delete(reason="$guildsync - role removed "
+                                       "or renamed in-game")
+                    await asyncio.wait_for(coro, timeout=5)
+                    return True
+                except (discord.Forbidden, asyncio.TimeoutError):
+                    self.delete_roles = False
+                except discord.HTTPException:
                     pass
+                return False
+            return True
 
         async def synchronize_roles(self):
             if self.tag_enabled:
                 self.tag_role = self.guild.get_role(self.tag_role_id)
                 if not self.tag_role:
-                    try:
-                        role = await self.create_role()
+                    role = await self.create_role()
+                    if role:
                         self.tag_role = role
                         self.tag_role_id = role.id
                         await self.save(tag_role=True)
-                    except discord.Forbidden:
-                        self.error = "Bot lacks permission to create roles."
             else:
                 if self.tag_role_id:
                     role = self.guild.get_role(self.tag_role_id)
-                    await self.safe_role_delete(role)
-                    self.tag_role = None
-                    self.tag_role_id = None
-                    await self.save(tag_role=True)
+                    if await self.safe_role_delete(role):
+                        self.tag_role = None
+                        self.tag_role_id = None
+                        await self.save(tag_role=True)
             if self.ranks_enabled:
                 ep = f"guild/{self.id}/ranks"
                 try:
@@ -142,12 +160,11 @@ class GuildSync:
                         if role:
                             self.roles[rank] = role
                             continue
-                    try:
-                        self.roles[rank] = await self.create_role(rank=rank)
-                    except discord.Forbidden:
-                        self.error = "Bot lacks permission to create roles."
-                    changed = True
-                orphaned = self.role_ids_to_ranks.keys() - self.roles
+                    role = await self.create_role(rank=rank)
+                    if role:
+                        self.roles[rank] = role
+                        changed = True
+                orphaned = self.ranks_to_role_ids.keys() - self.roles
                 for orphan in orphaned:
                     changed = True
                     role = self.guild.get_role(self.ranks_to_role_ids[orphan])
@@ -158,7 +175,7 @@ class GuildSync:
                 }
                 if changed:
                     await self.save(ranks=True)
-                if self.last_error:
+                if self.last_error and not self.error:
                     self.error = None
                     await self.save(error=True)
             else:
@@ -182,10 +199,18 @@ class GuildSync:
             return self
 
         async def add_roles(self, roles):
-            await self.member.add_roles(*roles, reason="$guildsync")
+            try:
+                coro = self.member.add_roles(*roles, reason="$guildsync")
+                await asyncio.wait_for(coro, timeout=5)
+            except (asyncio.TimeoutError, discord.Forbidden):
+                pass
 
         async def remove_roles(self, roles):
-            await self.member.remove_roles(*roles, reason="$guildsync")
+            try:
+                coro = self.member.remove_roles(*roles, reason="$guildsync")
+                await asyncio.wait_for(coro, timeout=5)
+            except (asyncio.TimeoutError, discord.Forbidden):
+                pass
 
         async def sync_membership(self, sync_guild: GuildSync.SyncGuild):
             lowest_order = float("inf")
@@ -208,22 +233,21 @@ class GuildSync:
                         break
                     if sync_guild.ranks_enabled:
                         rank = sync_guild.members[account]
-                        order = sync_guild.ranks[rank]
-                        if order < lowest_order:
-                            lowest_order = order
-                            highest_rank = rank
+                        order = sync_guild.ranks.get(rank)
+                        if order:
+                            if order < lowest_order:
+                                lowest_order = order
+                                highest_rank = rank
             if sync_guild.ranks_enabled and highest_rank:
                 if highest_rank not in current_rank_roles:
-                    to_add.append(sync_guild.roles[highest_rank])
+                    role = sync_guild.roles.get(highest_rank)
+                    if role:
+                        to_add.append(role)
             if sync_guild.tag_enabled and sync_guild.tag_role:
                 if not current_tag_role and belongs:
                     to_add.append(sync_guild.tag_role)
             if to_add:
-                try:
-                    await self.add_roles(to_add)
-                except discord.Forbidden:
-                    pass
-                    # Notify code here
+                await self.add_roles(to_add)
             to_remove = []
             for rank in current_rank_roles:
                 if rank != highest_rank:
@@ -231,11 +255,7 @@ class GuildSync:
             if not belongs and current_tag_role:
                 to_remove.append(current_tag_role)
             if to_remove:
-                try:
-                    await self.remove_roles(to_remove)
-                except discord.Forbidden:
-                    pass
-                    # Notify code here
+                await self.remove_roles(to_remove)
 
     @commands.guild_only()
     @commands.has_permissions(manage_roles=True)
@@ -807,24 +827,24 @@ class GuildSync:
                     continue
                 for target in targets:
                     await target.sync_membership(sync)
-
             except Exception as e:
                 self.log.exception("Exception in guildsync", exc_info=e)
         if purge:
             for target in targets:
                 member = target.member
-                membership_duration = (datetime.datetime.utcnow() -
+                membership_duration = (datetime.utcnow() -
                                        member.joined_at).total_seconds()
                 if not target.is_in_any_guild:
                     if len(member.roles) == 1 and membership_duration > 172800:
                         await member.guild.kick(user=member,
                                                 reason="$guildsync purge")
 
+    @tasks.loop(seconds=60)
     async def guildsync_consumer(self):
         while True:
             try:
                 _, coro = await self.guildsync_queue.get()
-                await coro
+                await asyncio.wait_for(coro, timeout=300)
             except Exception as e:
                 self.log.exception("Exception in guildsync consumer",
                                    exc_info=e)
@@ -840,8 +860,7 @@ class GuildSync:
     async def guild_synchronizer(self):
         cursor = self.bot.database.iter("guilds", {"guildsync.enabled": True},
                                         self,
-                                        batch_size=20,
-                                        subdocs=["sync"])
+                                        batch_size=20)
         async for doc in cursor:
             try:
                 if doc["_obj"]:
