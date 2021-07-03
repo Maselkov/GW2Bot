@@ -1,7 +1,5 @@
 import asyncio
 import datetime
-import html
-import re
 import unicodedata
 import xml.etree.ElementTree as et
 
@@ -63,7 +61,7 @@ class NotiifiersMixin:
             else:
                 msg = ("Daily notifier toggled on. In order to reeceive "
                        "dailies, you still need to set a channel using "
-                       "`dailynotifier channel <channel>`.".format(channel))
+                       "`dailynotifier channel <channel>`.")
         else:
             msg = ("Daily notifier disabled")
         await ctx.send(msg)
@@ -186,7 +184,7 @@ class NotiifiersMixin:
             else:
                 msg = ("Newsfeed toggled on. In order to receive "
                        "news, you still need to set a channel using "
-                       "`newsfeed channel <channel>`.".format(channel))
+                       "`newsfeed channel <channel>`.")
         else:
             msg = ("Newsfeed disabled")
         await ctx.send(msg)
@@ -345,7 +343,7 @@ class NotiifiersMixin:
             else:
                 msg = ("Boss notifier toggled on. In order to receive "
                        "bosses, you still need to set a channel using "
-                       "`bossnotifier channel <channel>`.".format(channel))
+                       "`bossnotifier channel <channel>`.")
         else:
             msg = ("Boss notifier disabled")
         await ctx.send(msg)
@@ -357,72 +355,43 @@ class NotiifiersMixin:
             return body[:1000] + "... [Read more]({})".format(url)
 
         async def get_page(url):
-            async with self.session.get(url + ".json") as r:
-                return await r.json()
+            async with self.session.get(url) as r:
+                return BeautifulSoup(await r.text(), 'html.parser')
 
-        def patchnotes_embed(embed, notes):
-            notes = "\n".join(html.unescape(notes).splitlines())
-            lines = notes.splitlines()
-            notes_sub = ""
-            for line in lines:
-                # Don't sub #### as those are made to a new header
-                line = re.sub('^#{1,3} ', '**', line)
-                line = re.sub('#{5} ', '**', line)
-                line = re.sub('(\*{2}.*)', r'\1**', line)
-                line = re.sub('\*{4}', '**', line)
-                line = re.sub('&quot;(.*)&quot;', r'*\1*', line)
-                notes_sub += "{}\n".format(line)
+        base_url = "https://en-forum.guildwars2.com/"
+        category = await get_page(base_url + "forum/6-game-update-notes/")
 
-            headers = re.findall('#{4}.*', notes_sub, re.MULTILINE)
-            values = re.split('#{4}.*', notes_sub)
-            counter = 0
-            if headers:
-                for header in headers:
-                    counter += 1
-                    header = re.sub("#{4} ", "", header)
-                    values[counter] = re.sub("\n\n", "\n", values[counter])
-                    embed.add_field(name=header, value=values[counter])
-            else:
-                embed.description = notes_sub
-            return embed
-
-        base_url = "https://en-forum.guildwars2.com"
-        url_category = base_url + "/categories/game-release-notes"
-        category = await get_page(url_category)
-        category = category["Category"]
-        last_discussion = category["LastDiscussionID"]
-        url_topic = base_url + "/discussion/{}".format(last_discussion)
-        patch_notes = ""
+        patch_notes = discord.Embed.Empty
         title = "GW2 has just updated"
+        url = discord.Embed.Empty
         try:  # Playing it safe in case forums die or something
-            topic_result = await get_page(url_topic)
-            topic = topic_result["Discussion"]
-            last_comment = topic["LastCommentID"]
-            if not last_comment:
-                comment_url = url_topic
-                body = topic["Body"]
-            else:
-                comment_url = url_topic + "#Comment_{}".format(last_comment)
-                for comment in topic_result["Comments"]:
-                    if comment["CommentID"] == last_comment:
-                        body = comment["Body"]
-                        break
-                else:
-                    raise Exception("Comment not found")
-            patch_notes = get_short_patchnotes(body, comment_url)
-            url_topic = comment_url
-            title = topic["Name"]
+            topic_url = category.find("span", {
+                "class": "ipsType_break ipsContained"
+            }).find("a")["href"].split("?")[0]
+
+            topic = await get_page(topic_url)
+            comment = topic.find_all("div",
+                                     {"data-role": "commentContent"})[-1]
+            comment_id = comment.parent.parent["data-commentid"]
+            url = f"{topic_url}?do=findComment&comment={comment_id}"
+            patch_notes = "\n".join(line
+                                    for line in comment.get_text().split("\n")
+                                    if line)
+            patch_notes = get_short_patchnotes(patch_notes, url)
+            title = topic.find("span", {
+                "class": "ipsType_break ipsContained"
+            }).get_text().strip()
+
         except Exception as e:
             self.log.exception(e)
-        embed = discord.Embed(title="**{}**".format(title),
-                              url=url_topic,
-                              color=self.embed_color)
-        if patch_notes:
-            embed = patchnotes_embed(embed, patch_notes)
+        embed = discord.Embed(title=f"**{title}**",
+                              url=url,
+                              color=self.embed_color,
+                              description=patch_notes)
         embed.set_footer(text="Build: {}".format(new_build))
         text_version = ("@here Guild Wars 2 has just updated! "
                         "New build: {} Update notes: <{}>\n{}".format(
-                            new_build, url_topic, patch_notes))
+                            new_build, url, patch_notes))
         return embed, text_version
 
     async def check_news(self):
@@ -646,7 +615,7 @@ class NotiifiersMixin:
                     else:
                         await channel.send(text)
                     sent += 1
-                except:
+                except Exception:
                     pass
             self.log.info("Update notifs: sent {}".format(sent))
         except Exception as e:
