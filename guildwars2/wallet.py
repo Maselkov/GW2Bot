@@ -126,7 +126,7 @@ class WalletMixin:
                     await ctx.send("Need permission to embed links")
                 return
         await ctx.trigger_typing()
-        ids_cur = [1, 4, 2, 3, 18, 23, 15, 16, 50, 47]
+        ids_cur = [1, 4, 2, 3, 18, 23, 15, 16, 50, 47, 26, 33]
         ids_keys = [43, 40, 41, 37, 42, 38, 44, 49, 51]
         ids_maps = [32, 45, 25, 27, 19, 22, 20, 29, 34, 35]
         ids_maps_items = [46682]
