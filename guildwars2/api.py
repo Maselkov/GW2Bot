@@ -28,14 +28,13 @@ class ApiMixin:
                             user=None,
                             scopes=None,
                             key=None,
-                            schema_version=None):
+                            **kwargs):
         if key is None and user:
             doc = await self.fetch_key(user, scopes)
             key = doc["key"]
         tasks = []
         for e in endpoints:
-            tasks.append(
-                self.call_api(e, key=key, schema_version=schema_version))
+            tasks.append(self.call_api(e, key=key, **kwargs))
         return await asyncio.gather(*tasks)
 
     @retry(retry=retry_if_exception_type(APIBadRequest),
@@ -47,7 +46,8 @@ class ApiMixin:
                        user=None,
                        scopes=None,
                        key=None,
-                       schema_version=None):
+                       schema_version=None,
+                       schema_string=None):
         headers = {
             'User-Agent': "GW2Bot - a Discord bot",
             'Accept': 'application/json'
@@ -60,6 +60,8 @@ class ApiMixin:
         if schema_version:
             schema = schema_version.replace(microsecond=0).isoformat() + "Z"
             headers.update({"X-Schema-Version": schema})
+        if schema_string:
+            headers.update({"X-Schema-Version": schema_string})
         apiserv = 'https://api.guildwars2.com/v2/'
         url = apiserv + endpoint
         async with self.session.get(url, headers=headers) as r:
