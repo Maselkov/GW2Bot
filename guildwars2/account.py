@@ -198,7 +198,8 @@ class AccountMixin:
         areas = self.gamedata["killproofs"]["areas"]
         # Create a list of lists of all achievement ids we need to check.
         achievement_ids = [
-            [x["id"]] if x["type"] == "single_achievement" or x["type"] == "progressed_achievement" else x["ids"]
+            [x["id"]] if x["type"] == "single_achievement"
+            or x["type"] == "progressed_achievement" else x["ids"]
             for x in chain.from_iterable(
                 [area["encounters"] for area in areas])
         ]
@@ -239,7 +240,8 @@ class AccountMixin:
                 _id = encounter["id"]
                 _progress = encounter["progress"]
                 for achievement in results:
-                    if achievement["id"] == _id and achievement["current"] >= _progress:
+                    if achievement["id"] == _id and achievement[
+                            "current"] >= _progress:
                         return "+✔"
                 # The achievement is not in the list or player hasn't progressed far enough
                 return "-✖"
@@ -596,20 +598,21 @@ class AccountMixin:
         user = ctx.author
         if not doc:
             doc = await self.fetch_key(user, ["inventories", "characters"])
-        schema = datetime.datetime(2019, 12, 19)
         endpoints = [
             "account/bank", "account/inventory", "account/materials",
             "characters?page=0&page_size=200"
         ]
-        results = await self.call_multiple(endpoints,
-                                           key=doc["key"],
-                                           schema_version=schema)
+        results = await self.call_multiple(
+            endpoints,
+            key=doc["key"],
+            schema_string="2021-07-15T13:00:00.000Z")
         bank, shared, materials, characters = results
         spaces = {
             "bank": bank,
             "shared": shared,
             "material storage": materials
         }
+        legendary_armory_item_ids = set()
         if search:
             counts = {
                 item_id: defaultdict(lambda: [0, 0])
@@ -619,18 +622,24 @@ class AccountMixin:
             counts = {item_id: defaultdict(int) for item_id in item_ids}
 
         def amounts_in_space(space, name, geared):
+            space_name = name
             for s in space:
+                if geared and s["location"].endswith("LegendaryArmory"):
+                    if s["id"] in legendary_armory_item_ids:
+                        continue
+                    legendary_armory_item_ids.add(s["id"])
+                    space_name = "legendary armory"
                 for item_id in item_ids:
                     amt = get_amount(s, item_id)
                     if amt:
                         if search:
                             if geared:
                                 # Tuple of (inventory, geared)
-                                counts[item_id][name][1] += amt
+                                counts[item_id][space_name][1] += amt
                             else:
-                                counts[item_id][name][0] += amt
+                                counts[item_id][space_name][0] += amt
                         else:
-                            counts[item_id][name] += amt
+                            counts[item_id][space_name] += amt
 
         def get_amount(slot, item_id):
             def count_upgrades(slots):
@@ -662,7 +671,8 @@ class AccountMixin:
             ]
             for bag in bags:
                 amounts_in_space(bag, character["name"], False)
-            amounts_in_space(character["equipment"], character["name"], True)
+            for tab in character["equipment_tabs"]:
+                amounts_in_space(tab["equipment"], character["name"], True)
         try:
             if "tradingpost" in doc["permissions"]:
                 result = await self.call_api("commerce/delivery",
