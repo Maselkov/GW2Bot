@@ -246,8 +246,7 @@ class EventsMixin:
                 if time < boss_time:
                     output = {
                         "name": boss["name"],
-                        "time":
-                        boss_time.astimezone(tz=timezone).strftime("%H:%M"),
+                        "time": f"<t:{int(boss_time.timestamp())}:t>",
                         "waypoint": boss["waypoint"],
                         "diff": boss_time - time
                     }
@@ -267,8 +266,9 @@ class EventsMixin:
                 boss["name"], self.format_timedelta(boss["diff"])),
                            value=value,
                            inline=False)
-        data.set_footer(text="Timezone: {}".format(timezone.tzname(None)),
-                        icon_url=self.bot.user.avatar_url)
+        data.set_footer(
+            text="The timestamps are dynamically adjusted to your timezone",
+            icon_url=self.bot.user.avatar_url)
         return data
 
     def format_timedelta(self, td):
