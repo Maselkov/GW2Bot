@@ -415,7 +415,7 @@ class NotiifiersMixin:
                             "description":
                             item.find("description").text.split("</p>", 1)[0]
                         })
-                except:
+                except Exception:
                     pass
         last_news = [x.find("title").text for x in feed.findall("item")]
         await self.bot.database.set_cog_config(self, {"cache.news": last_news})
@@ -467,88 +467,72 @@ class NotiifiersMixin:
             return False
 
     async def send_daily_notifs(self):
-        try:
-            name = self.__class__.__name__
-            cursor = self.bot.database.get_guilds_cursor(
-                {
-                    "daily.on": True,
-                    "daily.channel": {
-                        "$ne": None
-                    }
-                }, self)
-            daily_doc = await self.bot.database.get_cog_config(self)
-            sent = 0
-            deleted = 0
-            forbidden = 0
-            pinned = 0
-            async for doc in cursor:
-                try:
-                    guild = doc["cogs"][name]["daily"]
-                    categories = guild.get("categories")
-                    if not categories:
-                        categories = [
-                            "psna", "psna_later", "pve", "pvp", "wvw",
-                            "fractals", "strikes"
-                        ]
-                    channel = self.bot.get_channel(guild["channel"])
-                    embed = await self.daily_embed(categories,
-                                                   doc=daily_doc,
-                                                   ctx=channel)
-                    try:
-                        embed.set_thumbnail(
-                            url="https://wiki.guildwars2.com/images/"
-                            "1/14/Daily_Achievement.png")
-                        message = await channel.send(embed=embed)
-                        sent += 1
-                    except discord.Forbidden:
-                        forbidden += 1
-                        message = await channel.send("Need permission to "
-                                                     "embed links in order "
-                                                     "to send daily "
-                                                     "notifs!")
-                    await self.bot.database.set_guild(
-                        channel.guild, {"daily.message": message.id}, self)
-                    autodelete = guild.get("autodelete", False)
-                    if autodelete:
-                        try:
-                            old_message = guild.get("message")
-                            if old_message:
-                                to_delete = await channel.fetch_message(
-                                    old_message)
-                                await to_delete.delete()
-                                deleted += 1
-                        except:
-                            pass
-                    autopin = guild.get("autopin", False)
-                    if autopin:
-                        try:
-                            await message.pin()
-                            pinned += 1
-                            try:
-                                async for m in channel.history(after=message,
-                                                               limit=3):
-                                    if (m.type == discord.MessageType.pins_add
-                                            and m.author == self.bot.user):
-                                        await m.delete()
-                                        break
-                            except:
-                                pass
-                            old_message = guild.get("message")
-                            if old_message:
-                                to_unpin = await channel.fetch_message(
-                                    old_message)
-                                await to_unpin.unpin()
-                        except:
-                            pass
+        cursor = self.bot.database.iter("guilds", {
+            "daily.on": True,
+            "daily.channel": {
+                "$ne": None
+            }
+        },
+                                        self,
+                                        subdocs=["daily"])
+        daily_doc = await self.bot.database.get_cog_config(self)
 
-                except:
+        async def notify_guild(doc):
+            categories = doc.get("categories")
+            if not categories:
+                categories = [
+                    "psna", "psna_later", "pve", "pvp", "wvw", "fractals",
+                    "strikes"
+                ]
+            channel = self.bot.get_channel(doc["channel"])
+            embed = await self.daily_embed(categories,
+                                           doc=daily_doc,
+                                           ctx=channel)
+            try:
+                embed.set_thumbnail(url="https://wiki.guildwars2.com/images/"
+                                    "1/14/Daily_Achievement.png")
+                message = await channel.send(embed=embed)
+            except discord.Forbidden:
+                message = await channel.send("Need permission to "
+                                             "embed links in order "
+                                             "to send daily "
+                                             "notifs!")
+            await self.bot.database.set_guild(channel.guild,
+                                              {"daily.message": message.id},
+                                              self)
+            autodelete = doc.get("autodelete", False)
+            if autodelete:
+                try:
+                    old_message = doc.get("message")
+                    if old_message:
+                        to_delete = await channel.fetch_message(old_message)
+                        await to_delete.delete()
+                except Exception:
                     pass
-            self.log.info(
-                "Daily notifs: sent {}, deleted {}, forbidden {}, pinned {}".
-                format(sent, deleted, forbidden, pinned))
-        except Exception as e:
-            self.log.exception(e)
-            return
+            autopin = doc.get("autopin", False)
+            if autopin:
+                try:
+                    await message.pin()
+                    try:
+                        async for m in channel.history(after=message, limit=3):
+                            if (m.type == discord.MessageType.pins_add
+                                    and m.author == self.bot.user):
+                                await m.delete()
+                                break
+                    except Exception:
+                        pass
+                    old_message = doc.get("message")
+                    if old_message:
+                        to_unpin = await channel.fetch_message(old_message)
+                        await to_unpin.unpin()
+                except Exception:
+                    pass
+
+        async for doc in cursor:
+            try:
+                asyncio.create_task(notify_guild(doc))
+            except Exception:
+                pass
 
     async def send_news(self, embeds):
         cursor = self.bot.database.iter(
@@ -588,7 +572,7 @@ class NotiifiersMixin:
             try:
                 embed, text = await self.update_notification(build)
                 embed_available = True
-            except:
+            except Exception:
                 text = ("Guild Wars 2 has just updated! New build: {}".format(
                     build))
             cursor = self.bot.database.get_guilds_cursor(
@@ -665,7 +649,7 @@ class NotiifiersMixin:
                     await self.bot.database.set(user, {"gemtrack": None}, self)
             except asyncio.CancelledError:
                 return
-            except:
+            except Exception:
                 pass
 
     @tasks.loop(minutes=5)
@@ -703,7 +687,7 @@ class NotiifiersMixin:
             except asyncio.CancelledError:
                 self.log.error("Big dead")
                 return
-            except:
+            except Exception:
                 pass
 
     @tasks.loop(minutes=15)
@@ -746,7 +730,7 @@ class NotiifiersMixin:
                     await user.send(msg)
                 except asyncio.CancelledError:
                     return
-                except:
+                except Exception:
                     pass
 
     @tasks.loop(minutes=5)
@@ -759,5 +743,5 @@ class NotiifiersMixin:
                 await self.force_guild_account_names(guild)
             except asyncio.CancelledError:
                 return
-            except:
+            except Exception:
                 pass
