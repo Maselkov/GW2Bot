@@ -197,9 +197,11 @@ class Build:
             fields.append(int(bit_string, 2))
         terrestrial_palettes = [
             skill["palette_id"] for skill in terrestrial.skill_docs
+            if "palette_id" in skill
         ]
         aquatic_palettes = [
             skill["palette_id"] for skill in aquatic.skill_docs
+            if "palette_id" in skill
         ]
         terrestrial_palettes += [0] * (5 - len(terrestrial_palettes))
         aquatic_palettes += [0] * (5 - len(aquatic_palettes))
