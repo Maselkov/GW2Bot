@@ -529,7 +529,8 @@ class CharactersMixin:
                 eq = []
                 for item_1 in tab["equipment"]:
                     for item_2 in results["equipment"]:
-                        if item_1["id"] != item_2["id"]:
+                        if item_1["id"] != item_2["id"] or item_1[
+                                "slot"] != item_2.get("slot"):
                             continue
                         if tab["tab"] in item_2["tabs"]:
                             item_copy = copy.copy(item_2)
