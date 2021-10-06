@@ -10,18 +10,18 @@ from discord.ext.commands.cooldowns import BucketType
 
 from .exceptions import APIError, APINotFound
 from .utils.chat import embed_list_lines
+from discord_slash import cog_ext, SlashContext
 
 
 class AccountMixin:
-    @commands.command()
-    @commands.cooldown(1, 10, BucketType.user)
-    async def account(self, ctx):
+    @cog_ext.cog_slash()
+    async def account(self, ctx: SlashContext):
         """General information about your account
 
         Required permissions: account
         """
+        await ctx.defer()
         user = ctx.author
-        await ctx.trigger_typing()
         try:
             doc = await self.fetch_key(user, ["account"])
             results = await self.call_api("account", key=doc["key"])
@@ -95,18 +95,14 @@ class AccountMixin:
         except discord.Forbidden:
             await ctx.send("Need permission to embed links")
 
-    @commands.command(aliases=["ld"])
-    @commands.cooldown(1, 10, BucketType.user)
+    @cog_ext.cog_slash()
     async def li(self, ctx):
-        """Shows how many Legendary Insights and Divinations you have earned
-
-        Required permissions: inventories, characters
-        """
+        """Shows how many Legendary Insights and Divinations you have earned"""
+        await ctx.defer()
         user = ctx.author
         scopes = ["inventories", "characters"]
         if not self.can_embed_links(ctx):
             return await ctx.send("Need permission to embed links")
-        await ctx.trigger_typing()
 
         trophies = self.gamedata["raid_trophies"]
         ids = []
@@ -183,18 +179,14 @@ class AccountMixin:
             format(user),
             embed=embed)
 
-    @commands.command()
-    @commands.cooldown(1, 15, BucketType.user)
+    @cog_ext.cog_slash()
     async def kp(self, ctx):
-        """Shows completed raids and fractals
-
-        Required permissions: progression
-        """
+        """Shows completed raids and fractals"""
+        await ctx.defer()
         user = ctx.author
         scopes = ["progression"]
         if not self.can_embed_links(ctx):
             return await ctx.send("Need permission to embed links")
-        await ctx.trigger_typing()
         areas = self.gamedata["killproofs"]["areas"]
         # Create a list of lists of all achievement ids we need to check.
         achievement_ids = [
@@ -265,13 +257,10 @@ class AccountMixin:
         await ctx.send("{.mention}, here is your kill proof.".format(user),
                        embed=embed)
 
-    @commands.command()
-    @commands.cooldown(1, 10, BucketType.user)
+    @cog_ext.cog_slash()
     async def bosses(self, ctx):
-        """Shows your raid progression for the week
-
-        Required permissions: progression
-        """
+        """Shows your raid progression for the week"""
+        await ctx.defer()
         user = ctx.author
         scopes = ["progression"]
         endpoints = ["account/raids", "account"]
@@ -294,12 +283,10 @@ class AccountMixin:
         await ctx.send("{.mention}, here are your raid bosses:".format(user),
                        embed=embed)
 
-    @commands.command(aliases=["find"])
-    @commands.cooldown(1, 5, BucketType.user)
-    async def search(self, ctx, *, item):
-        """Find items on your account
-        Required permissions: inventories, characters
-        """
+    @cog_ext.cog_slash()
+    async def search(self, ctx, item: str):
+        """Find items on your account"""
+        await ctx.defer()
         if not self.can_embed_links(ctx):
             return await ctx.send("Need permission to embed links")
         user = ctx.author
@@ -314,7 +301,6 @@ class AccountMixin:
         if not choice:
             ctx.command.reset_cooldown(ctx)
             return
-        await ctx.trigger_typing()
         try:
             search_results = await self.find_items_in_account(ctx,
                                                               choice["ids"],
@@ -416,13 +402,11 @@ class AccountMixin:
         data.set_thumbnail(url=icon_url)
         await ctx.send(message, embed=data)
 
-    @commands.command()
-    @commands.cooldown(1, 10, BucketType.user)
+    @cog_ext.cog_slash()
     async def cats(self, ctx):
-        """Displays the cats you haven't unlocked yet
-
-        Required permissions: progression"""
-        user = ctx.message.author
+        """Displays the cats you haven't unlocked yet"""
+        await ctx.defer()
+        user = ctx.author
         endpoint = "account/home/cats"
         try:
             doc = await self.fetch_key(user, ["progression"])
@@ -446,13 +430,13 @@ class AccountMixin:
         await ctx.send("{.mention}, here are your cats:".format(user),
                        embed=embed)
 
-    @commands.command()
-    @commands.cooldown(1, 10, BucketType.user)
-    async def nodes(self, ctx):
+    @cog_ext.cog_slash()
+    async def nodes(self, ctx: SlashContext):
         """Displays the nodes you haven't unlocked.
 
         Required permissions: progression"""
-        user = ctx.message.author
+        await ctx.defer()
+        user = ctx.author
         endpoint = "account/home/nodes"
         try:
             doc = await self.fetch_key(user, ["progression"])
@@ -582,7 +566,7 @@ class AccountMixin:
             description += ("\n❗Warning❗\n Data outdated for this week. Log "
                             "into GW2 in order to update.")
         embed.description = description
-        embed.set_footer(text=f"Logs uploaded via {ctx.prefix}evtc will "
+        embed.set_footer(text=f"Logs uploaded via evtc will "
                          "appear here with links - they don't have to be "
                          "uploaded by you",
                          icon_url=self.bot.user.avatar_url)
