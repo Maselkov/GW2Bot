@@ -145,6 +145,34 @@ class CharactersMixin:
         except discord.Forbidden as e:
             await ctx.send("Need permission to embed links")
 
+    @character.command(name="heropoints")
+    @commands.cooldown(1, 10, BucketType.user)
+    async def character_hp(self, ctx, *, character: str):
+        """Displays the hero point progression of given character
+        You must be the owner of the character.
+
+        Required permissions: characters
+        """
+        character = character.title()
+        await ctx.trigger_typing()
+        try:
+            hps = await self.call_api(f"characters/{character}/heropoints",
+                                      ctx.author, ["characters"])
+        except APINotFound:
+            return await ctx.send("Invalid character name")
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+        regions = collections.defaultdict(int)
+        for hp in hps:
+            doc = await self.db.heropoints.find_one({"_id": hp})
+            print(hp)
+            regions[doc["region_name"]] += 1
+        print(regions)
+        # try:
+        #     await ctx.send(embed=embed)
+        # except discord.Forbidden as e:
+        #     await ctx.send("Need permission to embed links")
+
     @character.command(name="info")
     @commands.cooldown(1, 5, BucketType.user)
     async def character_info(self, ctx, *, character: str):

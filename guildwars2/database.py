@@ -230,29 +230,42 @@ class DatabaseMixin:
         await self.bot.database.set_cog_config(self, {"cache.raids": raids})
 
     async def cache_pois(self):
-        async def bulk_write(group):
+        async def bulk_write(group, collection):
             requests = []
             for item in group:
                 item["_id"] = item.pop("id")
                 requests.append(
                     ReplaceOne({"_id": item["_id"]}, item, upsert=True))
             try:
-                await self.db.pois.bulk_write(requests)
+                await self.db[collection].bulk_write(requests)
             except BulkWriteError as e:
                 self.log.exception("BWE while caching continents")
 
-        continents = await self.call_api("continents/1/floors?ids=all")
+        continents = await self.call_api("continents?ids=all")
         pois = []
+        hero_points = []
         for continent in continents:
             for region in continent["regions"].values():
+                name = region["name"]
+                # if name not in hero_points:
+                #     hero_points[name] = []
                 for game_map in region["maps"].values():
                     for poi in game_map["points_of_interest"].values():
                         del poi["chat_link"]
                         poi["continent_id"] = continent["id"]
                         pois.append(poi)
                         if len(pois) > 200:
-                            await bulk_write(pois)
+                            await bulk_write(pois, "pois")
                             pois = []
+                    for hp in game_map.get("skill_challenges", []):
+                        del hp["coord"]
+                        hp["region_name"] = name
+                        hero_points.append(hp)
+                        if len(hero_points) > 200:
+                            await bulk_write(hero_points, "heropoints")
+                            hero_points = []
+        await bulk_write(pois, "pois")
+        await bulk_write(hero_points, "heropoints")
         print("Continents done")
 
     async def get_raids(self):
