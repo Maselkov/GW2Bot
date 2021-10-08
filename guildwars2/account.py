@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import re
 from collections import OrderedDict, defaultdict
@@ -5,12 +6,14 @@ from itertools import chain
 
 import discord
 import pymongo
-from discord.ext import commands
-from discord.ext.commands.cooldowns import BucketType
+from discord_slash import SlashContext, cog_ext
+from discord_slash.utils.manage_components import (ComponentContext,
+                                                   create_actionrow,
+                                                   create_select,
+                                                   create_select_option)
 
 from .exceptions import APIError, APINotFound
 from .utils.chat import embed_list_lines
-from discord_slash import cog_ext, SlashContext
 
 
 class AccountMixin:
@@ -235,7 +238,8 @@ class AccountMixin:
                     if achievement["id"] == _id and achievement[
                             "current"] >= _progress:
                         return "+✔"
-                # The achievement is not in the list or player hasn't progressed far enough
+                # The achievement is not in the list or player hasn't
+                # progressed far enough
                 return "-✖"
 
         embed = discord.Embed(title="Kill Proof",
@@ -284,9 +288,98 @@ class AccountMixin:
                        embed=embed)
 
     @cog_ext.cog_slash()
-    async def search(self, ctx, item: str):
+    async def search(self, ctx: SlashContext, item: str):
         """Find items on your account"""
-        await ctx.defer()
+        async def generate_results_embed(results):
+            seq = [k for k, v in results.items() if v]
+            if not seq:
+                return None
+            longest = len(max(seq, key=len))
+            if longest < 8:
+                longest = 8
+            if 'is_upgrade' in choice and choice['is_upgrade']:
+                output = [
+                    "LOCATION{}INV / GEAR".format(" " * (longest - 5)),
+                    "--------{}|-----".format("-" * (longest - 6))
+                ]
+                align = 110
+            else:
+                output = [
+                    "LOCATION{}COUNT".format(" " * (longest - 5)),
+                    "--------{}|-----".format("-" * (longest - 6))
+                ]
+                align = 80
+            total = 0
+            storage_counts = OrderedDict(
+                sorted(results.items(), key=lambda kv: kv[1], reverse=True))
+            characters = await self.get_all_characters(user)
+            char_names = []
+            for character in characters:
+                char_names.append(character.name)
+            for k, v in storage_counts.items():
+                if v:
+                    if 'is_upgrade' in choice and choice['is_upgrade']:
+                        total += v[0]
+                        total += v[1]
+                        if k in char_names:
+                            slotted_upg = v[1]
+                            if slotted_upg == 0:
+                                inf = ""
+                            else:
+                                inf = "/ {} ".format(slotted_upg)
+                            output.append("{} {} | {} {}".format(
+                                k.upper(), " " * (longest - len(k)), v[0],
+                                inf))
+                        else:
+                            output.append("{} {} | {}".format(
+                                k.upper(), " " * (longest - len(k)), v[0]))
+                    else:
+                        total += v[0]
+                        total += v[1]
+                        output.append("{} {} | {}".format(
+                            k.upper(), " " * (longest - len(k)), v[0] + v[1]))
+            output.append("--------{}------".format("-" * (longest - 5)))
+            output.append("TOTAL:{}{}".format(" " * (longest - 2), total))
+            color = int(
+                self.gamedata["items"]["rarity_colors"][choice["rarity"]], 16)
+            item_doc = await self.fetch_item(choice["ids"][0])
+            icon_url = item_doc["icon"]
+            data = discord.Embed(description="Search results" + " " * align +
+                                 u'\u200b',
+                                 color=color)
+            value = "\n".join(output)
+
+            if len(value) > 1014:
+                value = ""
+                values = []
+                for line in output:
+                    if len(value) + len(line) > 1013:
+                        values.append(value)
+                        value = ""
+                    value += line + "\n"
+                if value:
+                    values.append(value)
+                data.add_field(name=choice["name"],
+                               value="```ml\n{}```".format(values[0]),
+                               inline=False)
+                for v in values[1:]:
+                    data.add_field(
+                        name=u'\u200b',  # Zero width space
+                        value="```ml\n{}```".format(v),
+                        inline=False)
+            else:
+                data.add_field(name=choice["name"],
+                               value="```ml\n{}\n```".format(value))
+            data.set_author(name=doc["account_name"], icon_url=user.avatar_url)
+            if 'is_upgrade' in choice and choice['is_upgrade']:
+                data.set_footer(text="Amount in inventory / Amount in gear",
+                                icon_url=self.bot.user.avatar_url)
+            else:
+                data.set_footer(text=self.bot.user.name,
+                                icon_url=self.bot.user.avatar_url)
+            data.set_thumbnail(url=icon_url)
+            return data
+
         if not self.can_embed_links(ctx):
             return await ctx.send("Need permission to embed links")
         user = ctx.author
@@ -294,113 +387,69 @@ class AccountMixin:
             doc = await self.fetch_key(user, ["inventories", "characters"])
         except APIError as e:
             await self.error_handler(ctx, e)
-        choice = await self.itemname_to_id(ctx,
-                                           item,
-                                           user,
-                                           group_duplicates=True)
-        if not choice:
-            ctx.command.reset_cooldown(ctx)
+        items = await self.itemname_to_id(ctx,
+                                          item,
+                                          user,
+                                          group_duplicates=True)
+        if not items:
             return
-        try:
-            search_results = await self.find_items_in_account(ctx,
-                                                              choice["ids"],
-                                                              flatten=True,
-                                                              search=True)
-        except APIError as e:
-            return await self.error_handler(ctx, e)
-        seq = [k for k, v in search_results.items() if v]
-        if not seq:
-            return await ctx.send("Sorry, not found on your account. "
-                                  "Make sure you've selected the "
-                                  "correct item.")
-        longest = len(max(seq, key=len))
-        if longest < 8:
-            longest = 8
-        if 'is_upgrade' in choice and choice['is_upgrade']:
-            output = [
-                "LOCATION{}INV / GEAR".format(" " * (longest - 5)),
-                "--------{}|-----".format("-" * (longest - 6))
-            ]
-            align = 110
-        else:
-            output = [
-                "LOCATION{}COUNT".format(" " * (longest - 5)),
-                "--------{}|-----".format("-" * (longest - 6))
-            ]
-            align = 80
-        total = 0
-        storage_counts = OrderedDict(
-            sorted(search_results.items(), key=lambda kv: kv[1], reverse=True))
-        characters = await self.get_all_characters(user)
-        char_names = []
-        for character in characters:
-            char_names.append(character.name)
-        for k, v in storage_counts.items():
-            if v:
-                if 'is_upgrade' in choice and choice['is_upgrade']:
-                    total += v[0]
-                    total += v[1]
-                    if k in char_names:
-                        slotted_upg = v[1]
-                        if slotted_upg == 0:
-                            inf = ""
-                        else:
-                            inf = "/ {} ".format(slotted_upg)
-                        output.append("{} {} | {} {}".format(
-                            k.upper(), " " * (longest - len(k)), v[0], inf))
-                    else:
-                        output.append("{} {} | {}".format(
-                            k.upper(), " " * (longest - len(k)), v[0]))
-                else:
-                    total += v[0]
-                    total += v[1]
-                    output.append("{} {} | {}".format(k.upper(),
-                                                      " " * (longest - len(k)),
-                                                      v[0] + v[1]))
-        output.append("--------{}------".format("-" * (longest - 5)))
-        output.append("TOTAL:{}{}".format(" " * (longest - 2), total))
-        message = ("{.mention}, here are your search results".format(user))
-
-        color = int(self.gamedata["items"]["rarity_colors"][choice["rarity"]],
-                    16)
-        item_doc = await self.fetch_item(choice["ids"][0])
-        icon_url = item_doc["icon"]
-        data = discord.Embed(
-            description="Search results".format(item_doc["name"]) +
-            " " * align + u'\u200b',
-            color=color)
-        value = "\n".join(output)
-
-        if len(value) > 1014:
-            value = ""
-            values = []
-            for line in output:
-                if len(value) + len(line) > 1013:
-                    values.append(value)
-                    value = ""
-                value += line + "\n"
-            if value:
-                values.append(value)
-            data.add_field(name=choice["name"],
-                           value="```ml\n{}```".format(values[0]),
-                           inline=False)
-            for v in values[1:]:
-                data.add_field(
-                    name=u'\u200b',  # Zero width space
-                    value="```ml\n{}```".format(v),
-                    inline=False)
-        else:
-            data.add_field(name=choice["name"],
-                           value="```ml\n{}\n```".format(value))
-        data.set_author(name=doc["account_name"], icon_url=user.avatar_url)
-        if 'is_upgrade' in choice and choice['is_upgrade']:
-            data.set_footer(text="Amount in inventory / Amount in gear",
-                            icon_url=self.bot.user.avatar_url)
-        else:
-            data.set_footer(text=self.bot.user.name,
-                            icon_url=self.bot.user.avatar_url)
-        data.set_thumbnail(url=icon_url)
-        await ctx.send(message, embed=data)
+        endpoints = [
+            "account/bank", "account/inventory", "account/materials",
+            "characters?page=0&page_size=200"
+        ]
+        task = asyncio.create_task(
+            self.call_multiple(endpoints,
+                               key=doc["key"],
+                               schema_string="2021-07-15T13:00:00.000Z"))
+        if len(items) > 1:
+            options = []
+            for c, m in enumerate(items):
+                options.append(
+                    create_select_option(f"{m['name']} - {m['rarity']}",
+                                         value=c))
+            select = create_select(min_values=1,
+                                   max_values=1,
+                                   options=options,
+                                   placeholder="Select the item to search for")
+            components = [create_actionrow(select)]
+            msg = await ctx.send("** **", components=components)
+            storage = None
+            while True:
+                try:
+                    answer: ComponentContext = await self.bot.wait_for(
+                        "component",
+                        timeout=120,
+                        check=lambda context: context.author == user and
+                        context.origin_message == msg)
+                    #await msg.edit(components=None)
+                    await answer.defer(edit_origin=True)
+                    if (not task.done()):
+                        storage = await task
+                    if exc := task(exception()):
+                        raise exc
+                    choice = items[int(answer.selected_options[0])]
+                    search_results = await self.find_items_in_account(
+                        ctx,
+                        choice["ids"],
+                        flatten=True,
+                        search=True,
+                        results=storage)
+                    embed = await generate_results_embed(search_results)
+                    if not embed:
+                        await answer.edit_origin(
+                            content="Sorry, not found on your account. "
+                            "Make sure you've selected the "
+                            "correct item.",
+                            embed=None,
+                            components=components)
+                        continue
+                    await answer.edit_origin(content="** **",
+                                             embed=embed,
+                                             components=components)
+                except APIError as e:
+                    return await self.error_handler(ctx, e)
+                except asyncio.TimeoutError:
+                    await msg.edit(components=None)
 
     @cog_ext.cog_slash()
     async def cats(self, ctx):
@@ -566,7 +615,7 @@ class AccountMixin:
             description += ("\n❗Warning❗\n Data outdated for this week. Log "
                             "into GW2 in order to update.")
         embed.description = description
-        embed.set_footer(text=f"Logs uploaded via evtc will "
+        embed.set_footer(text="Logs uploaded via evtc will "
                          "appear here with links - they don't have to be "
                          "uploaded by you",
                          icon_url=self.bot.user.avatar_url)
@@ -578,7 +627,8 @@ class AccountMixin:
                                     *,
                                     doc=None,
                                     flatten=False,
-                                    search=False):
+                                    search=False,
+                                    results=None):
         user = ctx.author
         if not doc:
             doc = await self.fetch_key(user, ["inventories", "characters"])
@@ -586,10 +636,11 @@ class AccountMixin:
             "account/bank", "account/inventory", "account/materials",
             "characters?page=0&page_size=200"
         ]
-        results = await self.call_multiple(
-            endpoints,
-            key=doc["key"],
-            schema_string="2021-07-15T13:00:00.000Z")
+        if not results:
+            results = await self.call_multiple(
+                endpoints,
+                key=doc["key"],
+                schema_string="2021-07-15T13:00:00.000Z")
         bank, shared, materials, characters = results
         spaces = {
             "bank": bank,
