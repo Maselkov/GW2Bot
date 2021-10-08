@@ -6,6 +6,8 @@ import time
 
 import discord
 from discord.ext import commands
+from discord_slash.context import ComponentContext
+from discord_slash.utils.manage_components import create_actionrow, create_select, create_select_option
 from pymongo import ReplaceOne
 from pymongo.errors import BulkWriteError
 
@@ -370,7 +372,7 @@ class DatabaseMixin:
                 "typos.\nAlways use singular forms, e.g. Legendary Insight")
             return None
         cursor = self.db[database].find(query)
-        if number > 35:
+        if number > 25:
             await destination.send("Your search gave me {} item results. "
                                    "Try exact match "
                                    "search? `Y/N`".format(number))
@@ -402,54 +404,40 @@ class DatabaseMixin:
         async for item in cursor:
             items.append(item)
         items.sort(key=lambda i: i["name"])
-        longest = len(max([item["name"] for item in items], key=len))
-        msg = [
-            "Which one of these interests you? Simply type it's number "
-            "into the chat now:```ml",
-            "INDEX    NAME {}RARITY".format(" " * (longest)),
-            "-----|------{}|-------".format("-" * (longest))
-        ]
-
         if group_duplicates:
             distinct_items = consolidate_duplicates(items)
         else:
             for item in items:
                 item["ids"] = [item["_id"]]
             distinct_items = items
-        if number != 1:
-            for c, m in enumerate(distinct_items, 1):
-                msg.append("  {} {}| {} {}| {}".format(
-                    c, " " * (2 - len(str(c))), m["name"].upper(),
-                    " " * (4 + longest - len(m["name"])), m["rarity"]))
-            msg.append("```")
-            message = await destination.send("\n".join(msg))
-            try:
-                answer = await self.bot.wait_for("message",
-                                                 timeout=120,
-                                                 check=check)
-            except asyncio.TimeoutError:
-                await message.edit(content="No response in time")
-                return None
-            try:
-                num = int(answer.content) - 1
-                choice = distinct_items[num]
-            except:
-                await message.edit(content="That's not a number in the list")
-                return None
-            try:
-                await message.delete()
-                await answer.delete()
-            except:
-                pass
-        else:
-            choice = distinct_items[0]
+        return distinct_items
+        # try:
+        # answer = await self.bot.wait_for("component",
+        #                                  timeout=120,
+        #                                  check=check)
+        # except asyncio.TimeoutError:
+        #     await message.edit(content="No response in time")
+        #     return None
+        # try:
+        #     num = int(answer.content) - 1
+        #     choice = distinct_items[num]
+        # except:
+        #     await message.edit(content="That's not a number in the list")
+        #     return None
+        # try:
+        #     await message.delete()
+        #     await answer.delete()
+        # except:
+        #     pass
+        # else:
+        #     choice = distinct_items[0]
 
-        for item in items:
-            if item["_id"] in choice["ids"]:
-                if item["type"] == "UpgradeComponent":
-                    choice["is_upgrade"] = True
+        # for item in items:
+        #     if item["_id"] in choice["ids"]:
+        #         if item["type"] == "UpgradeComponent":
+        #             choice["is_upgrade"] = True
 
-        return choice
+        # return choice
 
     async def selection_menu(self,
                              ctx,
@@ -477,42 +465,29 @@ class DatabaseMixin:
         key = "name"
         if filter_callable:
             items = filter_callable(items)
-        number = len(items)
         items.sort(key=lambda i: i[key])
-        longest = len(max([item[key] for item in items], key=len))
-        key_pos = (longest + 2) // 2 - 2
-        header = "INDEX{} {}{}".format(" " * key_pos, key.upper(),
-                                       " " * (longest - 2 - key_pos))
-        msg = [
-            "Which one of these interests you? Simply type it's number "
-            "into the chat now:```ml", header,
-            "-----|-{}-".format("-" * longest)
-        ]
-        if number != 1:
-            for c, m in enumerate(items, 1):
-                msg.append("  {} {}| {} {}".format(
-                    c, " " * (2 - len(str(c))), m[key].upper(),
-                    " " * (longest - len(m[key]))))
-            msg.append("```")
-            message = await ctx.send("\n".join(msg))
+        options = []
+        if len(items) != 1:
+            for i, item in enumerate(items):
+                options.append(create_select_option(item[key], value=i))
+            select = create_select(min_values=1,
+                                   max_values=1,
+                                   options=options,
+                                   placeholder="Select the item you want")
+            components = [create_actionrow(select)]
+            msg = await ctx.send("** **", components=components)
             try:
-                answer = await self.bot.wait_for("message",
-                                                 timeout=120,
-                                                 check=check)
+                answer: ComponentContext = await self.bot.wait_for(
+                    "component",
+                    timeout=120,
+                    check=lambda context: context.author == ctx.author and
+                    context.origin_message.id == msg.id)
+                choice = items[int(answer.selected_options[0])]
+                await answer.defer(edit_origin=True)
+                return (choice, answer)
             except asyncio.TimeoutError:
-                await message.edit(content="No response in time")
+                await msg.edit(content="No response in time", components=None)
                 return None
-            try:
-                num = int(answer.content) - 1
-                choice = items[num]
-            except:
-                await message.edit(content="That's not a number in the list")
-                return None
-            try:
-                await message.delete()
-                await answer.delete()
-            except:
-                pass
         else:
             choice = items[0]
         return choice
