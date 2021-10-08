@@ -72,9 +72,9 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
             self.forced_account_names, self.event_reminder_task,
             self.worldsync_task, self.guildsync_consumer
         ]
-        for task in self.tasks:
-            task.start()
-
+        # for task in self.tasks:
+        #     task.start()
+        # Todo wait for bot rady
     def cog_unload(self):
         for task in self.tasks:
             task.cancel()
