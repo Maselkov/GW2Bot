@@ -82,7 +82,7 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
     async def error_handler(self, ctx, exc):
         user = ctx.author
         if isinstance(exc, APIKeyError):
-            await ctx.send(exc)
+            await ctx.send(str(exc))
             return
         if isinstance(exc, APIInactiveError):
             await ctx.send("{.mention}, the API is currently down. "
