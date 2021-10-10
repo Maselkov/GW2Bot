@@ -307,7 +307,7 @@ class DatabaseMixin:
                      ["specializations", True], ["traits", True],
                      ["worlds", True], ["minis", True], ["pvp/amulets", True],
                      ["professions", True], ["legends", True], ["pets", True],
-                     ["outfits", True]]
+                     ["outfits", True], ["colors", True]]
         for e in endpoints:
             try:
                 await self.cache_endpoint(*e)
