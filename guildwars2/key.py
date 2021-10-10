@@ -118,10 +118,11 @@ class KeyMixin:
         options = []
         for i, key in enumerate(keys):
             options.append(
-                create_select_option(f"{key['name']} - {key['account_name']}",
+                create_select_option(key["account_name"],
+                                     description=key["name"],
                                      value=i))
         select = create_select(min_values=1,
-                               max_values=len(keys),
+                               max_values=max_values,
                                options=options,
                                placeholder=placeholder)
         components = [create_actionrow(select)]
@@ -215,7 +216,7 @@ class KeyMixin:
                 return
             index = int(answer.selected_options[0])
         try:
-            index = keys[index]
+            key = keys[index]
         except IndexError:
             text = ("You don't have a key with this ID, remember you can "
                     "check your list of keys by using this command without "
