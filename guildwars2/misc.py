@@ -1,16 +1,11 @@
 import asyncio
 import codecs
 import struct
-from collections import OrderedDict
-from logging import PlaceHolder
-from tkinter.constants import HIDDEN
 
 import discord
 from bs4 import BeautifulSoup
-from discord.ext import commands
 from discord_slash import cog_ext
 from discord_slash.model import SlashCommandOptionType
-from numpy import promote_types
 
 
 class MiscMixin:
