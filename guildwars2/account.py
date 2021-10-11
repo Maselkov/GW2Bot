@@ -10,7 +10,8 @@ from discord_slash import SlashContext, cog_ext
 from discord_slash.utils.manage_components import (ComponentContext,
                                                    create_actionrow,
                                                    create_select,
-                                                   create_select_option)
+                                                   create_select_option,
+                                                   wait_for_component)
 
 from .exceptions import APIError, APINotFound
 from .utils.chat import embed_list_lines
@@ -93,10 +94,7 @@ class AccountMixin:
         data.set_author(name=accountname, icon_url=user.avatar_url)
         data.set_footer(text=self.bot.user.name,
                         icon_url=self.bot.user.avatar_url)
-        try:
-            await ctx.send(embed=data)
-        except discord.Forbidden:
-            await ctx.send("Need permission to embed links")
+        await ctx.send(embed=data)
 
     @cog_ext.cog_slash()
     async def li(self, ctx):
@@ -104,8 +102,6 @@ class AccountMixin:
         await ctx.defer()
         user = ctx.author
         scopes = ["inventories", "characters"]
-        if not self.can_embed_links(ctx):
-            return await ctx.send("Need permission to embed links")
 
         trophies = self.gamedata["raid_trophies"]
         ids = []
@@ -188,8 +184,6 @@ class AccountMixin:
         await ctx.defer()
         user = ctx.author
         scopes = ["progression"]
-        if not self.can_embed_links(ctx):
-            return await ctx.send("Need permission to embed links")
         areas = self.gamedata["killproofs"]["areas"]
         # Create a list of lists of all achievement ids we need to check.
         achievement_ids = [
@@ -282,8 +276,6 @@ class AccountMixin:
         embed = await self.boss_embed(ctx, raids, results, doc["account_name"],
                                       last_modified)
         embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
-        if not self.can_embed_links(ctx):
-            return await ctx.send("Need permission to embed links")
         await ctx.send("{.mention}, here are your raid bosses:".format(user),
                        embed=embed)
 
@@ -380,17 +372,12 @@ class AccountMixin:
             data.set_thumbnail(url=icon_url)
             return data
 
-        if not self.can_embed_links(ctx):
-            return await ctx.send("Need permission to embed links")
         user = ctx.author
         try:
             doc = await self.fetch_key(user, ["inventories", "characters"])
         except APIError as e:
             await self.error_handler(ctx, e)
-        items = await self.itemname_to_id(ctx,
-                                          item,
-                                          user,
-                                          group_duplicates=True)
+        items = await self.itemname_to_id(ctx, item, group_duplicates=True)
         if not items:
             return
         endpoints = [
@@ -401,56 +388,79 @@ class AccountMixin:
             self.call_multiple(endpoints,
                                key=doc["key"],
                                schema_string="2021-07-15T13:00:00.000Z"))
-        if len(items) > 1:
-            options = []
-            for c, m in enumerate(items):
-                options.append(
-                    create_select_option(m['name'],
-                                         description=m["rarity"],
-                                         value=c))
-            select = create_select(min_values=1,
-                                   max_values=1,
-                                   options=options,
-                                   placeholder="Select the item to search for")
-            components = [create_actionrow(select)]
-            msg = await ctx.send("** **", components=components)
-            storage = None
-            while True:
-                try:
-                    answer: ComponentContext = await self.bot.wait_for(
-                        "component",
-                        timeout=120,
-                        check=lambda context: context.author == user and
-                        context.origin_message == msg)
-                    #await msg.edit(components=None)
-                    await answer.defer(edit_origin=True)
-                    if (not task.done()):
-                        storage = await task
-                    if exc := task.exception():
-                        raise exc
-                    choice = items[int(answer.selected_options[0])]
-                    search_results = await self.find_items_in_account(
-                        ctx,
-                        choice["ids"],
-                        flatten=True,
-                        search=True,
-                        results=storage)
-                    embed = await generate_results_embed(search_results)
-                    if not embed:
-                        await answer.edit_origin(
-                            content="Sorry, not found on your account. "
-                            "Make sure you've selected the "
-                            "correct item.",
-                            embed=None,
-                            components=components)
-                        continue
-                    await answer.edit_origin(content="** **",
-                                             embed=embed,
-                                             components=components)
-                except APIError as e:
-                    return await self.error_handler(ctx, e)
-                except asyncio.TimeoutError:
-                    await msg.edit(components=None)
+        if len(items) == 1:
+            return
+
+        rows = []
+        options = []
+        for i, item in enumerate(sorted(items, key=lambda c: c["name"]), 1):
+            if not i % 25:
+                rows.append(options)
+                options = []
+            emoji = self.get_emoji(ctx, item["type"], return_obj=True)
+            options.append(
+                create_select_option(item["name"],
+                                     description=item["rarity"],
+                                     emoji=emoji or None,
+                                     value=i - 1))
+        rows.append(options)
+        action_rows = []
+        for row in rows:
+            placeholder = "Select the item..."
+            if len(rows) > 1:
+                first_letter = row[0]["label"][0]
+                last_letter = row[-1]["label"][0]
+                if first_letter != last_letter:
+                    placeholder += f" [{first_letter}-{last_letter}]"
+                else:
+                    placeholder += f" [{first_letter}]"
+            action_rows.append(
+                create_actionrow(
+                    create_select(row,
+                                  min_values=1,
+                                  max_values=1,
+                                  placeholder=placeholder)))
+
+        if len(rows) > 1:
+            content = ("Due to Discord limitations, your selection had "
+                       "been split into several.")
+        else:
+            content = "** **"
+        msg = await ctx.send(content, components=action_rows)
+        storage = None
+
+        while True:
+            try:
+                answer = await wait_for_component(self.bot,
+                                                  components=action_rows,
+                                                  timeout=120)
+                if answer.author != ctx.author:
+                    self.tell_off(answer)
+                    continue
+                await answer.defer(edit_origin=True)
+                if (not task.done()):
+                    storage = await task
+                if exc := task.exception():
+                    raise exc
+                choice = items[int(answer.selected_options[0])]
+                search_results = await self.find_items_in_account(
+                    ctx,
+                    choice["ids"],
+                    flatten=True,
+                    search=True,
+                    results=storage)
+                embed = await generate_results_embed(search_results)
+                if not embed:
+                    await answer.edit_origin(
+                        content=
+                        f"`{choice['name']}`: Not found on your account.",
+                        embed=None)
+                    continue
+                await answer.edit_origin(content="** **", embed=embed)
+            except APIError as e:
+                return await self.error_handler(ctx, e)
+            except asyncio.TimeoutError:
+                await msg.edit(components=None)
 
     @cog_ext.cog_slash()
     async def cats(self, ctx):
