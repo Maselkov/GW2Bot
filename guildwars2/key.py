@@ -2,17 +2,15 @@ import asyncio
 import re
 
 import discord
-from discord.ext import commands
-from discord.ext.commands.cooldowns import BucketType
 from discord_slash import cog_ext
 from discord_slash.context import SlashContext
+from discord_slash.model import SlashCommandOptionType
 from discord_slash.utils.manage_components import (create_actionrow,
                                                    create_select,
                                                    create_select_option,
                                                    wait_for_component)
 
 from .exceptions import APIError, APIInactiveError
-from discord_slash.model import SlashCommandOptionType
 
 
 class KeyMixin:
@@ -266,7 +264,7 @@ class KeyMixin:
             if show_tokens:
                 token = key["key"]
                 if not reveal_tokens:
-                    token = token[:7] + re.sub("[a-zA-Z0-9]", "\*", token[8:])
+                    token = token[:7] + re.sub("[a-zA-Z0-9]", r"\*", token[8:])
                 else:
                     token = f"||{token}||"
                 lines.append(token)
