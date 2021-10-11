@@ -3,8 +3,6 @@ import datetime
 import re
 
 import discord
-from discord.ext import commands
-from discord.ext.commands.cooldowns import BucketType
 from discord_slash import cog_ext
 from discord_slash.model import SlashCommandOptionType
 
@@ -12,69 +10,93 @@ from .utils.chat import en_space, tab
 
 
 class DailyMixin:
-    @cog_ext.cog_subcommand(base="daily",
-                            name="pve",
-                            base_description="Daily related commands",
-                            options=[{
-                                "name": "tomorrow",
-                                "description":
-                                "Set to True to display tomorrow's dailies.",
-                                "type": SlashCommandOptionType.BOOLEAN,
-                                "required": False,
-                            }])
-    async def daily_pve(self, ctx, tomorrow=False):
+    @cog_ext.cog_subcommand(
+        base="daily",
+        name="pve",
+        base_description="Daily related commands",
+        options=[{
+            "name": "tomorrow",
+            "description":
+            "Select this options to view tomorrow's dailies instead.",
+            "type": SlashCommandOptionType.STRING,
+            "choices": [{
+                "value": "tomorrow",
+                "name": "tomorrow"
+            }],
+            "required": False,
+        }])
+    async def daily_pve(self, ctx, tomorrow=""):
         """Show today's PvE dailies"""
+        tomorrow = bool(tomorrow)
         embed = await self.daily_embed(["pve"], ctx=ctx, tomorrow=tomorrow)
         await ctx.send(embed=embed)
 
-    @cog_ext.cog_subcommand(base="daily",
-                            name="wvw",
-                            base_description="Daily related commands",
-                            options=[{
-                                "name": "tomorrow",
-                                "description":
-                                "Set to True to display tomorrow's dailies.",
-                                "type": SlashCommandOptionType.BOOLEAN,
-                                "required": False,
-                            }])
-    async def daily_wvw(self, ctx, tomorrow=False):
+    @cog_ext.cog_subcommand(
+        base="daily",
+        name="wvw",
+        base_description="Daily related commands",
+        options=[{
+            "name": "tomorrow",
+            "description":
+            "Select this options to view tomorrow's dailies instead.",
+            "type": SlashCommandOptionType.STRING,
+            "choices": [{
+                "value": "tomorrow",
+                "name": "tomorrow"
+            }],
+            "required": False,
+        }])
+    async def daily_wvw(self, ctx, tomorrow=""):
         """Show today's WvW dailies"""
+        tomorrow = bool(tomorrow)
         embed = await self.daily_embed(["wvw"], ctx=ctx, tomorrow=tomorrow)
         embed.set_thumbnail(
             url="https://render.guildwars2.com/file/"
             "2BBA251A24A2C1A0A305D561580449AF5B55F54F/338457.png")
         await ctx.send(embed=embed)
 
-    @cog_ext.cog_subcommand(base="daily",
-                            name="pvp",
-                            base_description="Daily related commands",
-                            options=[{
-                                "name": "tomorrow",
-                                "description":
-                                "Set to True to display tomorrow's dailies.",
-                                "type": SlashCommandOptionType.BOOLEAN,
-                                "required": False,
-                            }])
-    async def daily_pvp(self, ctx, tomorrow=False):
+    @cog_ext.cog_subcommand(
+        base="daily",
+        name="pvp",
+        base_description="Daily related commands",
+        options=[{
+            "name": "tomorrow",
+            "description":
+            "Select this options to view tomorrow's dailies instead.",
+            "type": SlashCommandOptionType.STRING,
+            "choices": [{
+                "value": "tomorrow",
+                "name": "tomorrow"
+            }],
+            "required": False,
+        }])
+    async def daily_pvp(self, ctx, tomorrow=""):
         """Show today's PvP dailies"""
+        tomorrow = bool(tomorrow)
         embed = await self.daily_embed(["pvp"], ctx=ctx, tomorrow=tomorrow)
         embed.set_thumbnail(
             url="https://render.guildwars2.com/file/"
             "FE01AF14D91F52A1EF2B22FE0A552B9EE2E4C3F6/511340.png")
         await ctx.send(embed=embed)
 
-    @cog_ext.cog_subcommand(base="daily",
-                            name="fractals",
-                            base_description="Daily related commands",
-                            options=[{
-                                "name": "tomorrow",
-                                "description":
-                                "Set to True to display tomorrow's dailies.",
-                                "type": SlashCommandOptionType.BOOLEAN,
-                                "required": False,
-                            }])
-    async def daily_fractals(self, ctx, tomorrow=False):
+    @cog_ext.cog_subcommand(
+        base="daily",
+        name="fractals",
+        base_description="Daily related commands",
+        options=[{
+            "name": "tomorrow",
+            "description":
+            "Select this options to view tomorrow's dailies instead.",
+            "type": SlashCommandOptionType.STRING,
+            "choices": [{
+                "value": "tomorrow",
+                "name": "tomorrow"
+            }],
+            "required": False,
+        }])
+    async def daily_fractals(self, ctx, tomorrow=""):
         """Show today's fractal dailies"""
+        tomorrow = bool(tomorrow)
         embed = await self.daily_embed(["fractals"],
                                        ctx=ctx,
                                        tomorrow=tomorrow)
@@ -83,54 +105,72 @@ class DailyMixin:
             "4A5834E40CDC6A0C44085B1F697565002D71CD47/1228226.png")
         await ctx.send(embed=embed)
 
-    @cog_ext.cog_subcommand(base="daily",
-                            name="strikes",
-                            base_description="Daily related commands",
-                            options=[{
-                                "name": "tomorrow",
-                                "description":
-                                "Set to True to display tomorrow's dailies.",
-                                "type": SlashCommandOptionType.BOOLEAN,
-                                "required": False,
-                            }])
-    async def daily_strikes(self, ctx, tomorrow=False):
+    @cog_ext.cog_subcommand(
+        base="daily",
+        name="strikes",
+        base_description="Daily related commands",
+        options=[{
+            "name": "tomorrow",
+            "description":
+            "Select this options to view tomorrow's dailies instead.",
+            "type": SlashCommandOptionType.STRING,
+            "choices": [{
+                "value": "tomorrow",
+                "name": "tomorrow"
+            }],
+            "required": False,
+        }])
+    async def daily_strikes(self, ctx, tomorrow=""):
         """Show today's priority strike"""
+        tomorrow = bool(tomorrow)
         embed = await self.daily_embed(["strikes"], ctx=ctx, tomorrow=tomorrow)
         embed.set_thumbnail(
             url="https://render.guildwars2.com/file/"
             "C34A20B86C73B0DCDC9401ECD22CE37C36B018A7/2271016.png")
         await ctx.send(embed=embed)
 
-    @cog_ext.cog_subcommand(base="daily",
-                            name="psna",
-                            base_description="Daily related commands",
-                            options=[{
-                                "name": "tomorrow",
-                                "description":
-                                "Set to True to display tomorrow's dailies.",
-                                "type": SlashCommandOptionType.BOOLEAN,
-                                "required": False,
-                            }])
-    async def daily_psna(self, ctx, tomorrow=False):
+    @cog_ext.cog_subcommand(
+        base="daily",
+        name="psna",
+        base_description="Daily related commands",
+        options=[{
+            "name": "tomorrow",
+            "description":
+            "Select this options to view tomorrow's dailies instead.",
+            "type": SlashCommandOptionType.STRING,
+            "choices": [{
+                "value": "tomorrow",
+                "name": "tomorrow"
+            }],
+            "required": False,
+        }])
+    async def daily_psna(self, ctx, tomorrow=""):
         """Show today's Pact Supply Network Agent locations"""
+        tomorrow = bool(tomorrow)
         embed = await self.daily_embed(["psna"], ctx=ctx, tomorrow=tomorrow)
         embed.set_thumbnail(
             url="https://wiki.guildwars2.com/images/1/14/Daily_Achievement.png"
         )
         await ctx.send(embed=embed)
 
-    @cog_ext.cog_subcommand(base="daily",
-                            name="all",
-                            base_description="Daily related commands",
-                            options=[{
-                                "name": "tomorrow",
-                                "description":
-                                "Set to True to display tomorrow's dailies.",
-                                "type": SlashCommandOptionType.BOOLEAN,
-                                "required": False,
-                            }])
-    async def daily_all(self, ctx, tomorrow=False):
+    @cog_ext.cog_subcommand(
+        base="daily",
+        name="all",
+        base_description="Daily related commands",
+        options=[{
+            "name": "tomorrow",
+            "description":
+            "Select this options to view tomorrow's dailies instead.",
+            "type": SlashCommandOptionType.STRING,
+            "choices": [{
+                "value": "tomorrow",
+                "name": "tomorrow"
+            }],
+            "required": False,
+        }])
+    async def daily_all(self, ctx, tomorrow=""):
         """Show today's all dailies"""
+        tomorrow = bool(tomorrow)
         embed = await self.daily_embed(
             ["psna", "pve", "pvp", "wvw", "strikes", "fractals"],
             ctx=ctx,
