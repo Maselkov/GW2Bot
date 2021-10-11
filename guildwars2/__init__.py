@@ -114,6 +114,11 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
             return int(doc["embed_color"], 16)
         return self.embed_color
 
+    def tell_off(self,
+                 component_context,
+                 message="Only the command owner may do that."):
+        self.bot.loop.create_task(component_context.send(message, hidden=True))
+
 
 def setup(bot):
     cog = GuildWars2(bot)
