@@ -405,7 +405,8 @@ class AccountMixin:
             options = []
             for c, m in enumerate(items):
                 options.append(
-                    create_select_option(f"{m['name']} - {m['rarity']}",
+                    create_select_option(m['name'],
+                                         description=m["rarity"],
                                          value=c))
             select = create_select(min_values=1,
                                    max_values=1,
@@ -425,7 +426,7 @@ class AccountMixin:
                     await answer.defer(edit_origin=True)
                     if (not task.done()):
                         storage = await task
-                    if exc := task(exception()):
+                    if exc := task.exception():
                         raise exc
                     choice = items[int(answer.selected_options[0])]
                     search_results = await self.find_items_in_account(
