@@ -75,6 +75,7 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
         # for task in self.tasks:
         #     task.start()
         # Todo wait for bot rady
+        # TODO test tasks and et
     def cog_unload(self):
         for task in self.tasks:
             task.cancel()
