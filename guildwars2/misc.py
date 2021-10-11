@@ -2,96 +2,82 @@ import asyncio
 import codecs
 import struct
 from collections import OrderedDict
+from logging import PlaceHolder
+from tkinter.constants import HIDDEN
 
 import discord
 from bs4 import BeautifulSoup
 from discord.ext import commands
+from discord_slash import cog_ext
+from discord_slash.model import SlashCommandOptionType
+from numpy import promote_types
 
 
 class MiscMixin:
-    @commands.command(aliases=["gw2wiki"])
-    async def wiki(self, ctx, *, search):
-        """Search the Guild wars 2 wiki
-        
-        Append a 2-character language tag to search in the localized wikis
-        Available languages:
-        en
-        de
-        fr
-        es
-        
-        Defaults to en
-
-        Examples:
-        Search for Lion's Arch:
-        $wiki Lion's Arch
-        Search it in the german wiki:
-        $wiki Löwenstein de
-        """
-        if len(search) > 300:
-            await ctx.send("Search too long")
-            return
-        wiki = {"en": "https://wiki.guildwars2.com",
+    @cog_ext.cog_slash(options=[{
+        "name": "search_text",
+        "description": "The text to search the wiki for. Example: Lion's Arch",
+        "type": SlashCommandOptionType.STRING,
+        "required": True,
+    }, {
+        "name":
+        "language",
+        "description":
+        "The language of the wiki to search on. Optional.",
+        "type":
+        SlashCommandOptionType.STRING,
+        "choices": [{
+            "value": "en",
+            "name": "en"
+        }, {
+            "value": "de",
+            "name": "de"
+        }, {
+            "value": "fr",
+            "name": "fr"
+        }, {
+            "value": "es",
+            "name": "se"
+        }],
+        "required":
+        False,
+    }])
+    async def wiki(self, ctx, search_text, language="en"):
+        """Search the Guild wars 2 wiki"""
+        if len(search_text) > 300:
+            return await ctx.send("Search too long", hidden=True)
+        await ctx.defer()
+        wiki = {
+            "en": "https://wiki.guildwars2.com",
             "de": "https://wiki-de.guildwars2.com",
             "fr": "https://wiki-fr.guildwars2.com",
-            "es": "https://wiki-es.guildwars2.com"}
-        search_url = {"en": "{}/index.php?title=Special%3ASearch&search={}",
+            "es": "https://wiki-es.guildwars2.com"
+        }
+        search_url = {
+            "en": "{}/index.php?title=Special%3ASearch&search={}",
             "de": "{}/index.php?search={}&title=Spezial%3ASuche&",
             "fr": "{}/index.php?search={}&title=Spécial%3ARecherche",
-            "es": "{}/index.php?title=Especial%3ABuscar&search={}"}
-        lang = search.split(" ")[-1].lower()
-        if lang in wiki:
-            search = search[:-3]
-        else:
-            lang = "en"
-        search = search.replace(" ", "+")
-        url = (search_url[lang].format(wiki[lang], search))
+            "es": "{}/index.php?title=Especial%3ABuscar&search={}"
+        }
+        url = (search_url[language].format(wiki[language], search_text))
         async with self.session.get(url) as r:
-            if r.history:
-                embed = await self.search_results_embed(
-                    ctx, "Wiki", exact_match=r)
-                try:
-                    await ctx.send(embed=embed)
-                except discord.Forbidden:
-                    await ctx.send("Need permission to embed links")
-                return
+            if r.history:  # Redirected
+                embed = await self.search_results_embed(ctx,
+                                                        "Wiki",
+                                                        exact_match=r)
+                return await ctx.send(embed=embed)
             else:
                 results = await r.text()
                 soup = BeautifulSoup(results, 'html.parser')
                 posts = soup.find_all(
                     "div", {"class": "mw-search-result-heading"})[:5]
                 if not posts:
-                    await ctx.send("No results")
-                    return
-        embed = await self.search_results_embed(
-            ctx, "Wiki", posts, base_url=wiki[lang])
-        try:
-            await ctx.send(embed=embed)
-        except discord.Forbidden:
-            await ctx.send("Need permission to embed links")
-
-    @commands.command(hidden=True)
-    async def dulfy(self, ctx, *, search):
-        """Search dulfy.net"""
-        if len(search) > 300:
-            await ctx.send("Search too long")
-            return
-        search = search.replace(" ", "+")
-        base_url = "https://dulfy.net/"
-        url = base_url + "?s={}".format(search)
-        message = await ctx.send(
-            "Searching dulfy.net, this can take a while...")
-        async with self.session.get(url) as r:
-            results = await r.text()
-            soup = BeautifulSoup(results, 'html.parser')
-        posts = soup.find_all(class_="post-title")[:5]
-        if not posts:
-            return await message.edit(content="No results")
-        embed = await self.search_results_embed(ctx, "Dulfy", posts)
-        try:
-            await message.edit(content=None, embed=embed)
-        except discord.Forbidden:
-            await ctx.send("Need permission to embed links")
+                    return await ctx.send("No results for your search")
+        embed = await self.search_results_embed(ctx,
+                                                "Wiki",
+                                                posts,
+                                                base_url=wiki[language])
+        await ctx.send(embed=embed)
 
     async def search_results_embed(self,
                                    ctx,
@@ -102,96 +88,109 @@ class MiscMixin:
                                    exact_match=None):
         if exact_match:
             soup = BeautifulSoup(await exact_match.text(), 'html.parser')
-            embed = discord.Embed(
-                title=soup.title.get_text(),
-                color=await self.get_embed_color(ctx),
-                url=str(exact_match.url))
+            embed = discord.Embed(title=soup.title.get_text(),
+                                  color=await self.get_embed_color(ctx),
+                                  url=str(exact_match.url))
             return embed
-        embed = discord.Embed(
-            title="{} search results".format(site),
-            description="Closest matches",
-            color=await self.get_embed_color(ctx))
+        embed = discord.Embed(title="{} search results".format(site),
+                              description="Closest matches",
+                              color=await self.get_embed_color(ctx))
         for post in posts:
             post = post.a
             url = base_url + post['href']
             url = url.replace(")", "\\)")
-            embed.add_field(
-                name=post["title"],
-                value="[Click here]({})".format(url),
-                inline=False)
+            embed.add_field(name=post["title"],
+                            value="[Click here]({})".format(url),
+                            inline=False)
         return embed
 
-    @commands.command(hidden=True)
-    async def praisejoko(self, ctx):
-        """To defy his Eminence is to defy life itself"""
-        await ctx.send("404 Joko not found")
-
-    @commands.command()
-    async def chatcode(self, ctx):
+    @cog_ext.cog_slash(options=[{
+        "name": "item",
+        "description": "Base item name for the chat code. Example: Banana",
+        "type": SlashCommandOptionType.STRING,
+        "required": True,
+    }, {
+        "name": "quantity",
+        "description": "Item quantity, ranging from 1 to 255.",
+        "type": SlashCommandOptionType.INTEGER,
+        "required": True,
+    }, {
+        "name": "skin",
+        "description": "Skin name to apply on the item.",
+        "type": SlashCommandOptionType.STRING,
+        "required": False,
+    }, {
+        "name": "upgrade_1",
+        "description":
+        "Name of the upgrade in the first slot. Example: Mark of Penetration",
+        "type": SlashCommandOptionType.STRING,
+        "required": False,
+    }, {
+        "name":
+        "upgrade_2",
+        "description":
+        "Name of the upgrade in the second slot. Example: Superior rune of "
+        "Generosity",
+        "type":
+        SlashCommandOptionType.STRING,
+        "required":
+        False,
+    }])
+    async def chatcode(
+        self,
+        ctx,
+        item,
+        quantity,
+        skin=None,
+        upgrade_1=None,
+        upgrade_2=None,
+    ):
         """Generate a chat code"""
-        user = ctx.author
-        try:
-            msg = await user.send("First, type the name of the item")
-            if ctx.guild:
-                await ctx.send("I've DMed you.")
-        except:
-            await ctx.send("I couldn't DM you. Check your DM settings")
-        response = await self.user_input(ctx)
-        dest = msg.channel
-        if response is None:
-            return
-        item = await self.itemname_to_id(dest, response.content, user)
+        if not 1 <= quantity <= 255:
+            return await ctx.send(
+                "Invalid quantity. Quantity can be a number between 1 and 255",
+                hidden=True)
+        item, answer = await self.itemname_to_id(ctx,
+                                                 item,
+                                                 prompt_user=True,
+                                                 hidden=True)
         if not item:
             return
         item = item["_id"]
-        response = await self.user_input(
-            ctx, "Type the amount of the item (1-255)")
-        if not response:
-            return
-        try:
-            count = int(response.content)
-            if not 1 <= count <= 255:
-                raise ValueError
-        except:
-            return await ctx.send("Invalid value")
-        response = await self.user_input(
-            ctx, "Optionally, type name of a skin to apply to the "
-            "item. Type `skip` to skip")
-        if not response:
-            return
-        if response.content.lower() == "skip":
-            skin = None
-        else:
-            skin = await self.itemname_to_id(
-                dest, response.content, user, database="skins")
-            if skin is not None:
-                skin = skin["_id"]
-        upgrades = OrderedDict((("first", None), ("second", None)))
-        for k in upgrades:
-            response = await self.user_input(
-                ctx, "Optionally, type name of {} upgrade to apply to the "
-                "item. Type `skip` to skip".format(k))
-            if response.content.lower() == "skip":
-                break
-            if not response:
+        if skin:
+            skin, answer = await self.itemname_to_id(
+                ctx,
+                skin,
+                database="skins",
+                prompt_user=True,
+                hidden=True,
+                component_context=answer,
+                placeholder="Select the skin you want...")
+            if not skin:
                 return
-            upgrade = await self.itemname_to_id(
-                dest,
-                response.content,
-                user,
-                filters={"type": "UpgradeComponent"})
-            if upgrade is not None:
-                if upgrade["_id"] == 24887:
-                    await user.send("L-lewd...")
-                upgrades[k] = upgrade["_id"]
-            else:
-                break
+        if skin is not None:
+            skin = skin["_id"]
+        upgrade_names = [x for x in [upgrade_1, upgrade_2] if x]
+        upgrades = []
+        for upgrade in upgrade_names:
+            upgrade, answer = await self.itemname_to_id(
+                ctx,
+                upgrade,
+                filters={"type": "UpgradeComponent"},
+                prompt_user=True,
+                hidden=True,
+                placeholder="Select the upgrade you want...",
+                component_context=answer)
+            if not upgrade:
+                return
+            upgrades.append(upgrade["_id"])
 
-        chat_code = self.generate_chat_code(
-            item, count, skin, upgrades["first"], upgrades["second"])
+        chat_code = self.generate_chat_code(item, quantity, skin, upgrades)
         output = "Here's your chatcode. No refunds. ```\n{}```".format(
             chat_code)
-        await user.send(output)
+        if answer:
+            return await answer.edit_origin(components=None, content=output)
+        await ctx.send(output, hidden=True)
 
     async def user_input(self, ctx, message=None, *, check=None, timeout=60):
         user = ctx.author
@@ -204,14 +203,14 @@ class MiscMixin:
         try:
             if message:
                 await user.send(message)
-            answer = await self.bot.wait_for(
-                "message", timeout=timeout, check=check)
+            answer = await self.bot.wait_for("message",
+                                             timeout=timeout,
+                                             check=check)
             return answer
         except asyncio.TimeoutError:
             return None
 
-    def generate_chat_code(self, item_id, count, skin_id, first_upgrade_id,
-                           second_upgrade_id):
+    def generate_chat_code(self, item_id, count, skin_id, upgrades):
         def little_endian(_id):
             return [int(x) for x in struct.pack("<i", _id)]
 
@@ -221,9 +220,9 @@ class MiscMixin:
             second = 0
             if skin_id:
                 skin = 128
-            if first_upgrade_id:
+            if len(upgrades) == 1:
                 first = 64
-            if second_upgrade_id:
+            if len(upgrades) == 2:
                 second = 32
             return skin | first | second
 
@@ -231,7 +230,7 @@ class MiscMixin:
         link.extend(little_endian(item_id))
         link = link[:5]
         link.append(upgrade_flag())
-        for x in filter(None, (skin_id, first_upgrade_id, second_upgrade_id)):
+        for x in filter(None, (skin_id, *upgrades)):
             link.extend(little_endian(x))
         link.append(0)
         output = codecs.encode(bytes(link), 'base64').decode('utf-8')
