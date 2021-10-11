@@ -669,7 +669,7 @@ class NotiifiersMixin:
                 doc = doc["cogs"][name]["bossnotifs"]
                 channel = self.bot.get_channel(doc["channel"])
                 timezone = await self.get_timezone(channel.guild)
-                embed = self.schedule_embed(2, timezone=timezone)
+                embed = self.schedule_embed(2)
                 try:
                     message = await channel.send(embed=embed)
                 except discord.Forbidden:

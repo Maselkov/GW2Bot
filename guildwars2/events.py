@@ -2,78 +2,74 @@ import asyncio
 import datetime
 
 import discord
+from discord import emoji
 from discord.ext import commands, tasks
+from discord_slash import cog_ext
+from discord_slash.context import ComponentContext
+from discord_slash.model import ButtonStyle, SlashCommandOptionType
+from discord_slash.utils.manage_components import create_actionrow, create_button
 
 UTC_TZ = datetime.timezone.utc
 
 
 class EventsMixin:
-    @commands.group(case_insensitive=True, aliases=["hotet"])
-    async def et(self, ctx):
-        """The event timer"""
-        # Help formatter preview
-        if ctx.invoked_subcommand is None:
-            msg = ("**{0}et bosses | b**: Upcoming bosses\n"
-                   "**{0}et hot | h**: Event timer for HoT maps and Dry top\n"
-                   "**{0}et pof | p**: Event timer for PoF and LS4 maps\n"
-                   "**{0}et day | d** Current day/night\n\n"
-                   "**{0}et reminder** Enable automatic reminders for events".
-                   format(ctx.prefix))
-            embed = discord.Embed(title="Event Timer help",
-                                  description=msg,
-                                  color=await self.get_embed_color(ctx))
-            embed.set_footer(text=self.bot.user.name,
-                             icon_url=self.bot.user.avatar_url)
-            info = None
-            if ctx.invoked_with.lower() == "hotet":
-                info = ("**{0}hotet** has evolved into **{0}et**, use "
-                        "**{0}et h** to access the old functionality").format(
-                            ctx.prefix)
-            try:
-                await ctx.send(info, embed=embed)
-            except:
-                await ctx.send_help(ctx.command)
-
-    @et.command(name="hot", aliases=["h"])
+    @cog_ext.cog_subcommand(base="et",
+                            name="hot",
+                            base_description="Event timer commands")
     async def et_hot(self, ctx):
         """Event timer for HoT maps and Dry Top"""
         await ctx.send(embed=await self.timer_embed(ctx, "hot"))
 
-    @et.command(name="pof", aliases=["p"])
+    @cog_ext.cog_subcommand(base="et",
+                            name="pof",
+                            base_description="Event timer commands")
     async def et_pof(self, ctx):
         """Event timer for PoF and LS4 maps"""
         await ctx.send(embed=await self.timer_embed(ctx, "pof"))
 
-    @et.command(name="day", aliases=["d"])
+    @cog_ext.cog_subcommand(base="et",
+                            name="day",
+                            base_description="Event timer commands")
     async def et_day(self, ctx):
         """Current day/night cycle"""
         await ctx.send(embed=await self.timer_embed(ctx, "day"))
 
-    @et.command(name="bosses", aliases=["b"])
+    @cog_ext.cog_subcommand(base="et",
+                            name="bosses",
+                            base_description="Event timer commands")
     async def et_bosses(self, ctx):
         """Upcoming world bosses"""
-        tz = await self.get_timezone(ctx.guild)
-        embed = self.schedule_embed(timezone=tz)
+        embed = self.schedule_embed()
         await ctx.send(embed=embed)
 
-    @et.command(name="reminder", short_help="<event name>")
-    async def et_reminder(self, ctx, *, event_name):
-        """Make the bot automatically notify you before an event starts
-
-        For the event name, use the exact name as it appears in $et
-        Examples:
-        $et reminder Shadow Behemoth
-        $et reminder Gerent Preparation
-        $et reminder Rounds 1-3
-        $et reminder Assault
-        """
-        if not event_name:
-            return await ctx.send_help(ctx.command)
+    @cog_ext.cog_subcommand(
+        base="et",
+        name="reminder",
+        base_description="Event timer commands",
+        options=[{
+            "name": "event_name",
+            "description":
+            "Event name. Examples: Shadow Behemoth. Gerent Preparation",
+            "type": SlashCommandOptionType.STRING,
+            "required": True,
+        }, {
+            "name": "minutes_before_event",
+            "description":
+            "The number of minutes before the event that you'll be notified at",
+            "type": SlashCommandOptionType.INTEGER,
+            "required": True
+        }])
+    async def et_reminder(self,
+                          ctx,
+                          event_name: str,
+                          minutes_before_event: int = 5):
+        """Make the bot automatically notify you before an event starts"""
+        if minutes_before_event < 0:
+            return await ctx.send("That's not how time works!", hidden=True)
+        if minutes_before_event > 60:
+            return await ctx.send("Time can't be greater than one hour",
+                                  hidden=True)
         event_name = event_name.lower()
-        #        if event_name == "settings":
-        #            return await self.et_reminder_settings_menu(ctx)
-        if event_name == "nothing":
-            return await ctx.send("Invalid event name")
         reminder = {}
         for boss in self.boss_schedule:
             if boss["name"].lower() == event_name:
@@ -90,30 +86,16 @@ class EventsMixin:
                             reminder["group"] = group
                             reminder["map_name"] = location["name"]
         if not reminder:
-            return await ctx.send("No event found matching that name")
-        embed = discord.Embed(
-            description="How many minutes before the event do you wish to "
-            "be notified? Simply type the number below.\nExample: **10**",
-            color=await self.get_embed_color(ctx))
-        await ctx.send(embed=embed)
-        ans = await ctx.get_answer()
-        if not ans:
-            return
-        try:
-            time = int(ans)
-        except:
-            return await ctx.send("Invalid answer")
-        if time < 0:
-            return await ctx.send("That's not how it works")
-        if time > 60:
-            return await ctx.send("Time can't be greater than one hour")
-        reminder["time"] = time * 60
+            return await ctx.send("No event found matching that name",
+                                  hidden=True)
+        reminder["time"] = minutes_before_event * 60
         await self.bot.database.set(ctx.author, {"event_reminders": reminder},
                                     self,
                                     operator="push")
-        await ctx.send("Reminder set succesfully")
+        await ctx.send("Reminder set succesfully", hidden=True)
 
     async def et_reminder_settings_menu(self, ctx):
+        # Unimplemented. Should get around to it sometime.
         user = ctx.author
         embed_templates = [{
             "setting":
@@ -230,7 +212,7 @@ class EventsMixin:
                 schedule.append(output)
         return sorted(schedule, key=lambda t: t["time"].time())
 
-    def get_upcoming_bosses(self, limit=8, *, timezone=UTC_TZ):
+    def get_upcoming_bosses(self, limit=8):
         upcoming_bosses = []
         time = datetime.datetime.now(UTC_TZ)
         counter = 0
@@ -255,8 +237,8 @@ class EventsMixin:
             day += 1
         return upcoming_bosses
 
-    def schedule_embed(self, limit=8, *, timezone=UTC_TZ):
-        schedule = self.get_upcoming_bosses(limit, timezone=timezone)
+    def schedule_embed(self, limit=8):
+        schedule = self.get_upcoming_bosses(limit)
         data = discord.Embed(title="Upcoming world bosses",
                              color=self.embed_color)
         for boss in schedule:
@@ -400,20 +382,21 @@ class EventsMixin:
             embed = discord.Embed(title="Event reminder",
                                   description=description,
                                   color=self.embed_color)
-            embed.set_footer(
-                icon_url=self.bot.user.avatar_url,
-                text="Click on the reaction below to unsubscribe to "
-                "reminders for this event")
+            button = create_button(style=ButtonStyle.red,
+                                   emoji="❌",
+                                   label="Unsubscribe")
+            components = [create_actionrow(button)]
+
             try:
-                msg = await user.send(embed=embed)
+                msg = await user.send(embed=embed, components=components)
             except discord.HTTPException:
                 return
             reminder["last_reminded"] = msg.created_at
             reminder["last_message"] = msg.id
+            reminder["button_id"] = button["custom_id"]
             await self.bot.database.set(user,
                                         {f"event_reminders.{i}": reminder},
                                         self)
-            await msg.add_reaction("❌")
 
     @tasks.loop(seconds=10)
     async def event_reminder_task(self):
@@ -436,25 +419,18 @@ class EventsMixin:
                 pass
 
     @commands.Cog.listener()
-    async def on_raw_reaction_add(self, payload):
-        if payload.guild_id:
-            return
-        if payload.user_id == self.bot.user.id:
-            return
-        user = self.bot.get_user(payload.user_id)
-        if not user:
-            return
-        if payload.emoji.name != "❌":
+    async def on_component(self, ctx: ComponentContext):
+        if ctx.guild:
             return
         update_result = await self.bot.database.set(
-            user, {"event_reminders": {
-                "last_message": payload.message_id
+            ctx.author,
+            {"event_reminders": {
+                "last_message": ctx.origin_message_id,
             }},
             self,
             operator="pull")
         if update_result.modified_count:
-            message = await user.fetch_message(payload.message_id)
             try:
-                await message.delete()
+                await ctx.origin_message.delete()
             except discord.HTTPException:
                 pass
