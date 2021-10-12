@@ -18,7 +18,7 @@ class EventsMixin:
             "name":
             "category",
             "description":
-            "Daily type",
+            "Event timer category",
             "type":
             SlashCommandOptionType.STRING,
             "required":
