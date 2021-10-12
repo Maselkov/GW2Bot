@@ -153,7 +153,7 @@ class MiscMixin:
             return
         item = item["_id"]
         if skin:
-            skin, answer = await self.itemname_to_id(
+            skin, new_answer = await self.itemname_to_id(
                 ctx,
                 skin,
                 database="skins",
@@ -163,12 +163,14 @@ class MiscMixin:
                 placeholder="Select the skin you want...")
             if not skin:
                 return
+            if new_answer:
+                answer = new_answer
         if skin is not None:
             skin = skin["_id"]
         upgrade_names = [x for x in [upgrade_1, upgrade_2] if x]
         upgrades = []
         for upgrade in upgrade_names:
-            upgrade, answer = await self.itemname_to_id(
+            upgrade, new_answer = await self.itemname_to_id(
                 ctx,
                 upgrade,
                 filters={"type": "UpgradeComponent"},
@@ -178,6 +180,8 @@ class MiscMixin:
                 component_context=answer)
             if not upgrade:
                 return
+            if new_answer:
+                answer = new_answer
             upgrades.append(upgrade["_id"])
 
         chat_code = self.generate_chat_code(item, quantity, skin, upgrades)
