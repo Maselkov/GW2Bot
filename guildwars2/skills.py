@@ -7,9 +7,11 @@ import re
 import struct
 
 import discord
+from discord_slash.model import SlashCommandOptionType
 import requests
 from discord.ext import commands
 from discord.ext.commands.cooldowns import BucketType
+from discord_slash import cog_ext
 from PIL import Image, ImageDraw
 
 from .utils.chat import cleanup_xml_tags, embed_list_lines
@@ -344,25 +346,20 @@ class Build:
 
 
 class SkillsMixin:
-    @commands.command(hidden=True)  # TODO add smarter check
-    async def template(self, ctx, *, code):
-        """Display a build template"""
-        if (not ctx.guild
-                or ctx.guild.id not in self.chatcode_preview_opted_out_guilds):
-            return
-        build = await Build.from_code(self, code)
-        image = await build.render()
-        await ctx.send(file=image)
-
-    @commands.command(name="skill", aliases=["skillinfo"])
-    @commands.cooldown(1, 5, BucketType.user)
+    @cog_ext.cog_slash(name="skill",
+            options=[{
+            "name": "skill",
+            "description":
+            "The skill name to search for. Example: Meteor Shower.",
+            "type": SlashCommandOptionType.STRING,
+            "required": True,
+        }])
     async def skillinfo(self, ctx, *, skill):
         """Information about a given skill"""
-        if not skill:
-            return await self.send_cmd_help(ctx)
         query = {"name": prepare_search(skill), "professions": {"$ne": None}}
         count = await self.db.skills.count_documents(query)
         cursor = self.db.skills.find(query)
+        await ctx.defer()
 
         def remove_duplicates(items):
             unique_items = []
@@ -380,18 +377,24 @@ class SkillsMixin:
                                            filter_callable=remove_duplicates)
         if not choice:
             return
+        if type(choice) is tuple:
+            choice, answer = choice
         data = await self.skill_embed(choice, ctx)
-        try:
-            await ctx.send(embed=data)
-        except discord.HTTPException:
-            await ctx.send("Need permission to embed links")
+        if answer:
+            return await answer.edit_origin(embed=data)
+        await ctx.send(embed=data)
 
-    @commands.command(name="trait", aliases=["traitinfo"])
-    @commands.cooldown(1, 5, BucketType.user)
+    @cog_ext.cog_slash(name="trait",
+            options=[{
+            "name": "skill",
+            "description":
+            "The trait name to search for. Example: Brave Stride.",
+            "type": SlashCommandOptionType.STRING,
+            "required": True,
+        }])
     async def traitinfo(self, ctx, *, trait):
         """Information about a given trait"""
-        if not trait:
-            return await self.send_cmd_help(ctx)
+        await ctx.defer()
         query = {
             "name": prepare_search(trait),
         }
@@ -401,11 +404,12 @@ class SkillsMixin:
         choice = await self.selection_menu(ctx, cursor, count)
         if not choice:
             return
+        if type(choice) is tuple:
+            choice, answer = choice
         data = await self.skill_embed(choice, ctx)
-        try:
-            await ctx.send(embed=data)
-        except discord.HTTPException:
-            await ctx.send("Need permission to embed links")
+        if answer:
+            return await answer.edit_origin(embed=data)
+        await ctx.send(embed=data)
 
     async def skill_embed(self, skill, ctx):
         def get_skill_type():
@@ -711,38 +715,6 @@ class SkillsMixin:
                 continue
         return fields
 
-    @commands.group(case_insensitive=True)
-    @commands.guild_only()
-    @commands.has_permissions(manage_guild=True)
-    async def previewchatlinks(self, ctx):
-        """The bot will automatically preview posted chat links (codes)
-
-        Works on build templates, items, point of interest links, and more.
-        """
-        if ctx.invoked_subcommand is None:
-            return await ctx.send_help(ctx.command)
-
-    @commands.cooldown(1, 5, BucketType.guild)
-    @previewchatlinks.command(name="toggle")
-    async def previewchatlinks_toggle(self, ctx):
-        """Toggle the link previews. Enabled by default!"""
-        guild = ctx.guild
-        doc = await self.bot.database.get_guild(guild, self)
-        setting = not doc.get("link_preview_disabled", False)
-        await self.bot.database.set_guild(guild,
-                                          {"link_preview_disabled": setting},
-                                          self)
-        if not setting:
-            await ctx.send("Chat link previewing is now **enabled**!\n")
-            try:
-                self.chatcode_preview_opted_out_guilds.remove(guild.id)
-            except KeyError:
-                pass
-        else:
-            self.chatcode_preview_opted_out_guilds.add(guild.id)
-            await ctx.send("Chat link previewing is now **disabled**!\n"
-                           "This setting is enabled by default."
-                           "Use the same command to turn it back on")
 
     async def prepare_linkpreview_guild_cache(self):
         cursor = self.bot.database.iter("guilds",
@@ -906,7 +878,7 @@ class SkillsMixin:
                         return
                     new_embed = await self.skill_embed(trait_doc, message)
                     new_embed.set_footer(text=embed.footer.text,
-                                        icon_url=embed.footer.icon_url)
+icon_url=embed.footer.icon_url)
                     return await message.channel.send(embed=new_embed)
                 case "User":
                     # Can't do much
