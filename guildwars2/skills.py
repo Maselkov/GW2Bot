@@ -370,7 +370,7 @@ class SkillsMixin:
                         unique_items.remove(unique)
                 unique_items.append(item)
             return unique_items
-
+        answer = None
         choice = await self.selection_menu(ctx,
                                            cursor,
                                            count,
@@ -386,7 +386,7 @@ class SkillsMixin:
 
     @cog_ext.cog_slash(name="trait",
             options=[{
-            "name": "skill",
+            "name": "trait",
             "description":
             "The trait name to search for. Example: Brave Stride.",
             "type": SlashCommandOptionType.STRING,
@@ -402,6 +402,7 @@ class SkillsMixin:
         cursor = self.db.traits.find(query)
 
         choice = await self.selection_menu(ctx, cursor, count)
+        answer = None
         if not choice:
             return
         if type(choice) is tuple:
