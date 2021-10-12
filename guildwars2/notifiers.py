@@ -5,348 +5,319 @@ import xml.etree.ElementTree as et
 
 import discord
 from bs4 import BeautifulSoup
-from discord.ext import commands, tasks
-from discord.ext.commands.cooldowns import BucketType
+from discord.ext import tasks
+from discord_slash import cog_ext
+from discord_slash.model import SlashCommandOptionType
+from discord_slash.utils.manage_components import (create_actionrow,
+                                                   create_select,
+                                                   create_select_option,
+                                                   wait_for_component)
 
+from .daily import DAILY_CATEGORIES
 from .exceptions import APIError
 
 
 class NotiifiersMixin:
-    @commands.group(case_insensitive=True)
-    @commands.guild_only()
-    @commands.has_permissions(manage_guild=True)
-    async def dailynotifier(self, ctx):
-        """Sends a list of dailies on server reset to specificed channel.
-        First, specify a channel using $daily notifier channel <channel>
-        Make sure it's toggle on using $daily notifier toggle on
-        """
-        if ctx.invoked_subcommand is None:
-            return await ctx.send_help(ctx.command)
-
-    @commands.cooldown(1, 5, BucketType.guild)
-    @dailynotifier.command(name="channel")
-    async def daily_notifier_channel(self, ctx, channel: discord.TextChannel):
-        """Sets the channel to send the dailies on server reset to"""
-        guild = ctx.guild
-        if not guild.me.permissions_in(channel).send_messages:
-            return await ctx.send("I do not have permissions to send "
-                                  "messages to {.mention}".format(channel))
-        await self.bot.database.set_guild(guild, {"daily.channel": channel.id},
-                                          self)
-        doc = await self.bot.database.get_guild(guild, self)
-        enabled = doc["daily"].get("on", False)
-        if enabled:
-            msg = ("I will now send dailies to {.mention}. "
-                   "".format(channel))
-        else:
-            msg = ("Channel set to {.mention}. In order to receive "
-                   "dailies, you still need to enable it using "
-                   "`dailynotifier toggle on`.".format(channel))
-        await channel.send(msg)
-
-    @commands.cooldown(1, 5, BucketType.guild)
-    @dailynotifier.command(name="toggle")
-    async def daily_notifier_toggle(self, ctx, on_off: bool):
-        """Toggles posting dailies at server reset"""
-        guild = ctx.guild
-        await self.bot.database.set_guild(guild, {"daily.on": on_off}, self)
-        if on_off:
-            doc = await self.bot.database.get_guild(guild, self)
-            channel = doc["daily"].get("channel")
-            if channel:
-                channel = guild.get_channel(channel)
-                if channel:
-                    msg = ("I will now send dailies to {.mention}. "
-                           "".format(channel))
-            else:
-                msg = ("Daily notifier toggled on. In order to reeceive "
-                       "dailies, you still need to set a channel using "
-                       "`dailynotifier channel <channel>`.")
-        else:
-            msg = ("Daily notifier disabled")
-        await ctx.send(msg)
-
-    @commands.cooldown(1, 5, BucketType.guild)
-    @dailynotifier.command(name="autodelete")
-    async def daily_notifier_autodelete(self, ctx, on_off: bool):
-        """Toggles automatically deleting last day's dailies"""
-        guild = ctx.guild
-        await self.bot.database.set_guild(guild, {"daily.autodelete": on_off},
-                                          self)
-        await ctx.send("Autodeletion for daily notifs enabled")
-
-    @commands.cooldown(1, 5, BucketType.guild)
-    @dailynotifier.command(name="categories")
-    async def daily_notifier_categories(self, ctx, *categories):
-        """Set daily notifier to only display specific categories
-
-        Separate multiple categories with space, possible values:
-        all
-        psna
-        psna_later
-        pve
-        pvp
-        wvw
-        fractals
-        strikes
-        psna_later is psna, 8 hours later
-        PSNA changes 8 hours after dailies change.
-
-        Example: $dailynotifier categories psna psna_later pve fractals
-        """
-        if not categories:
-            await ctx.send_help(ctx.command)
-            return
-        guild = ctx.guild
-        possible_values = [
-            "all", "psna", "psna_later", "pve", "pvp", "wvw", "fractals",
-            "strikes"
+    @cog_ext.cog_subcommand(
+        base="notifier",
+        name="daily",
+        base_description="Notifier Commands",
+        options=[{
+            "name":
+            "channel",
+            "description":
+            "The channel to post to. Leave blank to disable, required "
+            "otherwise",
+            "type":
+            SlashCommandOptionType.CHANNEL,
+            "required":
+            False,
+            "channel_types": [0]
+        }, {
+            "name": "pin_message",
+            "description":
+            "Toggle whether to automatically pin the daily message or not",
+            "type": SlashCommandOptionType.BOOLEAN,
+            "required": False,
+        }, {
+            "name":
+            "behavior",
+            "description":
+            "Select additional behavior for deleting/editing the message. "
+            "Leave blank for standard behavior.",
+            "type":
+            SlashCommandOptionType.STRING,
+            "choices": [
+                {
+                    "value":
+                    "autodelete",
+                    "name":
+                    "Delete the previous day's message. Causes an unread "
+                    "notification."
+                },
+                {
+                    "value":
+                    "autoedit",
+                    "name":
+                    "Edit the previous day's message. No unread notification."
+                },
+            ],
+            "required":
+            False
+        }])
+    async def daily_notifier(self,
+                             ctx,
+                             *,
+                             channel=None,
+                             pin_message=False,
+                             behavior=None):
+        """Send daily achievements to a channel every day"""
+        if not ctx.guild:
+            return await ctx.send(
+                "This command can only be used in servers at the time.",
+                hidden=True)
+        if not ctx.author.guild_permissions.manage_guild:
+            return await ctx.send("You need the `manage server` permission "
+                                  "to use this command.")
+        doc = await self.bot.database.get(ctx.guild, self)
+        enabled = doc.get("daily", {}).get("on", False)
+        if not enabled and not channel:
+            return await ctx.send(
+                "Daily notifier is aleady disabled. If "
+                "you were trying to enable it, make sure to fill out "
+                "the `channel` argument.",
+                hidden=True)
+        if enabled and not channel:
+            await self.bot.database.set(ctx.guild, {"daily.on": False}, self)
+            return await ctx.send("Daily notifier disabled.")
+        if not ctx.guild.me.permissions_in(channel).send_messages:
+            return await ctx.send(
+                "I do not have permissions to send "
+                f"messages to {channel.mention}",
+                hidden=True)
+        if not ctx.guild.me.permissions_in(channel).embed_links:
+            return await ctx.send(
+                "I do not have permissions to embed links in "
+                f"{channel.mention}",
+                hidden=True)
+        options = []
+        for category in DAILY_CATEGORIES:
+            emoji = self.get_emoji(ctx, f"daily_{category}", return_obj=True)
+            options.append(
+                create_select_option(category["name"],
+                                     category["value"],
+                                     emoji=emoji or None,
+                                     default=True))
+        row = [
+            create_actionrow(
+                create_select(options,
+                              placeholder="Select which categories "
+                              "you want the bot to post",
+                              min_values=1,
+                              max_values=len(DAILY_CATEGORIES)))
         ]
-        categories = [x.lower() for x in categories]
-        if len(categories) > 6:
-            await ctx.send_help(ctx.command)
-            return
-        for category in categories:
-            if category not in possible_values:
-                await ctx.send_help(ctx.command)
-                return
-            if categories.count(category) > 1:
-                await ctx.send_help(ctx.command)
-                return
-            if category == "all":
-                categories = [
-                    "psna", "psna_later", "pve", "pvp", "wvw", "fractals",
-                    "strikes"
-                ]
+        msg = await ctx.send("** **", components=row)
+        while True:
+            try:
+                answer = await wait_for_component(self.bot,
+                                                  components=row,
+                                                  timeout=120)
+                if answer.author != ctx.author:
+                    self.tell_off(answer)
+                    continue
                 break
-        embed = await self.daily_embed(categories, ctx=ctx)
-        await self.bot.database.set_guild(guild,
-                                          {"daily.categories": categories},
-                                          self)
+            except asyncio.TimeoutError:
+                return await msg.edit(content="No response in time.",
+                                      components=None)
+        embed = await self.daily_embed(answer.selected_options, ctx=ctx)
+        autodelete = False
+        autoedit = False
+        if behavior == "autodelete":
+            autodelete = True
+        if behavior == "autoedit":
+            autoedit = True
+        settings = {
+            "daily.on": True,
+            "daily.channel": channel.id,
+            "daily.autopin": pin_message,
+            "daily.autodelete": autodelete,
+            "daily.autoedit": autoedit,
+            "daily.categories": answer.selected_options
+        }
+        await self.bot.database.set(ctx.guild, settings, self)
+        await answer.edit_origin(
+            f"I will now send dailies to {channel.mention}. Here's an example "
+            "notification:",
+            embed=embed,
+            components=None)
+
+    @cog_ext.cog_subcommand(
+        base="notifier",
+        name="news",
+        base_description="Notifier Commands",
+        options=[{
+            "name":
+            "channel",
+            "description":
+            "The channel to post to. Leave blank to disable, required "
+            "otherwise",
+            "type":
+            SlashCommandOptionType.CHANNEL,
+            "required":
+            False,
+            "channel_types": [0]
+        }])
+    async def newsfeed(self, ctx, *, channel=None):
+        """Automatically sends news from guildwars2.com to a specified channel"""
+        if not ctx.guild:
+            return await ctx.send(
+                "This command can only be used in servers at the time.",
+                hidden=True)
+        if not ctx.author.guild_permissions.manage_guild:
+            return await ctx.send("You need the `manage server` permission "
+                                  "to use this command.")
+        doc = await self.bot.database.get(ctx.guild, self)
+        enabled = doc.get("news", {}).get("on", False)
+        if not enabled and not channel:
+            return await ctx.send(
+                "News notifier is aleady disabled. If "
+                "you were trying to enable it, make sure to fill out "
+                "the `channel` argument.",
+                hidden=True)
+        if enabled and not channel:
+            await self.bot.database.set(ctx.guild, {"news.on": False}, self)
+            return await ctx.send("News notifier disabled.")
+        if not ctx.guild.me.permissions_in(channel).send_messages:
+            return await ctx.send(
+                "I do not have permissions to send "
+                f"messages to {channel.mention}",
+                hidden=True)
+        if not ctx.guild.me.permissions_in(channel).embed_links:
+            return await ctx.send(
+                "I do not have permissions to embed links in "
+                f"{channel.mention}",
+                hidden=True)
+        settings = {"news.on": True, "news.channel": channel.id}
+        await self.bot.database.set(ctx.guild, settings, self)
+        await ctx.send(f"I will now send news to {channel.mention}.")
+
+    @cog_ext.cog_subcommand(
+        base="notifier",
+        name="update",
+        base_description="Notifier Commands",
+        options=[{
+            "name":
+            "channel",
+            "description":
+            "The channel to post to. Leave blank to disable, required "
+            "otherwise",
+            "type":
+            SlashCommandOptionType.CHANNEL,
+            "required":
+            False,
+            "channel_types": [0]
+        }, {
+            "name": "mention",
+            "description":
+            "The mention to ping when posting the notification. Can be a role, or everyone, or even a user.",
+            "type": SlashCommandOptionType.MENTIONABLE,
+            "required": False,
+            "channel_types": [0]
+        }])
+    async def updatenotifier(self, ctx, *, channel=None, mention=None):
+        """Send a notification whenever the game is updated"""
+        if not ctx.guild:
+            return await ctx.send(
+                "This command can only be used in servers at the time.",
+                hidden=True)
+        if not ctx.author.guild_permissions.manage_guild:
+            return await ctx.send("You need the `manage server` permission "
+                                  "to use this command.")
+        doc = await self.bot.database.get(ctx.guild, self)
+        enabled = doc.get("updates", {}).get("on", False)
+        if not enabled and not channel:
+            return await ctx.send(
+                "Update notifier is aleady disabled. If "
+                "you were trying to enable it, make sure to fill out "
+                "the `channel` argument.",
+                hidden=True)
+        if enabled and not channel:
+            await self.bot.database.set(ctx.guild, {"updates.on": False}, self)
+            return await ctx.send("Update notifier disabled.")
+        mention_string = ""
+        if mention:
+            mention = int(mention)
+            if mention == ctx.guild.id:
+                mention = "@everyone"
+            elif role := ctx.guild.get_role(mention):
+                mention_string = role.mention
+            else:
+                mention_string = ctx.guild.get_member(mention).mention
+
+        settings = {
+            "updates.on": True,
+            "updates.channel": channel.id,
+            "updates.mention": mention_string
+        }
+        await self.bot.database.set(ctx.guild, settings, self)
         await ctx.send(
-            "Your categories have been saved. Here's an example of "
-            "your daily notifs:",
-            embed=embed)
+            f"I will now send update notifications to {channel.mention}.")
 
-    @commands.cooldown(1, 5, BucketType.guild)
-    @dailynotifier.command(name="autopin")
-    async def daily_notifier_autopin(self, ctx, on_off: bool):
-        """Set daily notifier to automatically pin the message for the day
-
-        If enabled, will try to unpin last day's message as well
-        """
-        guild = ctx.guild
-        await self.bot.database.set_guild(guild, {"daily.autopin": on_off},
-                                          self)
-        await ctx.send("Autopinning for daily notifs enabled")
-
-    @commands.group(case_insensitive=True)
-    @commands.guild_only()
-    @commands.has_permissions(manage_guild=True)
-    async def newsfeed(self, ctx):
-        """Automatically sends new from guildwars2.com to specified channel"""
-        if ctx.invoked_subcommand is None:
-            return await ctx.send_help(ctx.command)
-
-    @newsfeed.command(name="channel")
-    async def newsfeed_channel(self, ctx, channel: discord.TextChannel):
-        """Sets the channel to send the news to"""
-        guild = ctx.guild
-        if not guild.me.permissions_in(channel).send_messages:
-            return await ctx.send("I do not have permissions to send "
-                                  "messages to {.mention}".format(channel))
-        await self.bot.database.set_guild(guild, {"news.channel": channel.id},
-                                          self)
-        doc = await self.bot.database.get_guild(guild, self)
-        enabled = doc["news"].get("on", False)
-        if enabled:
-            msg = ("I will now automatically send news to "
-                   "{.mention}.".format(channel))
-        else:
-            msg = ("Channel set to {.mention}. In order to receive "
-                   "news, you still need to enable it using "
-                   "`newsfeed toggle on`.".format(channel))
-        await channel.send(msg)
-
-    @newsfeed.command(name="toggle")
-    async def newsfeed_toggle(self, ctx, on_off: bool):
-        """Toggles posting news"""
-        guild = ctx.guild
-        await self.bot.database.set_guild(guild, {"news.on": on_off}, self)
-        if on_off:
-            doc = await self.bot.database.get_guild(guild, self)
-            channel = doc["news"].get("channel")
-            if channel:
-                channel = guild.get_channel(channel)
-                if channel:  # Channel can be none now
-                    msg = (
-                        "I will now send news to {.mention}.".format(channel))
-            else:
-                msg = ("Newsfeed toggled on. In order to receive "
-                       "news, you still need to set a channel using "
-                       "`newsfeed channel <channel>`.")
-        else:
-            msg = ("Newsfeed disabled")
-        await ctx.send(msg)
-
-    @newsfeed.command(name="filter")
-    async def newsfeed_filter(self, ctx, on_off: bool):
-        """Toggle filtering livestream schedule/community showcase"""
-        guild = ctx.guild
-        await self.bot.database.set_guild(guild, {"news.filter": on_off}, self)
-        if on_off:
-            msg = "Newsfeed community post filter enabled"
-        else:
-            msg = "Newsfeed community post filter disabled"
-        await ctx.send(msg)
-
-    @commands.group(case_insensitive=True)
-    @commands.guild_only()
-    @commands.has_permissions(manage_guild=True)
-    async def updatenotifier(self, ctx):
-        """Sends a notification whenever GW2 is updated"""
-        if ctx.invoked_subcommand is None:
-            await ctx.send_help(ctx.command)
-
-    @updatenotifier.command(name="channel")
-    async def update_channel(self, ctx, channel: discord.TextChannel):
-        """Sets the channel to send the update announcement"""
-        guild = ctx.guild
-        if not guild.me.permissions_in(channel).send_messages:
-            return await ctx.send("I do not have permissions to send "
-                                  "messages to {.mention}".format(channel))
-        await self.bot.database.set_guild(guild,
-                                          {"updates.channel": channel.id},
-                                          self)
-        doc = await self.bot.database.get_guild(guild, self)
-        enabled = doc["updates"].get("on", False)
-        if enabled:
-            mention = doc["updates"].get("mention", "here")
-            if mention == "none":
-                suffix = ""
-            else:
-                suffix = (" **WARNING** Currently bot will "
-                          "mention `@{}`. Use `{}updatenotifier "
-                          "mention` to change that".format(
-                              mention, ctx.prefix))
-            msg = ("I will now automatically send update notifications to "
-                   "{.mention}.".format(channel) + suffix)
-        else:
-            msg = ("Channel set to {.mention}. In order to receive "
-                   "update notifications, you still need to enable it using "
-                   "`updatenotifier toggle on`.".format(channel))
-        await channel.send(msg)
-
-    @updatenotifier.command(name="toggle")
-    async def update_toggle(self, ctx, on_off: bool):
-        """Toggles sending game update notifications"""
-        guild = ctx.guild
-        await self.bot.database.set_guild(guild, {"updates.on": on_off}, self)
-        if on_off:
-            doc = await self.bot.database.get_guild(guild, self)
-            channel = doc["updates"].get("channel")
-            if channel:
-                channel = guild.get_channel(channel)
-                if channel:  # Channel can be none now
-                    mention = doc["updates"].get("mention", "here")
-                    if mention == "none":
-                        suffix = ""
-                    else:
-                        suffix = (" **WARNING** Currently bot will "
-                                  "mention `@{}`. Use `{}updatenotifier "
-                                  "mention` to change that".format(
-                                      mention, ctx.prefix))
-                    msg = (
-                        "I will now automatically send update notifications "
-                        "to {.mention}".format(channel) + suffix)
-                else:  # TODO change it, ugly
-                    msg = (
-                        "Update notifier toggled on. In order to reeceive "
-                        "update notifs, you still need to set a channel using "
-                        "`updatenotifier channel <channel>`.")
-            else:
-                msg = ("Update notifier toggled on. In order to reeceive "
-                       "update notifs, you still need to set a channel using "
-                       "`updatenotifier channel <channel>`.")
-        else:
-            msg = ("Update notifier disabled")
-        await ctx.send(msg)
-
-    @commands.cooldown(1, 5, BucketType.guild)
-    @updatenotifier.command(name="mention", usage="<mention type>")
-    async def updatenotifier_mention(self, ctx, mention_type):
-        """Change the type of mention to be included with update notifier
-
-        Possible values:
-        none
-        here
-        everyone
-        """
-        valid_types = "none", "here", "everyone"
-        mention_type = mention_type.lower()
-        if mention_type not in valid_types:
-            return await ctx.send_help(ctx.command)
-        guild = ctx.guild
-        await self.bot.database.set_guild(guild,
-                                          {"updates.mention": mention_type},
-                                          self)
-        await ctx.send("Mention type set")
-
-    @commands.group(case_insensitive=True)
-    @commands.guild_only()
-    @commands.has_permissions(manage_guild=True)
-    async def bossnotifier(self, ctx):
-        """Sends the next two bosses every 15 minutes to a channel
-        """
-        if ctx.invoked_subcommand is None:
-            return await ctx.send_help(ctx.command)
-
-    @commands.cooldown(1, 5, BucketType.guild)
-    @bossnotifier.command(name="channel")
-    async def bossnotifier_channel(self, ctx, channel: discord.TextChannel):
-        """Sets the channel to send the bosses to"""
-        guild = ctx.guild
-        if not guild.me.permissions_in(channel).send_messages:
-            return await ctx.send("I do not have permissions to send "
-                                  "messages to {.mention}".format(channel))
-        await self.bot.database.set_guild(guild,
-                                          {"bossnotifs.channel": channel.id},
-                                          self)
-        doc = await self.bot.database.get_guild(guild, self)
-        enabled = doc["bossnotifs"].get("on", False)
-        if enabled:
-            msg = ("I will now send upcoming bosses to {.mention}."
-                   "\nLast message will be automatically deleted.".format(
-                       channel))
-        else:
-            msg = ("Channel set to {.mention}. In order to receive "
-                   "upcoming bosses, you still need to enable it using "
-                   "`bossnotifier toggle on`.".format(channel))
-        await channel.send(msg)
-
-    @commands.cooldown(1, 5, BucketType.guild)
-    @bossnotifier.command(name="toggle")
-    async def bossnotifier_toggle(self, ctx, on_off: bool):
-        """Toggles posting upcoming bosses"""
-        guild = ctx.guild
-        await self.bot.database.set_guild(guild, {"bossnotifs.on": on_off},
-                                          self)
-        if on_off:
-            doc = await self.bot.database.get_guild(guild, self)
-            channel = doc["bossnotifs"].get("channel")
-            if channel:
-                channel = guild.get_channel(channel)
-                if channel:
-                    msg = ("I will now send upcoming bosses to {.mention}."
-                           "\nLast message will be automatically deleted.".
-                           format(channel))
-            else:
-                msg = ("Boss notifier toggled on. In order to receive "
-                       "bosses, you still need to set a channel using "
-                       "`bossnotifier channel <channel>`.")
-        else:
-            msg = ("Boss notifier disabled")
-        await ctx.send(msg)
+    @cog_ext.cog_subcommand(
+        base="notifier",
+        name="bosses",
+        base_description="Notifier Commands",
+        options=[{
+            "name":
+            "channel",
+            "description":
+            "The channel to post to. Leave blank to disable, required "
+            "otherwise",
+            "type":
+            SlashCommandOptionType.CHANNEL,
+            "required":
+            False,
+            "channel_types": [0]
+        }, {
+            "name":
+            "edit",
+            "description":
+            "Edit the previous message instead of deleting it. If not, posts "
+            "a new message. Defaults to False",
+            "type":
+            SlashCommandOptionType.BOOLEAN,
+            "required":
+            False
+        }])
+    async def bossnotifier(self, ctx, *, channel=None, edit=False):
+        """Send the next two bosses every 15 minutes to a channel"""
+        key = "bossnotifs"
+        if not ctx.guild:
+            return await ctx.send(
+                "This command can only be used in servers at the time.",
+                hidden=True)
+        if not ctx.author.guild_permissions.manage_guild:
+            return await ctx.send("You need the `manage server` permission "
+                                  "to use this command.")
+        doc = await self.bot.database.get(ctx.guild, self)
+        enabled = doc.get(key, {}).get("on", False)
+        if not enabled and not channel:
+            return await ctx.send(
+                "Boss notifier is aleady disabled. If "
+                "you were trying to enable it, make sure to fill out "
+                "the `channel` argument.",
+                hidden=True)
+        if enabled and not channel:
+            await self.bot.database.set(ctx.guild, {f"{key}.on": False}, self)
+            return await ctx.send("Boss notifier disabled.")
+        settings = {
+            f"{key}.on": True,
+            f"{key}.channel": channel.id,
+            f"{key}.edit": edit
+        }
+        await self.bot.database.set(ctx.guild, settings, self)
+        await ctx.send(
+            f"I will now send boss notifications to {channel.mention}.")
 
     async def update_notification(self, new_build):
         def get_short_patchnotes(body, url):
@@ -586,15 +557,15 @@ class NotiifiersMixin:
             async for doc in cursor:
                 try:
                     guild = doc["cogs"][name]["updates"]
-                    mention = guild.get("mention", "here")
+                    mention = guild.get("mention", "")
+                    if mention == "everyone" or mention == "here":  # Legacy, too lazy to update atm, TODO
+                        mention = "@" + mention
                     if mention == "none":
                         mention = ""
-                    else:
-                        mention = "@{} ".format(mention)
                     channel = self.bot.get_channel(guild["channel"])
                     if (channel.permissions_for(channel.guild.me).embed_links
                             and embed_available):
-                        message = mention + "Guild Wars 2 has just updated!"
+                        message = mention + " Guild Wars 2 has just updated!"
                         await channel.send(message, embed=embed)
                     else:
                         await channel.send(text)
@@ -667,10 +638,21 @@ class NotiifiersMixin:
         async for doc in cursor:
             try:
                 doc = doc["cogs"][name]["bossnotifs"]
+                edit = doc.get("edit", False)
                 channel = self.bot.get_channel(doc["channel"])
-                timezone = await self.get_timezone(channel.guild)
                 embed = self.schedule_embed(2)
+                edited = False
                 try:
+                    if edit:
+                        old_message = await channel.fetch_message(
+                            doc["message"])
+                        if old_message:
+                            try:
+                                await old_message.edit(embed=embed)
+                                edited = True
+                                continue
+                            except discord.HTTPException:
+                                pass
                     message = await channel.send(embed=embed)
                 except discord.Forbidden:
                     message = await channel.send("Need permission to "
@@ -678,12 +660,14 @@ class NotiifiersMixin:
                                                  "to send boss "
                                                  "notifs!")
                     continue
-                await self.bot.database.set_guild(
-                    channel.guild, {"bossnotifs.message": message.id}, self)
-                old_message = doc.get("message")
-                if old_message:
-                    to_delete = await channel.fetch_message(old_message)
-                    await to_delete.delete()
+                if not edited:
+                    await self.bot.database.set(
+                        channel.guild, {"bossnotifs.message": message.id},
+                        self)
+                    old_message_id = doc.get("message")
+                    if old_message_id:
+                        to_delete = await channel.fetch_message(old_message_id)
+                        await to_delete.delete()
             except asyncio.CancelledError:
                 self.log.error("Big dead")
                 return
