@@ -2,67 +2,74 @@ import asyncio
 import datetime
 
 import discord
-from discord import emoji
 from discord.ext import commands, tasks
 from discord_slash import cog_ext
 from discord_slash.context import ComponentContext
 from discord_slash.model import ButtonStyle, SlashCommandOptionType
-from discord_slash.utils.manage_components import create_actionrow, create_button
+from discord_slash.utils.manage_components import (create_actionrow,
+                                                   create_button)
 
 UTC_TZ = datetime.timezone.utc
 
 
 class EventsMixin:
-    @cog_ext.cog_subcommand(base="et",
-                            name="hot",
-                            base_description="Event timer commands")
-    async def et_hot(self, ctx):
-        """Event timer for HoT maps and Dry Top"""
-        await ctx.send(embed=await self.timer_embed(ctx, "hot"))
-
-    @cog_ext.cog_subcommand(base="et",
-                            name="pof",
-                            base_description="Event timer commands")
-    async def et_pof(self, ctx):
-        """Event timer for PoF and LS4 maps"""
-        await ctx.send(embed=await self.timer_embed(ctx, "pof"))
-
-    @cog_ext.cog_subcommand(base="et",
-                            name="day",
-                            base_description="Event timer commands")
-    async def et_day(self, ctx):
-        """Current day/night cycle"""
-        await ctx.send(embed=await self.timer_embed(ctx, "day"))
-
-    @cog_ext.cog_subcommand(base="et",
-                            name="bosses",
-                            base_description="Event timer commands")
-    async def et_bosses(self, ctx):
-        """Upcoming world bosses"""
-        embed = self.schedule_embed()
+    @cog_ext.cog_slash(
+        options=[{
+            "name":
+            "category",
+            "description":
+            "Daily type",
+            "type":
+            SlashCommandOptionType.STRING,
+            "required":
+            True,
+            "choices": [
+                {
+                    "value": "hot",
+                    "name": "HoT - Heart of Thorns"
+                },
+                {
+                    "value": "hot",
+                    "name": "PoF - Path of Fire"
+                },
+                {
+                    "value": "day",
+                    "name": "Day/night cycle"
+                },
+                {
+                    "value": "bosses",
+                    "name": "World bosses"
+                },
+            ],
+        }], )
+    async def et(self, ctx, category):
+        """Event timer"""
+        if category == "bosses":
+            embed = self.schedule_embed()
+        else:
+            embed = await self.timer_embed(ctx, category)
         await ctx.send(embed=embed)
 
-    @cog_ext.cog_subcommand(
-        base="et",
-        name="reminder",
-        base_description="Event timer commands",
-        options=[{
+    @cog_ext.cog_slash(options=[
+        {
             "name": "event_name",
             "description":
             "Event name. Examples: Shadow Behemoth. Gerent Preparation",
             "type": SlashCommandOptionType.STRING,
             "required": True,
-        }, {
+        },
+        {
             "name": "minutes_before_event",
             "description":
             "The number of minutes before the event that you'll be notified at",
             "type": SlashCommandOptionType.INTEGER,
-            "required": True
-        }])
-    async def et_reminder(self,
-                          ctx,
-                          event_name: str,
-                          minutes_before_event: int = 5):
+            "required": True,
+        },
+    ])
+    async def event_reminder(self,
+                             ctx,
+                             event_name: str,
+                             minutes_before_event: int = 5):
         """Make the bot automatically notify you before an event starts"""
         if minutes_before_event < 0:
             return await ctx.send("That's not how time works!", hidden=True)
@@ -97,25 +104,28 @@ class EventsMixin:
     async def et_reminder_settings_menu(self, ctx):
         # Unimplemented. Should get around to it sometime.
         user = ctx.author
-        embed_templates = [{
-            "setting":
-            "online_only",
-            "title":
-            "Online only",
-            "description":
-            "Enable to have reminders sent only when you're online on Discord",
-            "footer":
-            "Note that the bot can't distinguish whether you're invisible or offline"
-        }, {
-            "setting":
-            "ingame_only",
-            "title":
-            "Ingame only",
-            "description":
-            "Enable to have reminders sent only while you're in game",
-            "footer":
-            "This works based off your Discord game status. Make sure to enable it"
-        }]
+        embed_templates = [
+            {
+                "setting":
+                "online_only",
+                "title":
+                "Online only",
+                "description":
+                "Enable to have reminders sent only when you're online on Discord",
+                "footer":
+                "Note that the bot can't distinguish whether you're invisible or offline",
+            },
+            {
+                "setting":
+                "ingame_only",
+                "title":
+                "Ingame only",
+                "description":
+                "Enable to have reminders sent only while you're in game",
+                "footer":
+                "This works based off your Discord game status. Make sure to enable it",
+            },
+        ]
         doc = await self.bot.database.get(user, self)
         doc = doc.get("et_reminder_settings", {})
         settings = [t["setting"] for t in embed_templates]
@@ -196,7 +206,7 @@ class EventsMixin:
                 output = {
                     "name": boss["name"],
                     "time": time,
-                    "waypoint": boss["waypoint"]
+                    "waypoint": boss["waypoint"],
                 }
                 schedule.append(output)
             counter += 1
@@ -207,7 +217,7 @@ class EventsMixin:
                 output = {
                     "name": boss["name"],
                     "time": time,
-                    "waypoint": boss["waypoint"]
+                    "waypoint": boss["waypoint"],
                 }
                 schedule.append(output)
         return sorted(schedule, key=lambda t: t["time"].time())
@@ -230,7 +240,7 @@ class EventsMixin:
                         "name": boss["name"],
                         "time": f"<t:{int(boss_time.timestamp())}:t>",
                         "waypoint": boss["waypoint"],
-                        "diff": boss_time - time
+                        "diff": boss_time - time,
                     }
                     upcoming_bosses.append(output)
                     counter += 1
@@ -244,13 +254,16 @@ class EventsMixin:
         for boss in schedule:
             value = "Time: {}\nWaypoint: {}".format(boss["time"],
                                                     boss["waypoint"])
-            data.add_field(name="{} in {}".format(
-                boss["name"], self.format_timedelta(boss["diff"])),
-                           value=value,
-                           inline=False)
+            data.add_field(
+                name="{} in {}".format(boss["name"],
+                                       self.format_timedelta(boss["diff"])),
+                value=value,
+                inline=False,
+            )
         data.set_footer(
             text="The timestamps are dynamically adjusted to your timezone",
-            icon_url=self.bot.user.avatar_url)
+            icon_url=self.bot.user.avatar_url,
+        )
         return data
 
     def format_timedelta(self, td):
@@ -270,7 +283,7 @@ class EventsMixin:
         title = {
             "hot": "HoT Event Timer",
             "pof": "PoF Event Timer",
-            "day": "Day/Night cycle"
+            "day": "Day/Night cycle",
         }.get(group)
         embed = discord.Embed(title=title,
                               color=await self.get_embed_color(ctx))
@@ -363,8 +376,9 @@ class EventsMixin:
         time = self.get_time_until_event(reminder)
         if time < reminder["time"] + 30:
             last_reminded = reminder.get("last_reminded")
-            if last_reminded and (datetime.datetime.utcnow() - last_reminded
-                                  ).total_seconds() < reminder["time"] + 120:
+            if (last_reminded and
+                (datetime.datetime.utcnow() - last_reminded).total_seconds() <
+                    reminder["time"] + 120):
                 return
             try:
                 last_message = reminder.get("last_message")
@@ -375,10 +389,10 @@ class EventsMixin:
                 pass
             minutes, seconds = divmod(time, 60)
             if minutes:
-                time_string = (f"{minutes} minutes and {seconds} seconds")
+                time_string = f"{minutes} minutes and {seconds} seconds"
             else:
                 time_string = f"{seconds} seconds"
-            description = (f"{reminder['name']} will begin in {time_string}")
+            description = f"{reminder['name']} will begin in {time_string}"
             embed = discord.Embed(title="Event reminder",
                                   description=description,
                                   color=self.embed_color)
@@ -428,7 +442,8 @@ class EventsMixin:
                 "last_message": ctx.origin_message_id,
             }},
             self,
-            operator="pull")
+            operator="pull",
+        )
         if update_result.modified_count:
             try:
                 await ctx.origin_message.delete()
