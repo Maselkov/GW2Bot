@@ -1,7 +1,7 @@
 import asyncio
 
 from discord_slash import cog_ext
-from discord_slash.model import ButtonStyle
+from discord_slash.model import ButtonStyle, SlashCommandOptionType
 from discord_slash.utils.manage_components import (create_actionrow,
                                                    create_button,
                                                    wait_for_component)
@@ -9,7 +9,7 @@ from discord_slash.utils.manage_components import (create_actionrow,
 
 class GuildManageMixin:
     @cog_ext.cog_subcommand(base="server",
-                            name="forceaccountnames",
+                            name="force_account_names",
                             base_description="Server management commands")
     async def server_force_account_names(self, ctx, enabled: bool):
         """Automatically change nicknames to in-game names"""
@@ -56,6 +56,42 @@ class GuildManageMixin:
             "`/server forceaccountnames false`\nPlease note that the "
             "bot cannot change nicknames for roles above the bot.",
             components=None)
+
+    @cog_ext.cog_subcommand(
+        base="server",
+        name="preview_chat_links",
+        base_description="Server management commands",
+        options=[{
+            "name": "enabled",
+            "description": "Enable or disable automatic chat link preview",
+            "type": SlashCommandOptionType.BOOLEAN,
+            "required": True,
+        }])
+    async def previewchatlinks(self, ctx, *, enabled):
+        """Enable or disable automatic GW2 chat link preview"""
+        doc = await self.bot.database.get(ctx.guild, self)
+        disabled = doc.get("link_preview_disabled", False)
+        if disabled and not enabled:
+            return await ctx.send("Chat link preview is aleady disabled.",
+                                  hidden=True)
+        if not disabled and enabled:
+            return await ctx.send("Chat link preview is aleady enabled.",
+                                  hidden=True)
+        if not disabled and not enabled:
+            self.chatcode_preview_opted_out_guilds.add(ctx.guild.id)
+            return await ctx.send("Chat link preview is now disabled.",
+                                  hidden=True)
+        if disabled and enabled:
+            await self.bot.database.set_guild(
+                ctx.guild, {"link_preview_disabled": not enabled}, self)
+            await self.bot.database.set_guild(
+                ctx.guild, {"link_preview_disabled": not enabled}, self)
+            try:
+                self.chatcode_preview_opted_out_guilds.remove(ctx.guild.id)
+            except KeyError:
+                pass
+            return await ctx.send("Chat link preview is now enabled.",
+                                  hidden=True)
 
     async def force_guild_account_names(self, guild):
         for member in guild.members:
