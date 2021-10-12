@@ -381,7 +381,7 @@ class SkillsMixin:
             choice, answer = choice
         data = await self.skill_embed(choice, ctx)
         if answer:
-            return await answer.edit_origin(embed=data)
+            return await answer.edit_origin(embed=data, components=None)
         await ctx.send(embed=data)
 
     @cog_ext.cog_slash(name="trait",
@@ -409,7 +409,7 @@ class SkillsMixin:
             choice, answer = choice
         data = await self.skill_embed(choice, ctx)
         if answer:
-            return await answer.edit_origin(embed=data)
+            return await answer.edit_origin(embed=data, components=None)
         await ctx.send(embed=data)
 
     async def skill_embed(self, skill, ctx):
