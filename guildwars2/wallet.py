@@ -4,6 +4,8 @@ import re
 import discord
 from discord.ext import commands
 from discord.ext.commands.cooldowns import BucketType
+from discord_slash import cog_ext
+from discord_slash.model import SlashCommandOptionType
 
 from .exceptions import APIError
 from .utils.chat import embed_list_lines
@@ -12,16 +14,6 @@ from .utils.db import prepare_search
 
 class WalletMixin:
     async def get_wallet(self, ctx, ids):
-        # Returns a list of lists with currency strings
-
-        # Difference between two lists, xs has to be the bigger one
-        def get_diff(xs, ys):
-            zs = []
-            for x in xs:
-                if x not in ys:
-                    zs.append(x)
-            return zs
-
         flattened_ids = [y for x in ids for y in x]
         try:
             doc = await self.fetch_key(ctx.author, ["wallet"])
@@ -75,17 +67,20 @@ class WalletMixin:
                                                       name))
         return lines
 
-    @commands.command(usage="<optional: specific currency>")
-    @commands.cooldown(1, 10, BucketType.user)
+    @cog_ext.cog_slash(options=[{
+        "name": "currency",
+        "description":
+        "The specific currency to search for. Leave blank for general overview.",
+        "type": SlashCommandOptionType.STRING,
+        "required": False,
+    }])
     async def wallet(self, ctx, *, currency=None):
-        """Shows your wallet
-
-        Required permissions: wallet
-        """
+        """Shows your wallet"""
         try:
             doc = await self.fetch_key(ctx.author, ["wallet"])
         except APIError as e:
             return await self.error_handler(ctx, e)
+        await ctx.defer()
         if currency:
             try:
                 results = await self.call_api("account/wallet", key=doc["key"])
@@ -97,7 +92,10 @@ class WalletMixin:
             query = {"name": prepare_search(currency)}
             count = await self.db.currencies.count_documents(query)
             cursor = self.db.currencies.find(query)
+            answer = None
             choice = await self.selection_menu(ctx, cursor, count)
+            if type(choice) is tuple:
+                choice, answer = choice
             if choice:
                 embed = discord.Embed(title=choice["name"].title(),
                                       description=choice["description"],
@@ -120,12 +118,10 @@ class WalletMixin:
                                  icon_url=ctx.author.avatar_url)
                 embed.set_footer(text=self.bot.user.name,
                                  icon_url=self.bot.user.avatar_url)
-                try:
-                    await ctx.send(embed=embed)
-                except discord.Forbidden:
-                    await ctx.send("Need permission to embed links")
-                return
-        await ctx.trigger_typing()
+                if answer:
+                    return await answer.edit_origin(embed=embed,
+                                                    components=None)
+                return await ctx.send(embed=embed)
         ids_cur = [1, 4, 2, 3, 18, 23, 15, 16, 50, 47, 26, 33]
         ids_keys = [43, 40, 41, 37, 42, 38, 44, 49, 51]
         ids_maps = [32, 45, 25, 27, 19, 22, 20, 29, 34, 35]
@@ -137,9 +133,11 @@ class WalletMixin:
         ids_ibs = [92072, 92272]
         ids_ibs_cur = [58, 60]
         ids_strikes_cur = [52, 56, 53, 55, 57, 54]
-        ids_wallet = [ids_cur, ids_keys, ids_maps, ids_token, ids_raid, ids_ibs_cur, ids_strikes_cur]
+        ids_wallet = [
+            ids_cur, ids_keys, ids_maps, ids_token, ids_raid, ids_ibs_cur,
+            ids_strikes_cur
+        ]
         ids_items = [ids_l3, ids_l4, ids_ibs, ids_maps_items]
-
         try:
             currencies_wallet = await self.get_wallet(ctx, ids_wallet)
             currencies_items = await self.get_item_currency(ctx, ids_items)
@@ -179,8 +177,7 @@ class WalletMixin:
         if expansion_content:
             saga_title = "EXPANSION LEVEL CONTENT"
         embed = embed_list_lines(embed,
-                                 currencies_items[2] + 
-                                 currencies_wallet[5],
+                                 currencies_items[2] + currencies_wallet[5],
                                  f"> **{saga_title}**",
                                  inline=True)
         embed = embed_list_lines(embed,
@@ -195,7 +192,4 @@ class WalletMixin:
                          icon_url=ctx.author.avatar_url)
         embed.set_footer(text=self.bot.user.name,
                          icon_url=self.bot.user.avatar_url)
-        try:
-            await ctx.send(embed=embed)
-        except discord.Forbidden:
-            await ctx.send("Need permission to embed links")
+        await ctx.send(embed=embed)
