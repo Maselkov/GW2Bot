@@ -10,7 +10,7 @@ from .exceptions import APIError
 class PvpMixin:
     @cog_ext.cog_subcommand(base="pvp",
                             name="stats",
-                            base_description="PVP related commands")
+                            base_description="PvP related commands")
     async def pvp_stats(self, ctx):
         """Information about your general pvp stats"""
         await ctx.defer()
