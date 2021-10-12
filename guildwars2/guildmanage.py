@@ -14,6 +14,12 @@ class GuildManageMixin:
     async def server_force_account_names(self, ctx, enabled: bool):
         """Automatically change nicknames to in-game names"""
         guild = ctx.guild
+        if not ctx.guild:
+            return await ctx.send("This command can only be used in servers.",
+                                  hidden=True)
+        if not ctx.author.guild_permissions.manage_nicknames:
+            return await ctx.send("You need the manage nicknames permission "
+                                  "to enable this feature.")
         doc = await self.bot.database.get(guild, self)
         if doc and enabled and doc.get("forced_account_names"):
             return await ctx.send("Forced account names are already enabled")
@@ -22,7 +28,7 @@ class GuildManageMixin:
                                         self)
             return await ctx.send("Forced account names disabled")
         if not ctx.guild.me.guild_permissions.manage_nicknames:
-            return await ctx.send("I need the manage nicknames permissions "
+            return await ctx.send("I need the manage nicknames permission "
                                   "for this feature")
 
         button = create_button(style=ButtonStyle.green,
