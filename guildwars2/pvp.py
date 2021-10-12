@@ -1,6 +1,4 @@
 import discord
-from discord.ext import commands
-from discord.ext.commands.cooldowns import BucketType
 from discord_slash import cog_ext
 from discord_slash.model import SlashCommandOptionType
 
