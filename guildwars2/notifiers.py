@@ -106,8 +106,7 @@ class NotiifiersMixin:
             options.append(
                 create_select_option(category["name"],
                                      category["value"],
-                                     emoji=emoji or None,
-                                     default=True))
+                                     emoji=emoji or None))
         row = [
             create_actionrow(
                 create_select(options,
@@ -146,6 +145,7 @@ class NotiifiersMixin:
         }
         await self.bot.database.set(ctx.guild, settings, self)
         await answer.edit_origin(
+            content=
             f"I will now send dailies to {channel.mention}. Here's an example "
             "notification:",
             embed=embed,
