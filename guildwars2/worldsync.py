@@ -185,3 +185,7 @@ class WorldsyncMixin:
                 return
             except Exception as e:
                 pass
+
+    @worldsync_task.before_loop
+    async def before_worldsync_task(self):
+        await self.bot.wait_until_ready()

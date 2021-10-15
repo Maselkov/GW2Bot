@@ -548,6 +548,8 @@ class NotiifiersMixin:
         async for doc in cursor:
             try:
                 channel = self.bot.get_channel(doc["channel"])
+                if not channel:
+                    continue
                 filter_on = doc.get("filter", True)
                 for embed in embeds:
                     if filter_on:
@@ -608,6 +610,10 @@ class NotiifiersMixin:
             await self.cache_dailies()
             await self.send_daily_notifs()
 
+    @daily_checker.before_loop
+    async def before_daily_checker(self):
+        await self.bot.wait_until_ready()
+
     @tasks.loop(minutes=3)
     async def news_checker(self):
         to_post = await self.check_news()
@@ -617,11 +623,19 @@ class NotiifiersMixin:
                 embeds.append(self.news_embed(item))
             await self.send_news(embeds)
 
+    @news_checker.before_loop
+    async def before_news_checker(self):
+        await self.bot.wait_until_ready()
+
     @tasks.loop(minutes=1)
     async def game_update_checker(self):
         if await self.check_build():
             await self.send_update_notifs()
             await self.rebuild_database()
+
+    @game_update_checker.before_loop
+    async def before_update_checker(self):
+        await self.bot.wait_until_ready()
 
     @tasks.loop(minutes=5)
     async def gem_tracker(self):
@@ -645,6 +659,10 @@ class NotiifiersMixin:
                 return
             except Exception:
                 pass
+
+    @gem_tracker.before_loop
+    async def before_gem_tracker(self):
+        await self.bot.wait_until_ready()
 
     @tasks.loop(minutes=5)
     async def boss_notifier(self):
@@ -692,10 +710,13 @@ class NotiifiersMixin:
                         to_delete = await channel.fetch_message(old_message_id)
                         await to_delete.delete()
             except asyncio.CancelledError:
-                self.log.error("Big dead")
                 return
             except Exception:
                 pass
+
+    @boss_notifier.before_loop
+    async def before_boss_notifier(self):
+        await self.bot.wait_until_ready()
 
     @tasks.loop(minutes=15)
     async def world_population_checker(self):
@@ -717,6 +738,10 @@ class NotiifiersMixin:
                     "date":
                     date
                 })
+
+    @world_population_checker.before_loop
+    async def before_world_population_checker(self):
+        await self.bot.wait_until_ready()
 
     async def send_population_notifs(self):
         async for world in self.db.worlds.find({"population": {
@@ -752,3 +777,7 @@ class NotiifiersMixin:
                 return
             except Exception:
                 pass
+
+    @forced_account_names.before_loop
+    async def before_forced_account_names(self):
+        await self.bot.wait_until_ready()

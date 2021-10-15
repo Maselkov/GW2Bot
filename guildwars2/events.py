@@ -432,6 +432,10 @@ class EventsMixin:
             except Exception as e:
                 pass
 
+    @event_reminder_task.before_loop
+    async def before_event_reminder_task(self):
+        await self.bot.wait_until_ready()
+
     @commands.Cog.listener()
     async def on_component(self, ctx: ComponentContext):
         if ctx.guild:

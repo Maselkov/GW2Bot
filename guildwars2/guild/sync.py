@@ -847,6 +847,10 @@ class GuildSync:
                                        exc_info=e)
             await asyncio.sleep(0.5)
 
+    @guildsync_consumer.before_loop
+    async def before_guildsync_consumer(self):
+        await self.bot.wait_until_ready()
+
     @tasks.loop(seconds=60)
     async def guild_synchronizer(self):
         cursor = self.bot.database.iter("guilds", {"guildsync.enabled": True},
@@ -861,6 +865,10 @@ class GuildSync:
             except Exception:
                 pass
         await self.guildsync_queue.join()
+
+    @guild_synchronizer.before_loop
+    async def before_guild_synchronizer(self):
+        await self.bot.wait_until_ready()
 
     def schedule_guildsync(self, guild, priority, *, member=None):
         coro = self.run_guildsyncs(guild, sync_for=member)
@@ -920,13 +928,13 @@ class GuildSync:
                 "again by removing and adding the reaction")
         guild = self.bot.get_guild(doc["guild_id"])
         if not guild:
-            return await answer.edit_origin(
+            return await ctx.edit_origin(
                 content="It seems like the server no longer exists",
                 components=None,
                 embed=None)
         requesting_user = self.bot.get_user(doc["requester_id"])
         if not requesting_user:
-            return await answer.edit_origin(
+            return await ctx.edit_origin(
                 content="It seems like the requesting user no "
                 "longer exists",
                 components=None,
