@@ -163,15 +163,17 @@ class CharactersMixin:
             if not results:
                 return
             edit = True
-        else:
-            character = character.title()
-            try:
-                results = await self.get_character(ctx, character)
-            except APINotFound:
-                return await ctx.send("Invalid character name")
-            except APIError as e:
-                return await self.error_handler(ctx, e)
-        eq = [x for x in results["equipment"] if x["location"] == "Equipped"]
+            character = results["name"]
+        try:
+            results = await self.get_character(ctx, character)
+        except APINotFound:
+            return await ctx.send("Invalid character name")
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+        eq = [
+            x for x in results["equipment"]
+            if x["location"].startswith("Equipped")
+        ]
         gear = {}
         pieces = [
             "Helm", "Shoulders", "Coat", "Gloves", "Leggings", "Boots",
@@ -639,9 +641,11 @@ class CharactersMixin:
         for tab in equipment_tabs:
             eq = []
             for item_1 in tab["equipment"]:
+                if "stats" in item_1:
+                    eq.append(item_1)
+                    continue
                 for item_2 in results["equipment"]:
-                    if item_1["id"] != item_2["id"] or item_1[
-                            "slot"] != item_2.get("slot"):
+                    if item_1["id"] != item_2["id"]:
                         continue
                     if tab["tab"] in item_2["tabs"]:
                         item_copy = copy.copy(item_2)
@@ -1273,11 +1277,11 @@ class CharactersMixin:
     async def get_character(self, ctx, character):
         character = character.title()
         endpoint = "characters/" + character.replace(" ", "%20")
-        schema = datetime.datetime(2019, 12, 19)
         try:
-            results = await self.call_api(endpoint,
-                                          ctx.author, ["characters", "builds"],
-                                          schema_version=schema)
+            results = await self.call_api(
+                endpoint,
+                ctx.author, ["characters", "builds"],
+                schema_string="2021-07-15T13:00:00.000Z")
             if results:
                 return results
             raise APINotFound
