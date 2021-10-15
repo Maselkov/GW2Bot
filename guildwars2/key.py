@@ -118,7 +118,7 @@ class KeyMixin:
             options.append(
                 create_select_option(key["account_name"],
                                      description=key["name"],
-                                     value=i))
+                                     value=str(i)))
         select = create_select(min_values=1,
                                max_values=max_values,
                                options=options,
@@ -151,7 +151,8 @@ class KeyMixin:
                                          "Select the keys you want to remove")
         if not answer:
             return
-        choices = [int(ans) for ans in answer.selected_options]
+        choices = sorted((int(ans) for ans in answer.selected_options),
+                         reverse=True)
         for choice in choices:
             if keys[choice] == key:
                 key = {}
@@ -228,7 +229,10 @@ class KeyMixin:
         msg = "Swapped to selected key."
         if key["name"]:
             msg += " Name : `{}`".format(key["name"])
-        await answer.edit_origin(content=msg, components=None)
+        if answer:
+            await answer.edit_origin(content=msg, components=None)
+        else:
+            await ctx.send(msg, hidden=True)
         try:
             if ctx.guild:
                 await self.worldsync_on_member_join(ctx.author)
