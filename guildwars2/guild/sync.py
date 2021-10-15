@@ -5,8 +5,7 @@ from datetime import datetime
 
 import discord
 from discord.ext import commands, tasks
-from discord.ext.commands.cooldowns import BucketType
-from discord_slash import cog_ext
+from discord_slash import cog_ext, ComponentContext
 from discord_slash.model import ButtonStyle, SlashCommandOptionType
 
 from ..exceptions import (APIError, APIForbidden, APIInvalidKey, APIKeyError,
@@ -268,12 +267,6 @@ class GuildSync:
         name="edit",
         base_description="Sync your in-game guild roster with server roles",
         options=[{
-            "name": "guild_name",
-            "description":
-            "The guild name of the guild you wish to sync with.",
-            "type": SlashCommandOptionType.STRING,
-            "required": True
-        }, {
             "name":
             "operation",
             "description":
@@ -301,7 +294,7 @@ class GuildSync:
                 "argument"
             }, {
                 "value": "delete",
-                "name": "Delete this guildsync"
+                "name": "Delete a guildsync"
             }],
             "required":
             True
@@ -323,6 +316,13 @@ class GuildSync:
                 return "**ON**"
             return "**OFF**"
 
+        if not ctx.guild:
+            return await ctx.send("This command can only be used in a server.",
+                                  hidden=True)
+        if not ctx.author.guild_permissions.manage_guild:
+            return await ctx.send(
+                "You need the manage server permission to use this command.",
+                hidden=True)
         if operation == "api_key" and not api_key:
             await ctx.send(
                 "You must fill the API key argument to use this operation.",
@@ -349,7 +349,7 @@ class GuildSync:
                     settings += f"\n❗ERROR: {sync.last_error}"
                 embed.add_field(name=f"**{i}.** {sync.guild_name}",
                                 value=settings)
-                options.append({create_select_option(sync.guild_name, i - 1)})
+                options.append(create_select_option(sync.guild_name, i - 1))
             rows = [
                 create_actionrow(
                     create_select(options,
@@ -359,7 +359,8 @@ class GuildSync:
             ]
             message = await ctx.send("Select the guildsync you want",
                                      embed=embed,
-                                     options=options)
+                                     components=rows)
+            answer = None
             while True:
                 try:
                     answer = await wait_for_component(self.bot,
@@ -368,7 +369,7 @@ class GuildSync:
                     if answer.author != ctx.author:
                         self.tell_off(answer)
                         continue
-                    sync = syncs[int(answer.selected_options[0])]
+                    option = int(answer.selected_options[0])
                     break
                 except asyncio.TimeoutError:
                     return await message.edit("Timed out..",
@@ -409,9 +410,10 @@ class GuildSync:
         elif operation == "delete":
             await sync.delete()
             if answer:
-                return await answer.edit_origin("Sync successfully deleted",
-                                                components=None,
-                                                embed=None)
+                return await answer.edit_origin(
+                    content="Sync successfully deleted",
+                    components=None,
+                    embed=None)
             return await ctx.send("Sync successfully deleted")
         await sync.save(edited=True)
         if message:
@@ -523,8 +525,13 @@ class GuildSync:
                             user_to_prompt=None,
                             api_key=None):
         """Sync your in-game guild ranks with Discord. Add a guild."""
-        # TODO check permissions
-
+        if not ctx.guild:
+            return await ctx.send("This command can only be used in a server.",
+                                  hidden=True)
+        if not ctx.author.guild_permissions.manage_guild:
+            return await ctx.send(
+                "You need the manage server permission to use this command.",
+                hidden=True)
         if authentication_method == "prompt_user" and not user_to_prompt:
             return await ctx.send(
                 "You must specify a user to prompt for authorization",
@@ -611,10 +618,12 @@ class GuildSync:
                     "will expire.")
                 confirm = create_button(style=ButtonStyle.green,
                                         emoji="✅",
-                                        label="Confirm")
-                deny = create_button(style=ButtonStyle.green,
+                                        label="Confirm",
+                                        custom_id="guildsync_confirm")
+                deny = create_button(style=ButtonStyle.red,
                                      emoji="❌",
-                                     label="Deny")
+                                     label="Deny",
+                                     custom_id="guildsync_deny")
                 components = [create_actionrow(confirm, deny)]
                 msg = await user_to_prompt.send(embed=embed,
                                                 components=components)
@@ -689,8 +698,7 @@ class GuildSync:
     @cog_ext.cog_subcommand(
         base="guildsync",
         name="toggle",
-        base_description=
-        "Toggle guildsync synchronization. Dose not wipe settings",
+        base_description="Sync your in-game guild roster with server roles",
         options=[{
             "name": "enabled",
             "description": "Enable or disable guildsync for this server",
@@ -698,7 +706,14 @@ class GuildSync:
             "required": True
         }])
     async def sync_toggle(self, ctx, enabled):
-        """Global toggle for synchronization - does not wipe the settings"""
+        """Global toggle for guildsync - does not wipe the settings"""
+        if not ctx.guild:
+            return await ctx.send("This command can only be used in a server.",
+                                  hidden=True)
+        if not ctx.author.guild_permissions.manage_guild:
+            return await ctx.send(
+                "You need the manage server permission to use this command.",
+                hidden=True)
         guild = ctx.guild
         await self.bot.database.set_guild(guild,
                                           {"guildsync.enabled": enabled}, self)
@@ -711,17 +726,14 @@ class GuildSync:
                    "Run this command again to enable it.")
         await ctx.send(msg)
 
-    @commands.cooldown(1, 60, BucketType.user)
-    async def sync_now(self, ctx):
+    async def guildsync_now(self, ctx):
         """Force a synchronization"""
-        await ctx.send("Ran guildsync.")
         self.schedule_guildsync(ctx.guild, 0)
 
     @cog_ext.cog_subcommand(
         base="guildsync",
         name="purge",
-        base_description=
-        "Toggle guildsync synchronization. Dose not wipe settings",
+        base_description="Sync your in-game guild roster with server roles",
         options=[{
             "name": "enabled",
             "description": "Enable or disable purge. You'll be asked to "
@@ -731,6 +743,13 @@ class GuildSync:
         }])
     async def sync_purge(self, ctx, enabled):
         """Toggle kicking of users that are not in any of the synced guilds."""
+        if not ctx.guild:
+            return await ctx.send("This command can only be used in a server.",
+                                  hidden=True)
+        if not ctx.author.guild_permissions.manage_guild:
+            return await ctx.send(
+                "You need the manage server permission to use this command.",
+                hidden=True)
         if enabled:
             button = create_button(style=ButtonStyle.green,
                                    emoji="✅",
@@ -860,54 +879,58 @@ class GuildSync:
         if enabled:
             self.schedule_guildsync(guild, 1, member=member)
 
-    @commands.Cog.listener("on_raw_reaction_add")
-    async def handle_guildsync_prompt_answers(
-            self, payload: discord.RawReactionActionEvent):
-        if payload.guild_id:
+    @commands.Cog.listener("on_component")
+    async def handle_guildsync_prompt_answers(self, ctx: ComponentContext):
+        if ctx.guild:
             return
-        if payload.user_id == self.bot.user.id:
-            return
-        emoji = payload.emoji
-        if not emoji.is_unicode_emoji():
-            return
-        if str(emoji) not in PROMPT_EMOJIS:
-            return
-        emoji = str(emoji)
-        answer = not PROMPT_EMOJIS.index(emoji)
-        query = {"message_id": payload.message_id}
+        query = {"message_id": ctx.origin_message_id}
         doc = await self.db.guildsync_prompts.find_one(query)
         if not doc:
             return
-        user = self.bot.get_user(payload.user_id)
+        if ctx.custom_id == "guildsync_confirm":
+            answer = True
+        elif ctx.custom_id == "guildsync_deny":
+            answer = False
+        else:
+            return
         if not answer:
             await self.db.guildsync_prompts.delete_one(query)
-            return await user.send(
-                "Noted, request rejected.\nNote that only "
+            return await ctx.edit_origin(
+                content="Noted, request rejected.\nNote that only "
                 "admins can send guildsync requests - if you're being "
                 "harassed then it is recommended to report them or to leave "
-                "the server.")
+                "the server.",
+                components=None,
+                embed=None)
+        await ctx.defer()
         try:
-            key = await self.fetch_key(user, scopes=["guilds"])
+            key = await self.fetch_key(ctx.author, scopes=["guilds"])
             key = key["key"]
         except APIKeyError:
-            return await user.send(
-                "It seems like your key is invalid. Try switching your key "
-                "and then try again by removing your reaction and adding "
-                "it back.")
+            return await ctx.edit_origin(
+                content="It seems like your key is invalid. Try switching "
+                "your key and then try again by removing your reaction "
+                "and adding it back.")
         in_game_guild_id = doc["guildsync_id"]
         is_leader = await self.verify_leader_permissions(key, in_game_guild_id)
         if not is_leader:
-            return await user.send(
-                "It seems like your key does not have the necessary in-game "
-                "permissions. Try switching your key, then try again by "
-                "removing and adding the reaction")
+            return await ctx.edit_origin(
+                content="It seems like your key does not have the necessary "
+                "in-game permissions. Try switching your key, then try "
+                "again by removing and adding the reaction")
         guild = self.bot.get_guild(doc["guild_id"])
         if not guild:
-            return await user.send("It seems like the server no longer exists")
+            return await answer.edit_origin(
+                content="It seems like the server no longer exists",
+                components=None,
+                embed=None)
         requesting_user = self.bot.get_user(doc["requester_id"])
         if not requesting_user:
-            return await user.send("It seems like the requesting user no "
-                                   "longer exists")
+            return await answer.edit_origin(
+                content="It seems like the requesting user no "
+                "longer exists",
+                components=None,
+                embed=None)
         await self.guildsync_success(
             guild,
             in_game_guild_id,
@@ -916,6 +939,9 @@ class GuildSync:
             options=doc["options"],
             extra_message="User {0.name}#{0.discriminator} has accepted your "
             "request for Guildsync authorization in {1.name}. "
-            "Guild: {2}".format(user, guild, doc["options"]["name"]))
-        await user.send("Guildsync successfully enabled! Thank you.")
+            "Guild: {2}".format(ctx.author, guild, doc["options"]["name"]))
+        await ctx.edit_origin(
+            content="Guildsync successfully enabled! Thank you.",
+            components=None,
+            embed=None)
         await self.db.guildsync_prompts.delete_one(query)
