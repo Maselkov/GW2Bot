@@ -13,38 +13,35 @@ BT_PIPELINE = [{
     '$unwind': '$bosses'
 }, {
     '$unwind': '$bosses'
-},
-               {
-                   '$group': {
-                       '_id': {
-                           'account_name': '$_id',
-                           'boss': '$bosses'
-                       },
-                       'sum': {
-                           '$sum': 1
-                       }
-                   }
-               },
-               {
-                   '$group': {
-                       '_id': '$_id.account_name',
-                       'bosses': {
-                           '$push': {
-                               'k': '$_id.boss',
-                               'v': '$sum'
-                           }
-                       }
-                   }
-               },
-               {
-                   '$project': {
-                       '_id': 0,
-                       'account_name': '$_id',
-                       'bosses': {
-                           '$arrayToObject': '$bosses'
-                       }
-                   }
-               }]
+}, {
+    '$group': {
+        '_id': {
+            'account_name': '$_id',
+            'boss': '$bosses'
+        },
+        'sum': {
+            '$sum': 1
+        }
+    }
+}, {
+    '$group': {
+        '_id': '$_id.account_name',
+        'bosses': {
+            '$push': {
+                'k': '$_id.boss',
+                'v': '$sum'
+            }
+        }
+    }
+}, {
+    '$project': {
+        '_id': 0,
+        'account_name': '$_id',
+        'bosses': {
+            '$arrayToObject': '$bosses'
+        }
+    }
+}]
 
 
 class BtMixin():
@@ -56,8 +53,8 @@ class BtMixin():
         try:
             doc = await self.bot.database.get_user(user, self)
             embed = await self.old_boss_embed(doc["bosses_total"])
-            embed.set_author(
-                name=doc["key"]["account_name"], icon_url=user.avatar_url)
+            embed.set_author(name=doc["key"]["account_name"],
+                             icon_url=user.avatar_url)
             await ctx.send(embed=embed)
         except:
             await ctx.send("No recorded bosskills yet")
@@ -85,8 +82,8 @@ class BtMixin():
             ])
             return title[0].upper() + title[1:]
 
-        embed = discord.Embed(
-            title="Total boss kills", color=await self.get_embed_color(ctx))
+        embed = discord.Embed(title="Total boss kills",
+                              color=await self.get_embed_color(ctx))
         raids = await self.get_raids()
         wings = [wing for raid in raids for wing in raid["wings"]]
         match = {"account_name": {"$in": accounts}}
@@ -112,9 +109,8 @@ class BtMixin():
             name = readable_id(wing["id"])
             embed.add_field(name=f"**{name}**", value="\n".join(value))
         if recording_since:
-            embed.set_footer(
-                text="Recording bosskills for this account since",
-                icon_url=self.bot.user.avatar_url)
+            embed.set_footer(text="Recording bosskills for this account since",
+                             icon_url=self.bot.user.avatar_url)
             embed.timestamp = recording_since
         return embed
 
@@ -136,8 +132,9 @@ class BtMixin():
                 value = ["```diff"]
                 for boss in wing["events"]:
                     count = results.get(boss["id"], 0)
-                    value.append("{}{}: {}".format(
-                        is_killed(boss), readable_id(boss["id"]), count))
+                    value.append("{}{}: {}".format(is_killed(boss),
+                                                   readable_id(boss["id"]),
+                                                   count))
                 value.append("```")
                 name = readable_id(wing["id"])
                 embed.add_field(name=name, value="\n".join(value))
@@ -145,8 +142,6 @@ class BtMixin():
         return embed
 
     async def get_raids(self):
-        config = await self.bot.database.configs.find_one({
-            "cog_name":
-            "GuildWars2"
-        })
+        config = await self.bot.database.configs.find_one(
+            {"cog_name": "GuildWars2"})
         return config["cache"].get("raids")

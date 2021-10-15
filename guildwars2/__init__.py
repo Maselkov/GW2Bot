@@ -82,7 +82,7 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
     async def error_handler(self, ctx, exc):
         user = ctx.author
         if isinstance(exc, APIKeyError):
-            await ctx.send(exc)
+            await ctx.send(str(exc))
             return
         if isinstance(exc, APIInactiveError):
             await ctx.send("{.mention}, the API is currently down. "
@@ -113,6 +113,11 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
         if doc and doc["embed_color"]:
             return int(doc["embed_color"], 16)
         return self.embed_color
+
+    def tell_off(self,
+                 component_context,
+                 message="Only the command owner may do that."):
+        self.bot.loop.create_task(component_context.send(message, hidden=True))
 
 
 def setup(bot):

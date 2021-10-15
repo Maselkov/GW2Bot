@@ -7,9 +7,11 @@ import re
 import struct
 
 import discord
+from discord_slash.model import SlashCommandOptionType
 import requests
 from discord.ext import commands
 from discord.ext.commands.cooldowns import BucketType
+from discord_slash import cog_ext
 from PIL import Image, ImageDraw
 
 from .utils.chat import cleanup_xml_tags, embed_list_lines
@@ -344,25 +346,20 @@ class Build:
 
 
 class SkillsMixin:
-    @commands.command(hidden=True)  # TODO add smarter check
-    async def template(self, ctx, *, code):
-        """Display a build template"""
-        if (not ctx.guild
-                or ctx.guild.id not in self.chatcode_preview_opted_out_guilds):
-            return
-        build = await Build.from_code(self, code)
-        image = await build.render()
-        await ctx.send(file=image)
-
-    @commands.command(name="skill", aliases=["skillinfo"])
-    @commands.cooldown(1, 5, BucketType.user)
+    @cog_ext.cog_slash(name="skill",
+            options=[{
+            "name": "skill",
+            "description":
+            "The skill name to search for. Example: Meteor Shower.",
+            "type": SlashCommandOptionType.STRING,
+            "required": True,
+        }])
     async def skillinfo(self, ctx, *, skill):
         """Information about a given skill"""
-        if not skill:
-            return await self.send_cmd_help(ctx)
         query = {"name": prepare_search(skill), "professions": {"$ne": None}}
         count = await self.db.skills.count_documents(query)
         cursor = self.db.skills.find(query)
+        await ctx.defer()
 
         def remove_duplicates(items):
             unique_items = []
@@ -373,25 +370,31 @@ class SkillsMixin:
                         unique_items.remove(unique)
                 unique_items.append(item)
             return unique_items
-
+        answer = None
         choice = await self.selection_menu(ctx,
                                            cursor,
                                            count,
                                            filter_callable=remove_duplicates)
         if not choice:
             return
+        if type(choice) is tuple:
+            choice, answer = choice
         data = await self.skill_embed(choice, ctx)
-        try:
-            await ctx.send(embed=data)
-        except discord.HTTPException:
-            await ctx.send("Need permission to embed links")
+        if answer:
+            return await answer.edit_origin(embed=data, components=None)
+        await ctx.send(embed=data)
 
-    @commands.command(name="trait", aliases=["traitinfo"])
-    @commands.cooldown(1, 5, BucketType.user)
+    @cog_ext.cog_slash(name="trait",
+            options=[{
+            "name": "trait",
+            "description":
+            "The trait name to search for. Example: Brave Stride.",
+            "type": SlashCommandOptionType.STRING,
+            "required": True,
+        }])
     async def traitinfo(self, ctx, *, trait):
         """Information about a given trait"""
-        if not trait:
-            return await self.send_cmd_help(ctx)
+        await ctx.defer()
         query = {
             "name": prepare_search(trait),
         }
@@ -399,13 +402,15 @@ class SkillsMixin:
         cursor = self.db.traits.find(query)
 
         choice = await self.selection_menu(ctx, cursor, count)
+        answer = None
         if not choice:
             return
+        if type(choice) is tuple:
+            choice, answer = choice
         data = await self.skill_embed(choice, ctx)
-        try:
-            await ctx.send(embed=data)
-        except discord.HTTPException:
-            await ctx.send("Need permission to embed links")
+        if answer:
+            return await answer.edit_origin(embed=data, components=None)
+        await ctx.send(embed=data)
 
     async def skill_embed(self, skill, ctx):
         def get_skill_type():
@@ -711,38 +716,6 @@ class SkillsMixin:
                 continue
         return fields
 
-    @commands.group(case_insensitive=True)
-    @commands.guild_only()
-    @commands.has_permissions(manage_guild=True)
-    async def previewchatlinks(self, ctx):
-        """The bot will automatically preview posted chat links (codes)
-
-        Works on build templates, items, point of interest links, and more.
-        """
-        if ctx.invoked_subcommand is None:
-            return await ctx.send_help(ctx.command)
-
-    @commands.cooldown(1, 5, BucketType.guild)
-    @previewchatlinks.command(name="toggle")
-    async def previewchatlinks_toggle(self, ctx):
-        """Toggle the link previews. Enabled by default!"""
-        guild = ctx.guild
-        doc = await self.bot.database.get_guild(guild, self)
-        setting = not doc.get("link_preview_disabled", False)
-        await self.bot.database.set_guild(guild,
-                                          {"link_preview_disabled": setting},
-                                          self)
-        if not setting:
-            await ctx.send("Chat link previewing is now **enabled**!\n")
-            try:
-                self.chatcode_preview_opted_out_guilds.remove(guild.id)
-            except KeyError:
-                pass
-        else:
-            self.chatcode_preview_opted_out_guilds.add(guild.id)
-            await ctx.send("Chat link previewing is now **disabled**!\n"
-                           "This setting is enabled by default."
-                           "Use the same command to turn it back on")
 
     async def prepare_linkpreview_guild_cache(self):
         cursor = self.bot.database.iter("guilds",
@@ -791,194 +764,195 @@ class SkillsMixin:
             else:
                 embed.set_footer(icon_url=self.bot.user.avatar_url)
             embed.description = "Chat link preview"
-            if link_type == "Coin":
-                # Currently disabled
-                return
-            elif link_type == "Item":
-                quantity, item_id = struct.unpack("<BI", data[1:5] + b"\0")
-                item_doc = await self.fetch_item(item_id)
-                if not item_doc:
+            match link_type:
+                case "Coin":
+                    # Currently disabled
                     return
-                embed.title = item_doc["name"]
-                embed.set_thumbnail(url=item_doc["icon"])
-                embed.color = int(
-                    self.gamedata["items"]["rarity_colors"][
-                        item_doc["rarity"]], 16)
-                suffix = ""
-                wiki_url = await self.get_wiki_url(item_doc["name"])
-                if wiki_url:
-                    embed.url = wiki_url
-                if len(data) > 5:
-                    bitfield = struct.unpack("<B", data[5:6])
-                    bitfield = bitfield[0]
-                    flags = []
-                    # Wardrobe, upgrade 1, upgrade 2
-                    for i in reversed(range(5, 8)):
-                        flags.append(bool(bitfield >> i & 1))
-                    if flags[2] and not flags[1]:  # Use first upgrade slut
-                        flags[1] = True
-                        flags[2] = False
-                    offset = 0
-                    if flags[0]:
-                        skin_id = struct.unpack("<I", data[6:9] + b"\0")
-                        skin_id = skin_id[0]
-                        skin_doc = await self.db.skins.find_one(
-                            {"_id": skin_id})
-                        if not skin_doc:
-                            name = "Unknown"
-                        else:
-                            name = skin_doc["name"]
-                        embed.set_thumbnail(url=skin_doc["icon"])
-                        embed.add_field(name="Skin", value=name)
-                        offset += 4
-                    upgrades = []
-                    for upgrade in flags[1:]:
-                        if not upgrade:
-                            break
-                        upgrade_id = struct.unpack(
-                            "<I", data[6 + offset:9 + offset] + b"\0")
-                        upgrade_id = upgrade_id[0]
-                        upgrade_doc = await self.db.items.find_one(
-                            {"_id": upgrade_id})
-                        if not upgrade_doc:
-                            upgrades.append("Unknown upgrade")
-                            continue
-                        else:
-                            upgrades.append(upgrade_doc["name"])
-                        if not suffix:
-                            suffix = upgrade_doc["details"].get("suffix", "")
-                        offset += 4
-                    if upgrades:
-                        field_name = "Upgrades" if len(
-                            upgrades) > 1 else "Upgrade"
-                        embed.add_field(name=field_name,
-                                        value="\n".join(upgrades))
-                    embed.title = f"{embed.title} {suffix}"
-                if quantity > 1:
-                    embed.title = f"{quantity} {embed.title}"
-                return await message.channel.send(embed=embed)
-            elif link_type == "NPC text string":
-                # Currently disabled
-                return
-            elif link_type == "Map link":
-                data = struct.unpack("<I", data[1:])
-                poi_id = data[0]
-                poi_doc = await self.db.pois.find_one({"_id": poi_id})
-                # continent_id = poi_doc["continent_id"]
-                # floor = poi_doc["floor"]
-                # x, y = [int(i) for i in poi_doc["coord"]]
-                # tile_url = TILESERVICE_BASE_URL + f"{continent_id}/{floor}/3/{x}/{y}.jpg"
-                # async with self.session.get(tile_url) as r:
-                #     image = io.BytesIO(await r.read())
-                # image.seek(0)
-                # print(tile_url)
-                # file = discord.File(image, "tile.jpg")
-                # embed.set_image(url=f"attachment://{file.filename}")
-                # await message.channel.send(file=file)
-                # API SUCKS
-                # TODO More detail
-                poi_type = poi_doc["type"].title()
-                if poi_type == "Landmark":
-                    poi_type = "Point of Interest"
-                emoji = self.get_emoji(message, poi_type)
-                embed.add_field(name=emoji + poi_type,
-                                value=poi_doc.get("name", "Unnamed"))
-                return await message.channel.send(embed=embed)
-            elif link_type == "PvP Game":
-                # Can't do much here
-                return
-            elif link_type == "Skill":
-                data = struct.unpack("<I", data[1:])
-                skill_id = data[0]
-                skill_doc = await self.db.skills.find_one({"_id": skill_id})
-                if not skill_doc:
+                case "Item":
+                    quantity, item_id = struct.unpack("<BI", data[1:5] + b"\0")
+                    item_doc = await self.fetch_item(item_id)
+                    if not item_doc:
+                        return
+                    embed.title = item_doc["name"]
+                    embed.set_thumbnail(url=item_doc["icon"])
+                    embed.color = int(
+                        self.gamedata["items"]["rarity_colors"][
+                            item_doc["rarity"]], 16)
+                    suffix = ""
+                    wiki_url = await self.get_wiki_url(item_doc["name"])
+                    if wiki_url:
+                        embed.url = wiki_url
+                    if len(data) > 5:
+                        bitfield = struct.unpack("<B", data[5:6])
+                        bitfield = bitfield[0]
+                        flags = []
+                        # Wardrobe, upgrade 1, upgrade 2
+                        for i in reversed(range(5, 8)):
+                            flags.append(bool(bitfield >> i & 1))
+                        if flags[2] and not flags[1]:  # Use first upgrade slut
+                            flags[1] = True
+                            flags[2] = False
+                        offset = 0
+                        if flags[0]:
+                            skin_id = struct.unpack("<I", data[6:9] + b"\0")
+                            skin_id = skin_id[0]
+                            skin_doc = await self.db.skins.find_one(
+                                {"_id": skin_id})
+                            if not skin_doc:
+                                name = "Unknown"
+                            else:
+                                name = skin_doc["name"]
+                            embed.set_thumbnail(url=skin_doc["icon"])
+                            embed.add_field(name="Skin", value=name)
+                            offset += 4
+                        upgrades = []
+                        for upgrade in flags[1:]:
+                            if not upgrade:
+                                break
+                            upgrade_id = struct.unpack(
+                                "<I", data[6 + offset:9 + offset] + b"\0")
+                            upgrade_id = upgrade_id[0]
+                            upgrade_doc = await self.db.items.find_one(
+                                {"_id": upgrade_id})
+                            if not upgrade_doc:
+                                upgrades.append("Unknown upgrade")
+                                continue
+                            else:
+                                upgrades.append(upgrade_doc["name"])
+                            if not suffix:
+                                suffix = upgrade_doc["details"].get("suffix", "")
+                            offset += 4
+                        if upgrades:
+                            field_name = "Upgrades" if len(
+                                upgrades) > 1 else "Upgrade"
+                            embed.add_field(name=field_name,
+                                            value="\n".join(upgrades))
+                        embed.title = f"{embed.title} {suffix}"
+                    if quantity > 1:
+                        embed.title = f"{quantity} {embed.title}"
+                    return await message.channel.send(embed=embed)
+                case "NPC text string":
+                    # Currently disabled
                     return
-                new_embed = await self.skill_embed(skill_doc, message)
-                new_embed.set_footer(text=embed.footer.text,
-                                     icon_url=embed.footer.icon_url)
-                return await message.channel.send(embed=new_embed)
-            elif link_type == "Trait":
-                data = struct.unpack("<I", data[1:])
-                trait_id = data[0]
-                trait_doc = await self.db.traits.find_one({"_id": trait_id})
-                if not trait_doc:
+                case "Map link":
+                    data = struct.unpack("<I", data[1:])
+                    poi_id = data[0]
+                    poi_doc = await self.db.pois.find_one({"_id": poi_id})
+                    # continent_id = poi_doc["continent_id"]
+                    # floor = poi_doc["floor"]
+                    # x, y = [int(i) for i in poi_doc["coord"]]
+                    # tile_url = TILESERVICE_BASE_URL + f"{continent_id}/{floor}/3/{x}/{y}.jpg"
+                    # async with self.session.get(tile_url) as r:
+                    #     image = io.BytesIO(await r.read())
+                    # image.seek(0)
+                    # print(tile_url)
+                    # file = discord.File(image, "tile.jpg")
+                    # embed.set_image(url=f"attachment://{file.filename}")
+                    # await message.channel.send(file=file)
+                    # API SUCKS
+                    # TODO More detail
+                    poi_type = poi_doc["type"].title()
+                    if poi_type == "Landmark":
+                        poi_type = "Point of Interest"
+                    emoji = self.get_emoji(message, poi_type)
+                    embed.add_field(name=emoji + poi_type,
+                                    value=poi_doc.get("name", "Unnamed"))
+                    return await message.channel.send(embed=embed)
+                case "PvP Game":
+                    # Can't do much here
                     return
-                new_embed = await self.skill_embed(trait_doc, message)
-                new_embed.set_footer(text=embed.footer.text,
-                                     icon_url=embed.footer.icon_url)
-                return await message.channel.send(embed=new_embed)
-            elif link_type == "User":
-                # Can't do much
-                return
-            elif link_type == "Recipe":
-                data = struct.unpack("<I", data[1:])
-                recipe_id = data[0]
-                recipe_doc = await self.db.recipes.find_one({"_id": recipe_id})
-                if not recipe_doc:
+                case "Skill":
+                    data = struct.unpack("<I", data[1:])
+                    skill_id = data[0]
+                    skill_doc = await self.db.skills.find_one({"_id": skill_id})
+                    if not skill_doc:
+                        return
+                    new_embed = await self.skill_embed(skill_doc, message)
+                    new_embed.set_footer(text=embed.footer.text,
+                                        icon_url=embed.footer.icon_url)
+                    return await message.channel.send(embed=new_embed)
+                case "Trait":
+                    data = struct.unpack("<I", data[1:])
+                    trait_id = data[0]
+                    trait_doc = await self.db.traits.find_one({"_id": trait_id})
+                    if not trait_doc:
+                        return
+                    new_embed = await self.skill_embed(trait_doc, message)
+                    new_embed.set_footer(text=embed.footer.text,
+icon_url=embed.footer.icon_url)
+                    return await message.channel.send(embed=new_embed)
+                case "User":
+                    # Can't do much
                     return
-                if message.guild:
-                    me = message.guild.me
-                else:
-                    me = self.bot.user
-                output = await self.fetch_item(recipe_doc["output_item_id"])
-                if output:
-                    count = recipe_doc["output_item_count"]
-                    name = output["name"]
-                    embed.title = f"Recipe: {count} {name}"
-                emojis = message.channel.permissions_for(me).external_emojis
-                disciplines = recipe_doc.get("disciplines", [])
-                if emojis:
+                case "Recipe":
+                    data = struct.unpack("<I", data[1:])
+                    recipe_id = data[0]
+                    recipe_doc = await self.db.recipes.find_one({"_id": recipe_id})
+                    if not recipe_doc:
+                        return
+                    if message.guild:
+                        me = message.guild.me
+                    else:
+                        me = self.bot.user
+                    output = await self.fetch_item(recipe_doc["output_item_id"])
+                    if output:
+                        count = recipe_doc["output_item_count"]
+                        name = output["name"]
+                        embed.title = f"Recipe: {count} {name}"
+                    emojis = message.channel.permissions_for(me).external_emojis
+                    disciplines = recipe_doc.get("disciplines", [])
+                    if emojis:
+                        value = []
+                        for disc in disciplines:
+                            value.append(self.get_emoji(message, disc))
+                        value = "".join(value)
+                    else:
+                        value = "\n".join(disciplines)
+                    if value:
+                        embed.add_field(name="Crafting disciplines", value=value)
+                    ingredients = recipe_doc.get("ingredients", [])
                     value = []
-                    for disc in disciplines:
-                        value.append(self.get_emoji(message, disc))
-                    value = "".join(value)
-                else:
-                    value = "\n".join(disciplines)
-                if value:
-                    embed.add_field(name="Crafting disciplines", value=value)
-                ingredients = recipe_doc.get("ingredients", [])
-                value = []
-                for ingredient in ingredients:
-                    item_doc = await self.fetch_item(ingredient["item_id"])
-                    if item_doc:
-                        name = item_doc["name"]
-                        count = ingredient["count"]
-                        value.append(f"{count} {name}")
-                value = "\n".join(value)
-                if value:
-                    embed.add_field(name="Ingredients", value=value)
-                return await message.channel.send(embed=embed)
+                    for ingredient in ingredients:
+                        item_doc = await self.fetch_item(ingredient["item_id"])
+                        if item_doc:
+                            name = item_doc["name"]
+                            count = ingredient["count"]
+                            value.append(f"{count} {name}")
+                    value = "\n".join(value)
+                    if value:
+                        embed.add_field(name="Ingredients", value=value)
+                    return await message.channel.send(embed=embed)
 
-            elif link_type == "Wardrobe":
-                data = struct.unpack("<I", data[1:])
-                skin_id = data[0]
-                skin_doc = await self.db.skins.find_one({"_id": skin_id})
-                if not skin_doc:
+                case "Wardrobe":
+                    data = struct.unpack("<I", data[1:])
+                    skin_id = data[0]
+                    skin_doc = await self.db.skins.find_one({"_id": skin_id})
+                    if not skin_doc:
+                        return
+                    embed.set_thumbnail(url=skin_doc["icon"])
+                    embed.title = skin_doc["name"]
+                    return await message.channel.send(embed=embed)
+
+                case "Outfit":
+                    data = struct.unpack("<I", data[1:])
+                    outfit_id = data[0]
+                    outfit_doc = await self.db.outfits.find_one({"_id": outfit_id})
+                    if not outfit_doc:
+                        return
+                    embed.set_thumbnail(url=outfit_doc["icon"])
+                    embed.title = outfit_doc["name"]
+                    return await message.channel.send(embed=embed)
+
+                case "WvW objective":
+                    # TODO
                     return
-                embed.set_thumbnail(url=skin_doc["icon"])
-                embed.title = skin_doc["name"]
-                return await message.channel.send(embed=embed)
-
-            elif link_type == "Outfit":
-                data = struct.unpack("<I", data[1:])
-                outfit_id = data[0]
-                outfit_doc = await self.db.outfits.find_one({"_id": outfit_id})
-                if not outfit_doc:
-                    return
-                embed.set_thumbnail(url=outfit_doc["icon"])
-                embed.title = outfit_doc["name"]
-                return await message.channel.send(embed=embed)
-
-            elif link_type == "WvW objective":
-                # TODO
-                return
-            elif link_type == "Build template":
-                build = await Build.from_code(self, chatcode)
-                file = await build.render()
-                embed.color = build.profession.color
-                embed.set_thumbnail(url=build.profession.icon)
-                embed.set_image(url=f"attachment://{file.filename}")
-                await message.channel.send(embed=embed, file=file)
+                case "Build template":
+                    build = await Build.from_code(self, chatcode)
+                    file = await build.render()
+                    embed.color = build.profession.color
+                    embed.set_thumbnail(url=build.profession.icon)
+                    embed.set_image(url=f"attachment://{file.filename}")
+                    await message.channel.send(embed=embed, file=file)
         except Exception as e:
             self.log.exception(exc_info=e)
             pass

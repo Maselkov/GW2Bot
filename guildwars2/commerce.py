@@ -1,49 +1,55 @@
+import asyncio
 import operator
 
 import discord
-from discord.ext import commands
-from discord.ext.commands.cooldowns import BucketType
+from discord_slash import cog_ext
+from discord_slash.model import SlashCommandOptionType
+from discord_slash.utils.manage_components import (create_actionrow,
+                                                   create_select,
+                                                   create_select_option,
+                                                   wait_for_component)
 
 from .exceptions import APIBadRequest, APIError, APINotFound
 
 
 class CommerceMixin:
-    @commands.group(case_insensitive=True)
-    async def tp(self, ctx):
-        """Commands related to tradingpost"""
-        if ctx.invoked_subcommand is None:
-            await ctx.send_help(ctx.command)
+    @cog_ext.cog_subcommand(base="tp",
+                            name="selling",
+                            base_description="Trading post related commands")
+    async def tp_selling(self, ctx):
+        """Show current selling transactions"""
+        await ctx.defer()
+        embed = await self.get_tp_embed(ctx, "sells")
+        try:
+            await ctx.send(embed=embed)
+        except discord.HTTPException:
+            await ctx.send("Need permission to embed links")
 
-    @tp.command(name="current")
-    @commands.cooldown(1, 10, BucketType.user)
-    async def tp_current(self, ctx, buys_sells):
-        """Show current selling/buying transactions
-        invoke with sells or buys
+    @cog_ext.cog_subcommand(base="tp",
+                            name="buying",
+                            base_description="Trading post related commands")
+    async def tp_buying(self, ctx):
+        """Show current buying transactions"""
+        await ctx.defer()
+        embed = await self.get_tp_embed(ctx, "buys")
+        try:
+            await ctx.send(embed=embed)
+        except discord.HTTPException:
+            await ctx.send("Need permission to embed links")
 
-        Required permissions: tradingpost
-        """
-        user = ctx.author
-        state = buys_sells.lower()
+    async def get_tp_embed(self, ctx, state):
         endpoint = "commerce/transactions/current/" + state
-        if state == "buys" or state == "sells":
-            try:
-                doc = await self.fetch_key(user, ["tradingpost"])
-                results = await self.call_api(endpoint, key=doc["key"])
-            except APIError as e:
-                return await self.error_handler(ctx, e)
-        else:
-            return await ctx.send(
-                "{0.mention}, Please us either 'sells' or 'buys' as parameter".
-                format(user))
-        data = discord.Embed(
-            description='Current ' + state,
-            colour=await self.get_embed_color(ctx))
-        data.set_author(
-            name='Transaction overview of {0}'.format(doc["account_name"]))
-        data.set_thumbnail(
-            url=("https://wiki.guildwars2.com/"
-                 "images/thumb/d/df/Black-Lion-Logo.png/"
-                 "300px-Black-Lion-Logo.png"))
+        try:
+            doc = await self.fetch_key(ctx.author, ["tradingpost"])
+            results = await self.call_api(endpoint, key=doc["key"])
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+        data = discord.Embed(description='Current ' + state,
+                             colour=await self.get_embed_color(ctx))
+        data.set_author(name=f'Transaction overview of {doc["account_name"]}')
+        data.set_thumbnail(url=("https://wiki.guildwars2.com/"
+                                "images/thumb/d/df/Black-Lion-Logo.png/"
+                                "300px-Black-Lion-Logo.png"))
         data.set_footer(text="Black Lion Trading Company")
         results = results[:20]  # Only display 20 most recent transactions
         item_id = ""
@@ -59,11 +65,9 @@ class CommerceMixin:
         try:
             listings = await self.call_api(endpoint_listing)
         except APIBadRequest:
-            return await ctx.send("{.mention} you don't have any ongoing "
-                                  "transactions".format(user))
+            return await ctx.send("You don't have any ongoing " "transactions")
         except APIError as e:
             return await self.error_handler(ctx, e)
-
         for result in results:
             index = dup_item[result["item_id"]]
             price = result["price"]
@@ -85,35 +89,52 @@ class CommerceMixin:
             else:
                 total = " - Total: " + self.gold_to_coins(
                     ctx, quantity * price)
-            data.add_field(
-                name=item_name,
-                value="{} x {}{}\nMax. offer: {} {}".format(
-                    quantity, self.gold_to_coins(ctx, price), total,
-                    self.gold_to_coins(ctx, max_price), undercuts),
-                inline=False)
+            data.add_field(name=item_name,
+                           value="{} x {}{}\nMax. offer: {} {}".format(
+                               quantity, self.gold_to_coins(ctx, price), total,
+                               self.gold_to_coins(ctx, max_price), undercuts),
+                           inline=False)
+        return data
 
-        try:
-            await ctx.send(embed=data)
-        except discord.HTTPException:
-            await ctx.send("Need permission to embed links")
-
-    @tp.command(name="price")
-    @commands.cooldown(1, 15, BucketType.user)
-    async def tp_price(self, ctx, *, item: str):
+    @cog_ext.cog_subcommand(base="tp",
+                            name="price",
+                            base_description="Trading post related commands")
+    async def tp_price(self, ctx, item: str):
         """Check price of an item"""
-        user = ctx.author
         flags = ["AccountBound", "SoulbindOnAcquire"]
-        choice = await self.itemname_to_id(ctx, item, user, flags=flags)
-        if not choice:
+        items = await self.itemname_to_id(ctx, item, ctx.author, flags=flags)
+        if not items:
             return
+        if len(items) > 1:
+            options = []
+            for c, m in enumerate(items):
+                options.append(
+                    create_select_option(m['name'],
+                                         description=m["rarity"],
+                                         value=c))
+            select = create_select(min_values=1,
+                                   max_values=1,
+                                   options=options,
+                                   placeholder="Select the item to search for")
+            components = [create_actionrow(select)]
+            msg = await ctx.send("** **", components=components)
+            while True:
+                try:
+                    answer = await wait_for_component(self.bot,
+                                                      components=components,
+                                                      timeout=120)
+                    await answer.defer(edit_origin=True)
+                    choice = items[int(answer.selected_options[0])]
+                    break
+                except asyncio.TimeoutError:
+                    await msg.edit(components=None)
         try:
             commerce = 'commerce/prices/'
             choiceid = str(choice["_id"])
             endpoint = commerce + choiceid
             results = await self.call_api(endpoint)
-        except APINotFound as e:
-            return await ctx.send("{0.mention}, This item isn't on the TP."
-                                  "".format(user))
+        except APINotFound:
+            return await ctx.send("This item isn't on the TP.")
         except APIError as e:
             return await self.error_handler(ctx, e)
         buyprice = results["buys"]["unit_price"]
@@ -126,45 +147,39 @@ class CommerceMixin:
                                                 itemtype.lower())
         if buyprice != 0:
             buyprice = self.gold_to_coins(ctx, buyprice)
+        else:
+            buyprice = "No buy orders"
         if sellprice != 0:
             sellprice = self.gold_to_coins(ctx, sellprice)
-        if buyprice == 0:
-            buyprice = 'No buy orders'
-        if sellprice == 0:
-            sellprice = 'No sell orders'
-        data = discord.Embed(
-            title=itemname,
-            description=description,
-            colour=self.rarity_to_color(rarity))
+        else:
+            sellprice = "No sell orders"
+        data = discord.Embed(title=itemname,
+                             description=description,
+                             colour=self.rarity_to_color(rarity))
         if "icon" in choice:
             data.set_thumbnail(url=choice["icon"])
         data.add_field(name="Buy price", value=buyprice, inline=False)
         data.add_field(name="Sell price", value=sellprice, inline=False)
         data.set_footer(text=choice["chat_link"])
-        try:
-            await ctx.send(embed=data)
-        except discord.Forbidden:
-            await ctx.send("Issue embedding data into discord")
+        if len(items) > 1:
+            await answer.edit_origin(content=None, components=None, embed=data)
+        await ctx.send(embed=data)
 
-    @tp.command(name="delivery")
-    @commands.cooldown(1, 10, BucketType.user)
+    @cog_ext.cog_subcommand(base="tp",
+                            name="delivery",
+                            base_description="Trading post related commands")
     async def tp_delivery(self, ctx):
-        """Show your items awaiting in delivery box
-
-        Required permissions: tradingpost
-        """
-        user = ctx.author
+        """Show your items awaiting in delivery box"""
         endpoint = "commerce/delivery/"
+        await ctx.defer()
         try:
-            doc = await self.fetch_key(user, ["tradingpost"])
+            doc = await self.fetch_key(ctx.author, ["tradingpost"])
             results = await self.call_api(endpoint, key=doc["key"])
         except APIError as e:
             return await self.error_handler(ctx, e)
-        data = discord.Embed(
-            description='Current deliveries',
-            colour=await self.get_embed_color(ctx))
-        data.set_author(
-            name='Delivery overview of {0}'.format(doc["account_name"]))
+        data = discord.Embed(description='Current deliveries',
+                             colour=await self.get_embed_color(ctx))
+        data.set_author(name=f'Delivery overview of {doc["account_name"]}')
         data.set_thumbnail(url="https://wiki.guildwars2.com/"
                            "images/thumb/d/df/Black-Lion-Logo.png"
                            "/300px-Black-Lion-Logo.png")
@@ -190,19 +205,16 @@ class CommerceMixin:
                 # Get quantity of items
                 quantity = item_quantity[counter]
                 counter += 1
-                data.add_field(
-                    name=item_name,
-                    value="x {0}".format(quantity),
-                    inline=False)
+                data.add_field(name=item_name,
+                               value="x {0}".format(quantity),
+                               inline=False)
         else:
             if coins == 0:
                 return await ctx.send("Your delivery box is empty!")
-            data.add_field(
-                name="No current deliveries.", value="Have fun!", inline=False)
-        try:
-            await ctx.send(embed=data)
-        except discord.HTTPException:
-            await ctx.send("Need permission to embed links")
+            data.add_field(name="No current deliveries.",
+                           value="Have fun!",
+                           inline=False)
+        await ctx.send(embed=data)
 
     def gold_to_coins(self, ctx, money):
         gold, remainder = divmod(money, 10000)
@@ -219,41 +231,30 @@ class CommerceMixin:
     def rarity_to_color(self, rarity):
         return int(self.gamedata["items"]["rarity_colors"][rarity], 0)
 
-    @commands.group(case_insensitive=True)
-    async def gem(self, ctx):
-        """Commands related to gems"""
-        if ctx.invoked_subcommand is None:
-            await ctx.send_help(ctx.command)
-
-    @gem.command(name="price")
+    @cog_ext.cog_subcommand(base="gem",
+                            name="price",
+                            base_description="Gem related commands")
     async def gem_price(self, ctx, quantity: int = 400):
-        """Lists current gold/gem exchange prices.
-
-        You can specify a custom amount, defaults to 400
-        """
+        """Lists current gold/gem exchange prices."""
         if quantity <= 1:
             return await ctx.send("Quantity must be higher than 1")
+        await ctx.defer()
         try:
             gem_price = await self.get_gem_price(quantity)
             coin_price = await self.get_coin_price(quantity)
         except APIError as e:
             return await self.error_handler(ctx, e)
-        data = discord.Embed(
-            title="Currency exchange", colour=await self.get_embed_color(ctx))
-        data.add_field(
-            name="{} gems would cost you".format(quantity),
-            value=self.gold_to_coins(ctx, gem_price),
-            inline=False)
+        data = discord.Embed(title="Currency exchange",
+                             colour=await self.get_embed_color(ctx))
+        data.add_field(name="{} gems would cost you".format(quantity),
+                       value=self.gold_to_coins(ctx, gem_price),
+                       inline=False)
         data.set_thumbnail(url="https://render.guildwars2.com/file/220061640EC"
                            "A41C0577758030357221B4ECCE62C/502065.png")
-        data.add_field(
-            name="{} gems could buy you".format(quantity),
-            value=self.gold_to_coins(ctx, coin_price),
-            inline=False)
-        try:
-            await ctx.send(embed=data)
-        except discord.Forbidden:
-            await ctx.send("Need permission to embed links")
+        data.add_field(name="{} gems could buy you".format(quantity),
+                       value=self.gold_to_coins(ctx, coin_price),
+                       inline=False)
+        await ctx.send(embed=data)
 
     async def get_gem_price(self, quantity=400):
         endpoint = "commerce/exchange/coins?quantity=10000000"
@@ -266,33 +267,36 @@ class CommerceMixin:
         results = await self.call_api(endpoint)
         return results["quantity"]
 
-    @gem.command(name="track", usage="<gold>")
+    @cog_ext.cog_subcommand(
+        base="gem",
+        name="track",
+        base_description="Gem related commands",
+        options=[{
+            "name": "gold",
+            "description":
+            "Receive a notification when price of 400 gems drops below this",
+            "type": SlashCommandOptionType.INTEGER,
+            "required": True,
+        }])
     async def gem_track(self, ctx, gold: int = 0):
-        """Receive a notification when cost of 400 gems drops below given cost
-
-        For example, if you set cost to 100, you will get a notification when
-        price of 400 gems drops below 100 gold
-        """
-        user = ctx.author
-        if not gold:
-            doc = await self.bot.database.get(user, self)
-            current = doc.get("gemtrack")
-            if current:
-                return await ctx.send(
-                    "You'll currently be notified if "
-                    "price of 400 gems drops below **{}**".format(
-                        current // 10000))
-            else:
-                return await ctx.send_help(ctx.command)
+        """Receive a notification when cost of 400 gems drops below given cost"""
+        # if not gold:
+        #     doc = await self.bot.database.get(ctx.author, self)
+        #     current = doc.get("gemtrack")
+        #     if current:
+        #         return await ctx.send(
+        #             "You'll currently be notified if "
+        #             "price of 400 gems drops below **{}**".format(current //
+        #                                                           10000),
+        #             hidden=True)
+        #     else:
+        #         return await ctx.send_help(ctx.command)
         if not 0 <= gold <= 500:
-            return await ctx.send("Invalid value")
+            return await ctx.send(
+                "Invalid value. Gold may be between 0 and 500", hidden=True)
         price = gold * 10000
-        try:
-            await user.send("You will be notified when price of 400 gems "
-                            "drops below {} gold".format(gold))
-        except:
-            return await ctx.send("Couldn't send a DM to you. Either you have "
-                                  "me blocked, or disabled DMs in this "
-                                  "server. Aborting.")
-        await self.bot.database.set(user, {"gemtrack": price}, self)
-        await ctx.send("Successfully set")
+        await ctx.send(
+            "You will be notified when price of 400 gems "
+            f"drops below {gold} gold",
+            hidden=True)
+        await self.bot.database.set(ctx.author, {"gemtrack": price}, self)

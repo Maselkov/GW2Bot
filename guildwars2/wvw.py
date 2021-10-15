@@ -1,5 +1,9 @@
 import discord
 import io
+
+from discord_slash import cog_ext
+from discord_slash.model import SlashCommandOptionType
+
 try:
     import matplotlib
     matplotlib.use("agg")
@@ -9,12 +13,8 @@ try:
     MATPLOTLIB_AVAILABLE = True
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
-
-from discord.ext import commands
-from discord.ext.commands.cooldowns import BucketType
-
-from .exceptions import APIError, APIKeyError
 import datetime
+from .exceptions import APIError, APIKeyError
 
 
 def generate_population_graph(data):
@@ -23,17 +23,17 @@ def generate_population_graph(data):
     ax = fig.add_subplot(111)
     ax.set_yticks([0, 1, 2, 3, 4])
     ax.set_yticklabels(["Low", "Medium", "High", "Very High", "Full"])
-    ax.set_title('Population over time',
+    ax.set_title("Population over time",
                  color="#ffa600",
                  path_effects=path_effects)
-    ax.tick_params(axis='y', which='major', length=2)
+    ax.tick_params(axis="y", which="major", length=2)
     ax.step(*zip(*data), where="post", color="#c12d2b")
     ax.tick_params(axis="x", which="major", pad=0)
     ax.tick_params(axis="both", labelcolor="#ffa600", color="#c12d2b")
     ax.grid(b=True,
-            which='both',
-            color='black',
-            linestyle='-',
+            which="both",
+            color="black",
+            linestyle="-",
             alpha=0.2,
             path_effects=[
                 pe.withStroke(linewidth=1, foreground="white", alpha=0.2)
@@ -53,7 +53,7 @@ def generate_population_graph(data):
     fig.savefig(buf,
                 format="png",
                 transparent=True,
-                bbox_inches='tight',
+                bbox_inches="tight",
                 dpi=300)
     plt.close(fig)
     buf.seek(0)
@@ -61,32 +61,21 @@ def generate_population_graph(data):
 
 
 class WvwMixin:
-    @commands.group(case_insensitive=True)
-    async def wvw(self, ctx):
-        """Commands related to WVW"""
-        if ctx.invoked_subcommand is None:
-            await ctx.send_help(ctx.command)
-
-    @wvw.command(name="worlds")
-    @commands.cooldown(1, 20, BucketType.user)
-    async def wvw_worlds(self, ctx):
-        """List all worlds"""
-        try:
-            results = await self.call_api("worlds?ids=all")
-        except APIError as e:
-            return await self.error_handler(ctx, e)
-        output = "Available worlds are: ```"
-        for world in results:
-            output += world["name"] + ", "
-        output += "```"
-        await ctx.send(output)
-
-    @wvw.command(name="info")
-    @commands.cooldown(1, 10, BucketType.user)
+    @cog_ext.cog_subcommand(
+        base="wvw",
+        name="info",
+        base_description="WvW related commands",
+        options=[{
+            "name": "world",
+            "description":
+            "World name. Leave blank to use your account's world",
+            "type": SlashCommandOptionType.STRING,
+            "required": False
+        }])
     async def wvw_info(self, ctx, *, world: str = None):
-        """Info about a world. Defaults to account's world
-        """
+        """Info about a world. Defaults to account"s world"""
         user = ctx.author
+        await ctx.defer()
         if not world:
             try:
                 endpoint = "account"
@@ -100,8 +89,7 @@ class WvwMixin:
         else:
             wid = await self.get_world_id(world)
         if not wid:
-            await ctx.send("Invalid world name")
-            return
+            return await ctx.send("Invalid world name")
         try:
             endpoints = [
                 "wvw/matches?world={0}".format(wid),
@@ -150,27 +138,25 @@ class WvwMixin:
         if MATPLOTLIB_AVAILABLE:
             graph = await self.get_population_graph(worldinfo)
             data.set_image(url=f"attachment://{graph.filename}")
-            try:
-                await ctx.send(embed=data, file=graph)
-            except discord.Forbidden:
-                await ctx.send("Missing permission to embed links or "
-                               "upload images")
-                # TODO automate giving exact error
-            return
-        try:
-            await ctx.send(embed=data)
-        except discord.Forbidden:
-            await ctx.send("Need permission to embed links")
+            return await ctx.send(embed=data, file=graph)
+        await ctx.send(embed=data)
 
-    @wvw.command(name="populationtrack")
-    @commands.cooldown(1, 5, BucketType.user)
-    async def wvw_population_track(self, ctx, *, world_name):
-        """Receive a notification when the world is no longer full
-
-        Example: $wvw populationtrack gandara
-        """
+    @cog_ext.cog_subcommand(
+        base="wvw",
+        name="poptrack",
+        base_description="WvW related commands",
+        options=[{
+            "name": "world",
+            "description":
+            "World name. Leave blank to use your account's world",
+            "type": SlashCommandOptionType.STRING,
+            "required": True
+        }])
+    async def wvw_population_track(self, ctx, *, world):
+        """Receive a notification when the world is no longer full"""
         user = ctx.author
-        wid = await self.get_world_id(world_name)
+        await ctx.defer(hidden=True)
+        wid = await self.get_world_id(world)
         if not wid:
             return await ctx.send("Invalid world name")
         doc = await self.bot.database.get_user(user, self)
@@ -182,17 +168,11 @@ class WvwMixin:
             return await self.error_handler(ctx, e)
         if results["population"] != "Full":
             return await ctx.send("This world is currently not full!")
-        try:
-            await user.send("You will be notiifed when {} is no longer full "
-                            "".format(world_name.title()))
-        except:
-            return await ctx.send("Couldn't send a DM to you. Either you have "
-                                  "me blocked, or disabled DMs in this "
-                                  "server. Aborting.")
-        await self.bot.database.set_user(user, {"poptrack": wid},
-                                         self,
-                                         operator="$push")
-        await ctx.send("Successfully set")
+        await ctx.send("You will be notiifed when {} is no longer full "
+                       "".format(world.title()))
+        await self.bot.database.set(user, {"poptrack": wid},
+                                    self,
+                                    operator="$push")
 
     def population_to_int(self, pop):
         pops = ["low", "medium", "high", "veryhigh", "full"]

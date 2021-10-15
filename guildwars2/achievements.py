@@ -1,8 +1,7 @@
 import math
 
 import discord
-from discord.ext import commands
-from discord.ext.commands.cooldowns import BucketType
+from discord_slash import SlashContext, cog_ext
 
 from .exceptions import APIError, APINotFound
 from .utils.chat import cleanup_xml_tags
@@ -10,20 +9,21 @@ from .utils.db import prepare_search
 
 
 class AchievementsMixin:
-    @commands.command(
-        name="achievement", aliases=["achievementinfo", "ach", "achiev"])
-    @commands.cooldown(1, 3, BucketType.user)
-    async def achievementinfo(self, ctx, *, achievement):
+    @cog_ext.cog_slash(name="achievement")
+    async def achievementinfo(self, ctx: SlashContext, achievement):
         """Display achievement information and your completion status"""
         user = ctx.author
-        query = {
-            "name": prepare_search(achievement)
-        }
+        query = {"name": prepare_search(achievement)}
         count = await self.db.achievements.count_documents(query)
         cursor = self.db.achievements.find(query)
         choice = await self.selection_menu(ctx, cursor, count)
+        answer = None
         if not choice:
             return
+        if type(choice) is tuple:
+            choice, answer = choice
+        if not answer:
+            await ctx.defer()
         try:
             doc = await self.fetch_key(user, ["progression"])
             endpoint = "account/achievements?id=" + str(choice["_id"])
@@ -35,24 +35,25 @@ class AchievementsMixin:
         embed = await self.ach_embed(ctx, results, choice)
         embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
         try:
-            await ctx.send(
-                "{.mention}, here is your achievement:".format(user),
-                embed=embed)
+            if answer:
+                await answer.edit_origin(components=None, embed=embed)
+            else:
+                await ctx.send(embed=embed)
         except discord.Forbidden:
             await ctx.send("Need permission to embed links")
 
     async def ach_embed(self, ctx, res, ach):
         description = cleanup_xml_tags(ach["description"])
-        data = discord.Embed(
-            title=ach["name"],
-            description=description,
-            color=await self.get_embed_color(ctx))
+        data = discord.Embed(title=ach["name"],
+                             description=description,
+                             color=await self.get_embed_color(ctx))
         if "icon" in ach:
             data.set_thumbnail(url=ach["icon"])
         requirement = ach.get("requirement")
         if requirement:
-            data.add_field(
-                name="Requirement", value=ach["requirement"], inline=False)
+            data.add_field(name="Requirement",
+                           value=ach["requirement"],
+                           inline=False)
         tiers = ach["tiers"]
         repeated = res["repeated"] if "repeated" in res else 0
         max_prog = len(tiers)
@@ -87,10 +88,9 @@ class AchievementsMixin:
                 footer += " | Green (+) means completed. Red (-) means not"
                 for i in range(number_of_fields):
                     value = "\n".join(lines[i * 10:i * 10 + 10])
-                    data.add_field(
-                        name="Objectives ({}/{})".format(
-                            i + 1, number_of_fields),
-                        value="```diff\n{}\n```".format(value))
+                    data.add_field(name="Objectives ({}/{})".format(
+                        i + 1, number_of_fields),
+                                   value="```diff\n{}\n```".format(value))
         if "rewards" in ach:
             lines = []
             for rew in ach["rewards"]:
@@ -106,13 +106,13 @@ class AchievementsMixin:
                     reward = await self.get_title(rew["id"])
                     reward = "Title: " + reward
                 lines.append(reward)
-            data.add_field(
-                name="Rewards", value="\n".join(lines), inline=False)
+            data.add_field(name="Rewards",
+                           value="\n".join(lines),
+                           inline=False)
         data.add_field(name="Tier completion", value=progress, inline=False)
-        data.add_field(
-            name="AP earned",
-            value="{}/{}".format(earned_ap, max_ap),
-            inline=False)
+        data.add_field(name="AP earned",
+                       value="{}/{}".format(earned_ap, max_ap),
+                       inline=False)
 
         data.set_footer(text=footer, icon_url=self.bot.user.avatar_url)
         return data

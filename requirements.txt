@@ -3,3 +3,4 @@ pillow
 requests
 tenacity
 matplotlib
+discord-py-interactions

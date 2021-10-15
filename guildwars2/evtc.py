@@ -3,7 +3,8 @@ import datetime
 import aiohttp
 import discord
 from discord.ext import commands
-from discord.ext.commands.cooldowns import BucketType
+from discord_slash import MenuContext, cog_ext
+from discord_slash.model import ContextMenuType, SlashCommandOptionType
 
 from .exceptions import APIError
 from .utils.chat import (embed_list_lines, en_space, magic_space,
@@ -27,10 +28,11 @@ class EvtcMixin:
                 async with self.session.get(TOKEN_URL) as r:
                     data = await r.json()
                     token = data["userToken"]
-                    await self.bot.database.set(
-                        user, {"dpsreport_token": token}, self)
+                    await self.bot.database.set(user,
+                                                {"dpsreport_token": token},
+                                                self)
                     return token
-            except:
+            except Exception:
                 return None
 
     async def upload_log(self, file, user):
@@ -40,8 +42,8 @@ class EvtcMixin:
             params["userToken"] = token
         data = aiohttp.FormData()
         data.add_field("file", await file.read(), filename=file.filename)
-        async with self.session.post(
-                UPLOAD_URL, data=data, params=params) as r:
+        async with self.session.post(UPLOAD_URL, data=data,
+                                     params=params) as r:
             resp = await r.json()
             error = resp["error"]
             if error:
@@ -69,15 +71,15 @@ class EvtcMixin:
     async def upload_embed(self, ctx, result):
         if not result["encounter"]["jsonAvailable"]:
             return None
-        async with self.session.get(
-                JSON_URL, params={"id": result["id"]}) as r:
+        async with self.session.get(JSON_URL, params={"id":
+                                                      result["id"]}) as r:
             data = await r.json()
         lines = []
         targets = data["phases"][0]["targets"]
         group_dps = 0
         for target in targets:
-            group_dps += sum(
-                p["dpsTargets"][target][0]["dps"] for p in data["players"])
+            group_dps += sum(p["dpsTargets"][target][0]["dps"]
+                             for p in data["players"])
 
         def get_graph(percentage):
             bar_count = round(percentage / 5)
@@ -128,11 +130,10 @@ class EvtcMixin:
         seconds = int(seconds[:-1])
         duration_time = (minutes * 60) + seconds
         duration = f"**{minutes}** minutes, **{seconds}** seconds"
-        embed = discord.Embed(
-            title="DPS Report",
-            description="Encounter duration: " + duration,
-            url=result["permalink"],
-            color=color)
+        embed = discord.Embed(title="DPS Report",
+                              description="Encounter duration: " + duration,
+                              url=result["permalink"],
+                              color=color)
         boss_lines = []
         for target in targets:
             target = data["targets"][target]
@@ -226,94 +227,94 @@ class EvtcMixin:
             embed.set_author(name=data["fightName"], icon_url=boss["icon"])
         return embed
 
-    @commands.group(case_insensitive=True)
-    async def evtc(self, ctx):
-        """Process an EVTC combat log or enable automatic processing
-
-        Simply upload your file and in the "add a comment" field type $evtc,
-        in other words invoke this command while uploading a file.
-        Use this command ($evtc) without uploading a file to see other commands
-        Accepted formats are: .evtc, .zevtc, .zip
-
-        It's highly recommended to enable compression in your Arc settings.
-        With the setting enabled logs sized will rarely, if ever, be higher
-        than the Discord upload limit
-        """
-        if ctx.invoked_subcommand is None and not ctx.message.attachments:
-            return await ctx.send_help(ctx.command)
-        for attachment in ctx.message.attachments:
+    @cog_ext.cog_context_menu(target=ContextMenuType.MESSAGE,
+                              name="ProcessEVTC")
+    async def evtc(self, ctx: MenuContext):
+        """Process an EVTC combat log in an attachment"""
+        message = ctx.target_message
+        if not message.attachments:
+            return await ctx.send(
+                "The message must have an attached evtc file!", hidden=True)
+        for attachment in message.attachments:
             if attachment.filename.endswith(ALLOWED_FORMATS):
                 break
         else:
-            return await ctx.send_help(ctx.command)
+            return await ctx.send(
+                "The attachment seems not to be of a correct filetype.\n"
+                f"Allowed file extensions: `{', '.join(ALLOWED_FORMATS)}`",
+                hidden=True)
         if ctx.guild:
-            doc = await self.bot.database.get(ctx.channel, self)
-            settings = doc.get("evtc", {})
-            enabled = settings.get("enabled")
             if not ctx.channel.permissions_for(ctx.me).embed_links:
                 return await ctx.send(
-                    "I need embed links permission to process logs.")
-            if enabled:
-                return
-        await self.process_evtc(ctx.message)
+                    "I need embed links permission to process logs.",
+                    hidden=True)
+        await ctx.defer()
+        await self.process_evtc(message, ctx)
 
-    @commands.cooldown(1, 5, BucketType.guild)
-    @commands.guild_only()
-    @commands.has_permissions(manage_guild=True)
-    @evtc.command(name="channel")
-    async def evtc_channel(self, ctx):
+    @cog_ext.cog_subcommand(
+        base="evtc",
+        name="channel",
+        base_description="EVTC related commands",
+        options=[{
+            "name": "channel",
+            "description":
+            "The channel to enable automatic EVTC processing on.",
+            "type": SlashCommandOptionType.CHANNEL,
+            "required": True,
+        }])
+    async def evtc_channel(self, ctx, channel: discord.TextChannel):
         """Sets this channel to be automatically used to process logs"""
+        if not ctx.guild:
+            return await ctx.send("This command can only be used in a server.",
+                                  hidden=True)
+        if not ctx.author.guild_permissions.manage_guild:
+            return await ctx.send(
+                "You need the manage server permission to use this command.",
+                hidden=True)
         doc = await self.bot.database.get(ctx.channel, self)
         enabled = not doc.get("evtc.enabled", False)
         await self.bot.database.set(ctx.channel, {"evtc.enabled": enabled},
                                     self)
         if enabled:
             msg = ("Automatic EVTC processing enabled. Simply upload the file "
-                   "wish to be processed in this channel. Accepted "
-                   "formats: `.evtc`, `.zevtc`, `.zip` ")
-            if not ctx.channel.permissions_for(ctx.me).embed_links:
-                await ctx.send("I won't be able to process logs without Embed "
-                               "Links permission.")
+                   f"wish to be processed in {channel.mention}, while "
+                   "@mentioning the bot in the same message.. Accepted "
+                   f"formats: `{', '.join(ALLOWED_FORMATS)}` ")
+            if not channel.permissions_for(ctx.me).embed_links:
+                msg += ("I won't be able to process logs without Embed "
+                        "Links permission.")
         else:
             msg = ("Automatic EVTC processing diasbled")
         await ctx.send(msg)
 
-    async def process_evtc(self, message):
+    async def process_evtc(self, message, ctx):
         embeds = []
-        prompt = await message.channel.send("Processing logs... " +
-                                            self.get_emoji(message, "loading"))
+        destination = ctx or message.channel
         for attachment in message.attachments:
             if attachment.filename.endswith(ALLOWED_FORMATS):
                 try:
                     resp = await self.upload_log(attachment, message.author)
                     embeds.append(await self.upload_embed(message, resp))
                 except Exception as e:
-                    self.log.exception(
-                        "Exception processing EVTC log ", exc_info=e)
-                    return await prompt.edit(
-                        content="Error processing your log! :x:")
+                    self.log.exception("Exception processing EVTC log ",
+                                       exc_info=e)
+                    return await destination.send(
+                        content="Error processing your log! :x:", hidden=True)
         for embed in embeds:
-            await message.channel.send(embed=embed)
-        try:
-            await prompt.delete()
-            await message.delete()
-        except discord.HTTPException:
-            pass
+            await destination.send(embed=embed)
 
     @commands.Cog.listener()
     async def on_message(self, message):
         if not message.attachments:
-            return
-        if not message.guild:
             return
         for attachment in message.attachments:
             if attachment.filename.endswith(ALLOWED_FORMATS):
                 break
         else:
             return
-        doc = await self.bot.database.get(message.channel, self)
-        settings = doc.get("evtc", {})
-        enabled = settings.get("enabled")
-        if not enabled:
-            return
-        await self.process_evtc(message)
+        if not message.guild:
+            doc = await self.bot.database.get(message.channel, self)
+            settings = doc.get("evtc", {})
+            if not settings.get("enabled"):
+                return
+        await self.process_evtc(message, None)

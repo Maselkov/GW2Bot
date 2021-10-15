@@ -3,9 +3,15 @@ import collections
 import datetime
 import re
 import time
+from unicodedata import name
 
 import discord
 from discord.ext import commands
+from discord_slash.context import ComponentContext
+from discord_slash.utils.manage_components import (create_actionrow,
+                                                   create_select,
+                                                   create_select_option,
+                                                   wait_for_component)
 from pymongo import ReplaceOne
 from pymongo.errors import BulkWriteError
 
@@ -305,7 +311,7 @@ class DatabaseMixin:
                      ["specializations", True], ["traits", True],
                      ["worlds", True], ["minis", True], ["pvp/amulets", True],
                      ["professions", True], ["legends", True], ["pets", True],
-                     ["outfits", True]]
+                     ["outfits", True], ["colors", True]]
         for e in endpoints:
             try:
                 await self.cache_endpoint(*e)
@@ -332,124 +338,139 @@ class DatabaseMixin:
                                                                        start))
 
     async def itemname_to_id(self,
-                             destination,
+                             ctx,
                              item,
-                             user,
                              *,
                              flags=[],
                              filters={},
                              database="items",
-                             group_duplicates=False):  # TODO cleanup
+                             group_duplicates=False,
+                             prompt_user=False,
+                             component_context=None,
+                             limit=125,
+                             hidden=False,
+                             placeholder="Select the item you want..."
+                             ):  # TODO cleanup this monstrosity
         def consolidate_duplicates(items):
             unique_items = collections.OrderedDict()
             for item in items:
-                item_tuple = item["name"], item["rarity"]
+                item_tuple = item["name"], item["rarity"], item["type"]
                 if item_tuple not in unique_items:
                     unique_items[item_tuple] = []
                 unique_items[item_tuple].append(item["_id"])
             unique_list = []
             for k, v in unique_items.items():
-                unique_list.append({"name": k[0], "rarity": k[1], "ids": v})
+                unique_list.append({
+                    "name": k[0],
+                    "rarity": k[1],
+                    "ids": v,
+                    "type": k[2]
+                })
             return unique_list
-
-        def check(m):
-            if isinstance(destination,
-                          (discord.abc.User, discord.abc.PrivateChannel)):
-                chan = isinstance(m.channel, discord.abc.PrivateChannel)
-            else:
-                chan = m.channel == destination.channel
-            return m.author == user and chan
 
         item_sanitized = re.escape(item)
         search = re.compile(item_sanitized + ".*", re.IGNORECASE)
         query = {"name": search, "flags": {"$nin": flags}, **filters}
         number = await self.db[database].count_documents(query)
         if not number:
-            await destination.send(
+            await ctx.send(
                 "Your search gave me no results, sorry. Check for "
                 "typos.\nAlways use singular forms, e.g. Legendary Insight")
             return None
         cursor = self.db[database].find(query)
-        if number > 35:
-            await destination.send("Your search gave me {} item results. "
-                                   "Try exact match "
-                                   "search? `Y/N`".format(number))
-            try:
-                answer = await self.bot.wait_for("message",
-                                                 timeout=120,
-                                                 check=check)
-            except asyncio.TimeoutError:
-                return None
-            if answer.content.lower() != "y":
-                return
-            exact_match = "^" + item_sanitized + "$"
-            search = re.compile(exact_match, re.IGNORECASE)
-            query["name"] = search
-            number = await self.db[database].count_documents(query)
-            cursor = self.db[database].find(query)
-            if not number:
-                await destination.send(
-                    "Your search gave me no results, sorry. Check for "
-                    "typos.\nAlways use singular forms, e.g. Legendary Insight"
-                )
-                return None
-            if number > 25:
-                await destination.send("Your search gave me {} item results. "
-                                       "Please be more specific".format(number)
-                                       )
-                return None
+
+        if number > limit:  # TODO multiple selections for 125 items.
+            await ctx.send("Your search gave me {} item results. "
+                           "Please be more specific".format(number))
+            return None
         items = []
         async for item in cursor:
             items.append(item)
         items.sort(key=lambda i: i["name"])
-        longest = len(max([item["name"] for item in items], key=len))
-        msg = [
-            "Which one of these interests you? Simply type it's number "
-            "into the chat now:```ml",
-            "INDEX    NAME {}RARITY".format(" " * (longest)),
-            "-----|------{}|-------".format("-" * (longest))
-        ]
-
         if group_duplicates:
             distinct_items = consolidate_duplicates(items)
         else:
             for item in items:
                 item["ids"] = [item["_id"]]
             distinct_items = items
-        if number != 1:
-            for c, m in enumerate(distinct_items, 1):
-                msg.append("  {} {}| {} {}| {}".format(
-                    c, " " * (2 - len(str(c))), m["name"].upper(),
-                    " " * (4 + longest - len(m["name"])), m["rarity"]))
-            msg.append("```")
-            message = await destination.send("\n".join(msg))
-            try:
-                answer = await self.bot.wait_for("message",
-                                                 timeout=120,
-                                                 check=check)
-            except asyncio.TimeoutError:
-                await message.edit(content="No response in time")
-                return None
-            try:
-                num = int(answer.content) - 1
-                choice = distinct_items[num]
-            except:
-                await message.edit(content="That's not a number in the list")
-                return None
-            try:
-                await message.delete()
-                await answer.delete()
-            except:
-                pass
+
+        if len(distinct_items) == 1:
+            if not prompt_user:
+                return distinct_items[0]
+            return distinct_items[0], None
+        if not prompt_user:
+            return distinct_items
+        rows = []
+        options = []
+        for i, item in enumerate(
+                sorted(distinct_items, key=lambda c: c["name"]), 1):
+            if not i % limit:
+                rows.append(options)
+                options = []
+            emoji = self.get_emoji(ctx, item["type"], return_obj=True)
+            options.append(
+                create_select_option(item["name"],
+                                     i - 1,
+                                     description=item["rarity"],
+                                     emoji=emoji or None))
+        rows.append(options)
+        action_rows = []
+        for row in rows:
+            ph = placeholder
+            if len(rows) > 1:
+                first_letter = row[0]["label"][0]
+                last_letter = row[-1]["label"][0]
+                if first_letter != last_letter:
+                    ph += f" [{first_letter}-{last_letter}]"
+                else:
+                    ph += f" [{first_letter}]"
+            action_rows.append(
+                create_actionrow(
+                    create_select(row,
+                                  min_values=1,
+                                  max_values=1,
+                                  placeholder=ph)))
+
+        if len(rows) > 1:
+            content = f"Due to Discord limitations, your selection had been split into several."
         else:
-            choice = distinct_items[0]
+            content = "** **"
+        if component_context:
+            await component_context.edit_origin(content=content,
+                                                components=action_rows)
+        else:
+            msg = await ctx.send(content,
+                                 components=action_rows,
+                                 hidden=hidden)
 
-        for item in items:
-            if item["_id"] in choice["ids"]:
-                if item["type"] == "UpgradeComponent":
-                    choice["is_upgrade"] = True
+        def tell_off(answer):
+            self.bot.loop.create_task(
+                answer.send("Only the command owner may do that.",
+                            hidden=True))
 
-        return choice
+        try:
+            while True:
+                answer = await wait_for_component(self.bot,
+                                                  components=action_rows,
+                                                  timeout=120)
+                if answer.author != ctx.author:
+                    tell_off(answer)
+                    continue
+                index = int(answer.selected_options[0])
+                return distinct_items[index], answer
+        except asyncio.TimeoutError:
+            if component_context:
+                await component_context.edit_origin(content="Timed out.",
+                                                    components=None)
+            else:
+                await msg.edit(content="Timed out.", components=None)
+            return None, None
+        # for item in items:
+        #     if item["_id"] in choice["ids"]:
+        #         if item["type"] == "UpgradeComponent":
+        #             choice["is_upgrade"] = True
+
+        # return choice
 
     async def selection_menu(self,
                              ctx,
@@ -477,42 +498,29 @@ class DatabaseMixin:
         key = "name"
         if filter_callable:
             items = filter_callable(items)
-        number = len(items)
         items.sort(key=lambda i: i[key])
-        longest = len(max([item[key] for item in items], key=len))
-        key_pos = (longest + 2) // 2 - 2
-        header = "INDEX{} {}{}".format(" " * key_pos, key.upper(),
-                                       " " * (longest - 2 - key_pos))
-        msg = [
-            "Which one of these interests you? Simply type it's number "
-            "into the chat now:```ml", header,
-            "-----|-{}-".format("-" * longest)
-        ]
-        if number != 1:
-            for c, m in enumerate(items, 1):
-                msg.append("  {} {}| {} {}".format(
-                    c, " " * (2 - len(str(c))), m[key].upper(),
-                    " " * (longest - len(m[key]))))
-            msg.append("```")
-            message = await ctx.send("\n".join(msg))
+        options = []
+        if len(items) != 1:
+            for i, item in enumerate(items):
+                options.append(create_select_option(item[key], value=i))
+            select = create_select(min_values=1,
+                                   max_values=1,
+                                   options=options,
+                                   placeholder="Select the item you want")
+            components = [create_actionrow(select)]
+            msg = await ctx.send("** **", components=components)
             try:
-                answer = await self.bot.wait_for("message",
-                                                 timeout=120,
-                                                 check=check)
+                answer: ComponentContext = await self.bot.wait_for(
+                    "component",
+                    timeout=120,
+                    check=lambda context: context.author == ctx.author and
+                    context.origin_message.id == msg.id)
+                choice = items[int(answer.selected_options[0])]
+                await answer.defer(edit_origin=True)
+                return (choice, answer)
             except asyncio.TimeoutError:
-                await message.edit(content="No response in time")
+                await msg.edit(content="No response in time", components=None)
                 return None
-            try:
-                num = int(answer.content) - 1
-                choice = items[num]
-            except:
-                await message.edit(content="That's not a number in the list")
-                return None
-            try:
-                await message.delete()
-                await answer.delete()
-            except:
-                pass
         else:
             choice = items[0]
         return choice
