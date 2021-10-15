@@ -75,20 +75,12 @@ class WorldsyncMixin:
 
     async def worldsync_now(self, ctx):
         """Run the worldsync now"""
-        msg = await ctx.send("Starting worldsync." +
-                             self.get_emoji(ctx, "loading"))
         doc = await self.bot.database.get(ctx.guild, self)
         worldsync = doc.get("worldsync", {})
         enabled = worldsync.get("enabled", False)
         if not enabled:
-            return await ctx.send("Worldsync is not enabled")
-        async with ctx.typing():
-            await self.sync_worlds(worldsync, ctx.guild)
-        await ctx.send("Worldsync complete")
-        try:
-            await msg.delete()
-        except discord.HTTPException:
-            pass
+            return
+        await self.sync_worlds(worldsync, ctx.guild)
 
     async def get_linked_worlds(self, world):
         endpoint = f"wvw/matches/overview?world={world}"

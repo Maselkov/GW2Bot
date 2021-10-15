@@ -69,6 +69,13 @@ class GuildManageMixin:
         }])
     async def previewchatlinks(self, ctx, *, enabled):
         """Enable or disable automatic GW2 chat link preview"""
+        if not ctx.guild:
+            return await ctx.send("This command can only be used in a server.",
+                                  hidden=True)
+        if not ctx.author.guild_permissions.manage_server:
+            return await ctx.send(
+                "You need the manage server permission to use this command.",
+                hidden=True)
         doc = await self.bot.database.get(ctx.guild, self)
         disabled = doc.get("link_preview_disabled", False)
         if disabled and not enabled:
@@ -92,6 +99,22 @@ class GuildManageMixin:
                 pass
             return await ctx.send("Chat link preview is now enabled.",
                                   hidden=True)
+
+    @cog_ext.cog_subcommand(base="server",
+                            name="sync",
+                            base_description="Server management commands")
+    async def sync_now(self, ctx):
+        """Force a sync for any Guildsyncs and Worldsyncs you have"""
+        if not ctx.guild:
+            return await ctx.send("This command can only be used in a server.",
+                                  hidden=True)
+        if not ctx.author.guild_permissions.manage_server:
+            return await ctx.send(
+                "You need the manage server permission to use this command.",
+                hidden=True)
+        await ctx.send("Syncs scheduled!")
+        await self.guildsync_now(ctx)
+        await self.worldsync_now(ctx)
 
     async def force_guild_account_names(self, guild):
         for member in guild.members:
