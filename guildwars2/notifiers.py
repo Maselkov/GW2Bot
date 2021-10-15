@@ -455,33 +455,55 @@ class NotiifiersMixin:
                     "psna", "psna_later", "pve", "pvp", "wvw", "fractals",
                     "strikes"
                 ]
+            if "psna" in categories and not "psna_later" in categories:
+                categories.insert(categories.index("psna") + 1, "psna_later")
             channel = self.bot.get_channel(doc["channel"])
             embed = await self.daily_embed(categories,
                                            doc=daily_doc,
                                            ctx=channel)
+
+            edit = doc.get("autoedit", False)
+            autodelete = doc.get("autodelete", False)
+            old_message = None
+            if autodelete or edit:
+                try:
+                    old_message_id = doc.get("message")
+                    if old_message_id:
+                        old_message = await channel.fetch_message(
+                            old_message_id)
+                except discord.HTTPException:
+                    pass
+            edited = False
             try:
                 embed.set_thumbnail(url="https://wiki.guildwars2.com/images/"
                                     "1/14/Daily_Achievement.png")
-                message = await channel.send(embed=embed)
+                if old_message and edit:
+                    try:
+                        await old_message.edit(embed=embed)
+                        edited = True
+                    except discord.HTTPException:
+                        pass
+                if not edited:
+                    message = await channel.send(embed=embed)
             except discord.Forbidden:
                 message = await channel.send("Need permission to "
                                              "embed links in order "
                                              "to send daily "
                                              "notifs!")
-            await self.bot.database.set_guild(channel.guild,
-                                              {"daily.message": message.id},
-                                              self)
-            autodelete = doc.get("autodelete", False)
-            if autodelete:
+            if autodelete and not edited:
                 try:
-                    old_message = doc.get("message")
-                    if old_message:
-                        to_delete = await channel.fetch_message(old_message)
-                        await to_delete.delete()
-                except Exception:
+                    await old_message.delete()
+                except discord.HTTPException:
                     pass
+            if not edited:
+                await self.bot.database.set_guild(
+                    channel.guild, {"daily.message": message.id}, self)
             autopin = doc.get("autopin", False)
             if autopin:
+                message = old_message
+                if edited:
+                    if message.pinned:
+                        return
                 try:
                     await message.pin()
                     try:
@@ -492,10 +514,11 @@ class NotiifiersMixin:
                                 break
                     except Exception:
                         pass
-                    old_message = doc.get("message")
-                    if old_message:
-                        to_unpin = await channel.fetch_message(old_message)
-                        await to_unpin.unpin()
+                    if not edited:
+                        old_message = doc.get("message")
+                        if old_message:
+                            to_unpin = await channel.fetch_message(old_message)
+                            await to_unpin.unpin()
                 except Exception:
                     pass
 
