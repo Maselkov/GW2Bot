@@ -267,7 +267,7 @@ class EvtcMixin:
         if not ctx.guild:
             return await ctx.send("This command can only be used in a server.",
                                   hidden=True)
-        if not ctx.author.guild_permissions.manage_server:
+        if not ctx.author.guild_permissions.manage_guild:
             return await ctx.send(
                 "You need the manage server permission to use this command.",
                 hidden=True)
