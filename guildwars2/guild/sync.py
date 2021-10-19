@@ -180,13 +180,14 @@ class GuildSync:
                 }
                 if changed:
                     await self.save(ranks=True)
-                if self.last_error and not self.error:
-                    self.error = None
-                    await self.save(error=True)
+
             else:
                 for role_id in self.ranks_to_role_ids.values():
                     role = self.guild.get_role(role_id)
                     await self.safe_role_delete(role)
+            if self.last_error and not self.error:
+                self.error = None
+                await self.save(error=True)
 
     class SyncTarget:
         @classmethod
@@ -814,6 +815,7 @@ class GuildSync:
                     await sync.fetch_members()
                 except APIError:
                     sync.error = "Couldn't fetch guild members."
+                    print("failed")
                     await sync.save(error=True)
                     continue
                 for target in targets:
@@ -827,8 +829,11 @@ class GuildSync:
                                        member.joined_at).total_seconds()
                 if not target.is_in_any_guild:
                     if len(member.roles) == 1 and membership_duration > 172800:
-                        await member.guild.kick(user=member,
-                                                reason="$guildsync purge")
+                        try:
+                            await member.guild.kick(user=member,
+                                                    reason="$guildsync purge")
+                        except discord.Forbidden:
+                            pass
 
     @tasks.loop(seconds=60)
     async def guildsync_consumer(self):
