@@ -128,6 +128,7 @@ class NotiifiersMixin:
             except asyncio.TimeoutError:
                 return await msg.edit(content="No response in time.",
                                       components=None)
+        await answer.defer()
         embed = await self.daily_embed(answer.selected_options, ctx=ctx)
         autodelete = False
         autoedit = False
@@ -291,14 +292,17 @@ class NotiifiersMixin:
         }])
     async def bossnotifier(self, ctx, *, channel=None, edit=False):
         """Send the next two bosses every 15 minutes to a channel"""
+        await ctx.defer()
         key = "bossnotifs"
         if not ctx.guild:
             return await ctx.send(
                 "This command can only be used in servers at the time.",
                 hidden=True)
         if not ctx.author.guild_permissions.manage_guild:
-            return await ctx.send("You need the `manage server` permission "
-                                  "to use this command.")
+            return await ctx.send(
+                "You need the `manage server` permission "
+                "to use this command.",
+                hidden=True)
         doc = await self.bot.database.get(ctx.guild, self)
         enabled = doc.get(key, {}).get("on", False)
         if not enabled and not channel:
@@ -455,9 +459,23 @@ class NotiifiersMixin:
                     "psna", "psna_later", "pve", "pvp", "wvw", "fractals",
                     "strikes"
                 ]
-            if "psna" in categories and not "psna_later" in categories:
+            if "psna" in categories and "psna_later" not in categories:
                 categories.insert(categories.index("psna") + 1, "psna_later")
             channel = self.bot.get_channel(doc["channel"])
+
+            if not channel:
+                return
+            can_embed = channel.permissions_for(channel.guild.me).embed_links
+            can_send = channel.permissions_for(channel.guild.me).send_messages
+            can_see_history = channel.permissions_for(
+                channel.guild.me).read_message_history
+            if not can_send:
+                return
+            if not can_embed:
+                return await channel.send("Need permission to "
+                                          "embed links in order "
+                                          "to send daily "
+                                          "notifs!")
             embed = await self.daily_embed(categories,
                                            doc=daily_doc,
                                            ctx=channel)
@@ -465,7 +483,7 @@ class NotiifiersMixin:
             edit = doc.get("autoedit", False)
             autodelete = doc.get("autodelete", False)
             old_message = None
-            if autodelete or edit:
+            if (autodelete or edit) and can_see_history:
                 try:
                     old_message_id = doc.get("message")
                     if old_message_id:
@@ -474,23 +492,17 @@ class NotiifiersMixin:
                 except discord.HTTPException:
                     pass
             edited = False
-            try:
-                embed.set_thumbnail(url="https://wiki.guildwars2.com/images/"
-                                    "1/14/Daily_Achievement.png")
-                if old_message and edit:
-                    try:
-                        await old_message.edit(embed=embed)
-                        edited = True
-                    except discord.HTTPException:
-                        pass
-                if not edited:
-                    message = await channel.send(embed=embed)
-            except discord.Forbidden:
-                message = await channel.send("Need permission to "
-                                             "embed links in order "
-                                             "to send daily "
-                                             "notifs!")
-            if autodelete and not edited:
+            embed.set_thumbnail(url="https://wiki.guildwars2.com/images/"
+                                "1/14/Daily_Achievement.png")
+            if old_message and edit:
+                try:
+                    await old_message.edit(embed=embed)
+                    edited = True
+                except discord.HTTPException:
+                    pass
+            if not edited:
+                message = await channel.send(embed=embed)
+            if old_message and autodelete and not edited:
                 try:
                     await old_message.delete()
                 except discord.HTTPException:
@@ -507,11 +519,13 @@ class NotiifiersMixin:
                 try:
                     await message.pin()
                     try:
-                        async for m in channel.history(after=message, limit=3):
-                            if (m.type == discord.MessageType.pins_add
-                                    and m.author == self.bot.user):
-                                await m.delete()
-                                break
+                        if can_see_history:
+                            async for m in channel.history(after=message,
+                                                           limit=3):
+                                if (m.type == discord.MessageType.pins_add
+                                        and m.author == self.bot.user):
+                                    await m.delete()
+                                    break
                     except Exception:
                         pass
                     if not edited:
@@ -523,10 +537,8 @@ class NotiifiersMixin:
                     pass
 
         async for doc in cursor:
-            try:
-                asyncio.create_task(notify_guild(doc))
-            except Exception:
-                pass
+            asyncio.create_task(notify_guild(doc))
+            await asyncio.sleep(0.05)
 
     async def send_news(self, embeds):
         cursor = self.bot.database.iter(
@@ -682,11 +694,12 @@ class NotiifiersMixin:
                 edit = doc.get("edit", False)
                 channel = self.bot.get_channel(doc["channel"])
                 embed = self.schedule_embed(2)
+                old_message_id = doc.get("message")
                 edited = False
                 try:
-                    if edit:
+                    if edit and old_message_id:
                         old_message = await channel.fetch_message(
-                            doc["message"])
+                            old_message_id)
                         if old_message:
                             try:
                                 await old_message.edit(embed=embed)
