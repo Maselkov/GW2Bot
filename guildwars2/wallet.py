@@ -76,11 +76,11 @@ class WalletMixin:
     }])
     async def wallet(self, ctx, *, currency=None):
         """Shows your wallet"""
+        await ctx.defer()
         try:
             doc = await self.fetch_key(ctx.author, ["wallet"])
         except APIError as e:
             return await self.error_handler(ctx, e)
-        await ctx.defer()
         if currency:
             try:
                 results = await self.call_api("account/wallet", key=doc["key"])
