@@ -1,6 +1,7 @@
+import re
+
 import discord
 from discord.ext import commands
-import re
 
 
 class EmojiMixin:
@@ -27,9 +28,15 @@ class EmojiMixin:
         if ctx:
             if isinstance(ctx, discord.TextChannel):
                 channel = ctx
-            else:
+            elif ctx.channel:
                 channel = ctx.channel
-            if channel.permissions_for(me).external_emojis:
+            else:
+                channel = None
+            if channel:
+                can_use = channel.permissions_for(me).external_emojis
+            else:
+                can_use = True
+            if can_use:
                 search_str = emoji.lower().replace(" ", "_")
                 # Remove illegal emoji characters
                 search_str = re.sub('[\.,\,,\',\:,\;,!\?]', '', search_str)
