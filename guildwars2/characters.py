@@ -303,43 +303,59 @@ class CharactersMixin:
                                           components=None)
         await ctx.send(embed=embed)
 
-    # @character.command(name="list",
-    #    usage="<sort (name|profession|created|age)>")
-    @commands.cooldown(1, 5, BucketType.user)
-    async def character_list(self, ctx, sort="name"):
-        """Lists all your characters, with extra info (age|created|profession)
+    @cog_ext.cog_subcommand(
+        base="character",
+        name="list",
+        base_description="Character related commands",
+        options=[
+            {
+                "name":
+                "info",
+                "description":
+                "Select additional information to display.",
+                "type":
+                SlashCommandOptionType.STRING,
+                "choices": [
+                    {
+                        "value": "age",
+                        "name": "Time played"
+                    },
+                    {
+                        "value": "created",
+                        "name": "Age"
+                    },
+                ],
+                "required":
+                False,
+            },
+        ])
+    async def character_list(self, ctx, info="name"):
+        """Lists all your characters."""
 
-        You can specify a sort parameter which can be
-        name, profession, created (date of creation), or age (time played).
-        Defaults to name.
-        Required permissions: characters
-        """
-
-        sort = sort.lower()
-        if sort not in ("profession", "name", "created", "age"):
+        if info not in ("profession", "name", "created", "age"):
             return await ctx.send_help(ctx.command)
 
         def get_sort_key():
-            if sort == "profession":
+            if info == "profession":
                 return lambda k: (k.profession, k.name)
-            if sort == "age":
+            if info == "age":
                 return lambda k: (-k.age, k.name)
-            if sort == "created":
+            if info == "created":
                 return lambda k: (-(datetime.datetime.utcnow() - k.created).
                                   total_seconds(), k.name)
             return lambda k: k.name
 
         def extra_info(char):
-            if sort == "age":
+            if info == "age":
                 return ": " + self.format_age(char.age, short=True)
-            if sort == "created":
+            if info == "created":
                 return ": " + char.created.strftime("%Y-%m-%d")
             is_80 = char.level == 80
             return "" + (" (Level {})".format(char.level) if not is_80 else "")
 
         user = ctx.author
         scopes = ["characters", "builds"]
-        await ctx.trigger_typing()
+        await ctx.defer()
         try:
             doc = await self.fetch_key(user, scopes)
             characters = await self.get_all_characters(user)
@@ -357,16 +373,13 @@ class CharactersMixin:
                                fallback=True,
                                fallback_fmt="**({})** "), character.name,
                 extra_info(character)))
-        sort = {
+        info = {
             "created": "date of creation",
             "age": "time played"
-        }.get(sort, sort)
+        }.get(info, info)
         embed = embed_list_lines(embed, output, "List")
-        embed.description = "Sorted by " + sort
-        embed.set_footer(text="You can use age|created|profession to "
-                         "display more information! E.g. {}character list age".
-                         format(ctx.prefix))
-        await ctx.send("{.mention}".format(user), embed=embed)
+        embed.description = "Sorted by " + info
+        await ctx.send(embed=embed)
 
     @cog_ext.cog_subcommand(
         base="character",
