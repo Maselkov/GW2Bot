@@ -94,6 +94,7 @@ class GeneralGuild:
         """Shows a list of members and their ranks."""
         user = ctx.author
         scopes = ["guilds"]
+        await ctx.defer()
         try:
             guild = await self.get_guild(ctx, guild_name=guild_name)
             if not guild and not guild_name:
