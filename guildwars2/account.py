@@ -377,6 +377,7 @@ class AccountMixin:
             doc = await self.fetch_key(user, ["inventories", "characters"])
         except APIError as e:
             await self.error_handler(ctx, e)
+        await ctx.defer()
         items = await self.itemname_to_id(ctx, item, group_duplicates=True)
         if not items:
             return
@@ -388,9 +389,20 @@ class AccountMixin:
             self.call_multiple(endpoints,
                                key=doc["key"],
                                schema_string="2021-07-15T13:00:00.000Z"))
+        storage = None
         if len(items) == 1:
-            return
-
+            if (not task.done()):
+                storage = await task
+            if exc := task.exception():
+                raise exc
+            choice = items[0]
+            search_results = await self.find_items_in_account(ctx,
+                                                              choice["ids"],
+                                                              flatten=True,
+                                                              search=True,
+                                                              results=storage)
+            embed = await generate_results_embed(search_results)
+            return await ctx.send(embed=embed)
         rows = []
         options = []
         for i, item in enumerate(sorted(items, key=lambda c: c["name"]), 1):
@@ -427,7 +439,6 @@ class AccountMixin:
         else:
             content = "** **"
         msg = await ctx.send(content, components=action_rows)
-        storage = None
 
         while True:
             try:
