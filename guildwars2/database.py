@@ -396,8 +396,8 @@ class DatabaseMixin:
 
         if len(distinct_items) == 1:
             if not prompt_user:
-                return distinct_items[0]
-            return distinct_items[0], None
+                return distinct_items
+            return distinct_items, None
         if not prompt_user:
             return distinct_items
         rows = []
