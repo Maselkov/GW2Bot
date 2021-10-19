@@ -170,18 +170,18 @@ class KeyMixin:
     async def key_info(self, ctx: SlashContext):
         """Information about your active api keys"""
         doc = await self.bot.database.get(ctx.author, self)
+        await ctx.defer(hidden=True)
         keys = doc.get("keys", [])
         key = doc.get("key", {})
         if not keys and not key:
             return await ctx.send(
-                "You have no keys added, you can add one with /key add.",
-                hidden=True)
+                "You have no keys added, you can add one with /key add.")
         embed = await self.display_keys(ctx,
                                         doc,
                                         display_active=True,
                                         show_tokens=True,
                                         reveal_tokens=True)
-        await ctx.send(embed=embed, hidden=True)
+        await ctx.send(embed=embed)
 
     @cog_ext.cog_subcommand(
         base="key",
@@ -217,14 +217,11 @@ class KeyMixin:
         try:
             key = keys[index]
         except IndexError:
-            text = ("You don't have a key with this ID, remember you can "
-                    "check your list of keys by using this command without "
-                    "a number.")
-            if answer:
-                await answer.edit_origin(content=text, components=None)
-            else:
-                await ctx.send(text, hidden=True)
-            await answer.edit_origin(content=text, components=None)
+            return await ctx.send(
+                "You don't have a key with this ID, remember you can "
+                "check your list of keys by using this command without "
+                "a number.",
+                hidden=True)
         await self.bot.database.set(ctx.author, {"key": key}, self)
         msg = "Swapped to selected key."
         if key["name"]:
