@@ -787,8 +787,6 @@ class CharactersMixin:
             fields[next_bd].append(
                 ("{} {}".format(self.get_emoji(ctx, spec["name"]),
                                 character.name), days_left))
-        msg = "{.mention}, here are your upcoming birthdays:".format(
-            ctx.author)
         embed = discord.Embed(title="Days until...",
                               colour=await self.get_embed_color(ctx))
         embed.set_author(name=doc["account_name"],
@@ -800,7 +798,7 @@ class CharactersMixin:
             ]
             embed = embed_list_lines(embed, lines,
                                      "{}{} Birthday".format(k, suffix(k)))
-        await ctx.send(msg, embed=embed)
+        await ctx.send(embed=embed)
 
     def readable_attribute(self, attribute_name):
         attribute_sub = re.sub(r"(\w)([A-Z])", r"\1 \2", attribute_name)

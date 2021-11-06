@@ -173,10 +173,7 @@ class AccountMixin:
             url="https://api.gw2bot.info/resources/icons/lild.png")
         embed.set_footer(text=self.bot.user.name,
                          icon_url=self.bot.user.avatar_url)
-        await ctx.send(
-            "{.mention}, here are your Legendary Insights and Divinations".
-            format(user),
-            embed=embed)
+        await ctx.send(embed=embed)
 
     @cog_ext.cog_slash()
     async def kp(self, ctx):
@@ -252,8 +249,7 @@ class AccountMixin:
         embed.set_footer(text="Green (+) means completed. Red (-) means not. "
                          "CM stands for Challenge Mode.")
 
-        await ctx.send("{.mention}, here is your kill proof.".format(user),
-                       embed=embed)
+        await ctx.send(embed=embed)
 
     @cog_ext.cog_slash()
     async def bosses(self, ctx):
@@ -276,8 +272,7 @@ class AccountMixin:
         embed = await self.boss_embed(ctx, raids, results, doc["account_name"],
                                       last_modified)
         embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
-        await ctx.send("{.mention}, here are your raid bosses:".format(user),
-                       embed=embed)
+        await ctx.send(embed=embed)
 
     @cog_ext.cog_slash()
     async def search(self, ctx: SlashContext, item: str):
@@ -402,6 +397,9 @@ class AccountMixin:
                                                               search=True,
                                                               results=storage)
             embed = await generate_results_embed(search_results)
+            if not embed:
+                return await ctx.send(
+                    content=f"`{choice['name']}`: Not found on your account.")
             return await ctx.send(embed=embed)
         rows = []
         options = []
@@ -498,8 +496,7 @@ class AccountMixin:
         embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
         embed.set_footer(text=self.bot.user.name,
                          icon_url=self.bot.user.avatar_url)
-        await ctx.send("{.mention}, here are your cats:".format(user),
-                       embed=embed)
+        await ctx.send(embed=embed)
 
     @cog_ext.cog_slash()
     async def nodes(self, ctx: SlashContext):
@@ -528,8 +525,7 @@ class AccountMixin:
         embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
         embed.set_footer(text=self.bot.user.name,
                          icon_url=self.bot.user.avatar_url)
-        await ctx.send("{.mention}, here are your nodes:".format(user),
-                       embed=embed)
+        await ctx.send(embed=embed)
 
     async def boss_embed(self, ctx, raids, results, account_name,
                          last_modified):
