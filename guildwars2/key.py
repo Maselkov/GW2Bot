@@ -205,7 +205,9 @@ class KeyMixin:
                 "add first.",
                 hidden=True)
         answer = None
-        if not index:
+        if index:
+            index -= 1
+        else:
             answer = await self.key_dropdown(
                 ctx,
                 keys,
