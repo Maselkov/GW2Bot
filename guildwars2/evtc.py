@@ -149,7 +149,7 @@ class EvtcMixin:
             boss_lines.append(get_graph(health_left))
         embed.add_field(name="> **BOSS**", value="\n".join(boss_lines))
         buff_lines = []
-        sought_buffs = ["Might", "Fury", "Quickness", "Alacrity"]
+        sought_buffs = ["Might", "Fury", "Quickness", "Alacrity", "Protection"]
         buffs = []
         for buff in sought_buffs:
             for key, value in data["buffMap"].items():
@@ -162,11 +162,22 @@ class EvtcMixin:
                     break
         separator = 2 * en_space
         line = zero_width_space + (en_space * (charater_name_max_length + 6))
+        icon_line = line
+        blank = self.get_emoji(ctx, "blank")
+        first = True
         for buff in sought_buffs:
-            line += self.get_emoji(
-                ctx, buff, fallback=True,
-                fallback_fmt="{:1.1}") + f"{separator}{2 * en_space}"
-        buff_lines.append(line)
+            if first and not blank:
+                icon_line = icon_line[:-2]
+            if not first:
+                if blank:
+                    icon_line += blank + blank
+                else:
+                    icon_line += separator + (en_space * 4)
+            icon_line += self.get_emoji(ctx,
+                                        buff,
+                                        fallback=True,
+                                        fallback_fmt="{:1.1}")
+            first = False
         groups = []
         for player in players:
             if player["group"] not in groups:
@@ -188,7 +199,9 @@ class EvtcMixin:
             for buff in buffs:
                 for buff_uptime in player["buffUptimes"]:
                     if buff["id"] == buff_uptime["id"]:
-                        uptime = str(buff_uptime["buffData"][0]["uptime"])
+                        uptime = str(
+                            round(buff_uptime["buffData"][0]["uptime"],
+                                  1)).rjust(5)
                         break
                 else:
                     uptime = "0"
@@ -197,11 +210,13 @@ class EvtcMixin:
                 line += uptime
                 line += separator + ((6 - len(uptime)) * magic_space)
             line += '`'
-            buff_lines.append(line)
+            buff_lines.append(line.strip())
         embed = embed_list_lines(embed, lines, "> **PLAYERS**")
         embed = embed_list_lines(embed, dpses, "> **DPS**")
-        embed = embed_list_lines(embed, buff_lines, "> **BUFFS**")
-        boss = self.gamedata["bosses"].get(str(result["encounter"]["bossId"]))
+        embed.add_field(name="> **BUFFS**", value=icon_line)
+
+        embed = embed_list_lines(embed, buff_lines, zero_width_space)
+        boss = self.gamedata["bosses"].get(str(data["triggerID"]))
         date_format = "%Y-%m-%d %H:%M:%S %z"
         date = datetime.datetime.strptime(data["timeEnd"] + "00", date_format)
         start_date = datetime.datetime.strptime(data["timeStart"] + "00",
@@ -209,7 +224,7 @@ class EvtcMixin:
         date = date.astimezone(datetime.timezone.utc)
         start_date = start_date.astimezone(datetime.timezone.utc)
         doc = {
-            "boss_id": result["encounter"]["bossId"],
+            "boss_id": data["triggerID"],
             "start_date": start_date,
             "date": date,
             "players":
@@ -262,9 +277,16 @@ class EvtcMixin:
             "type": SlashCommandOptionType.CHANNEL,
             "required": True,
             "channel_types": [0]
+        }, {
+            "name": "autodelete",
+            "description":
+            "Automatically delete message after processing the EVTC log",
+            "type": SlashCommandOptionType.BOOLEAN,
+            "required": True
         }])
-    async def evtc_channel(self, ctx, channel: discord.TextChannel):
-        """Sets this channel to be automatically used to process logs"""
+    async def evtc_channel(self, ctx, channel: discord.TextChannel,
+                           autodelete):
+        """Sets this channel to be automatically used to process EVTC logs"""
         if not ctx.guild:
             return await ctx.send("This command can only be used in a server.",
                                   hidden=True)
@@ -274,13 +296,16 @@ class EvtcMixin:
                 hidden=True)
         doc = await self.bot.database.get(ctx.channel, self)
         enabled = not doc.get("evtc.enabled", False)
-        await self.bot.database.set(ctx.channel, {"evtc.enabled": enabled},
-                                    self)
+        await self.bot.database.set(ctx.channel, {
+            "evtc.enabled": enabled,
+            "evtc.autodelete": autodelete
+        }, self)
         if enabled:
             msg = ("Automatic EVTC processing enabled. Simply upload the file "
                    f"wish to be processed in {channel.mention}, while "
                    "@mentioning the bot in the same message.. Accepted "
-                   f"formats: `{', '.join(ALLOWED_FORMATS)}` ")
+                   f"formats: `{', '.join(ALLOWED_FORMATS)}`\nTo disable, use "
+                   "this command again.")
             if not channel.permissions_for(ctx.me).embed_links:
                 msg += ("I won't be able to process logs without Embed "
                         "Links permission.")
