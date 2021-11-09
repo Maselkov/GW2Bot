@@ -247,19 +247,22 @@ class DatabaseMixin:
             except BulkWriteError as e:
                 self.log.exception("BWE while caching continents")
 
-        continents = await self.call_api("continents/1/floors?ids=all")
+        continents = await self.call_api("continents?ids=all")
         pois = []
         for continent in continents:
-            for region in continent["regions"].values():
-                for game_map in region["maps"].values():
-                    for poi in game_map["points_of_interest"].values():
-                        del poi["chat_link"]
-                        poi["continent_id"] = continent["id"]
-                        pois.append(poi)
-                        if len(pois) > 200:
-                            await bulk_write(pois)
-                            pois = []
-        print("Continents done")
+            floors = await self.call_api(
+                f"continents/{continent['id']}/floors?ids=all")
+            for floor in floors:
+                for region in floor["regions"].values():
+                    for game_map in region["maps"].values():
+                        for poi in game_map["points_of_interest"].values():
+                            del poi["chat_link"]
+                            poi["continent_id"] = continent["id"]
+                            pois.append(poi)
+                            if len(pois) > 200:
+                                await bulk_write(pois)
+                                pois = []
+            print("Continents done")
 
     async def get_raids(self):
         config = await self.bot.database.get_cog_config(self)
