@@ -838,18 +838,9 @@ class GuildSync:
     @tasks.loop(seconds=60)
     async def guildsync_consumer(self):
         while True:
-            try:
-                _, coro = await self.guildsync_queue.get()
-                await asyncio.wait_for(coro, timeout=300)
-            except Exception as e:
-                self.log.exception("Exception in guildsync consumer",
-                                   exc_info=e)
-            finally:
-                try:
-                    self.guildsync_queue.task_done()
-                except ValueError as e:
-                    self.log.exception("Error in guildsync consumer",
-                                       exc_info=e)
+            _, coro = await self.guildsync_queue.get()
+            await asyncio.wait_for(coro, timeout=300)
+            self.guildsync_queue.task_done()
             await asyncio.sleep(0.5)
 
     @guildsync_consumer.before_loop
