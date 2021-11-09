@@ -261,6 +261,7 @@ class EvtcMixin:
             "The channel to enable automatic EVTC processing on.",
             "type": SlashCommandOptionType.CHANNEL,
             "required": True,
+            "channel_types": [0]
         }])
     async def evtc_channel(self, ctx, channel: discord.TextChannel):
         """Sets this channel to be automatically used to process logs"""
