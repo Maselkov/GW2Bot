@@ -7,11 +7,11 @@ import re
 import struct
 
 import discord
-from discord_slash.model import SlashCommandOptionType
 import requests
 from discord.ext import commands
 from discord.ext.commands.cooldowns import BucketType
 from discord_slash import cog_ext
+from discord_slash.model import SlashCommandOptionType
 from PIL import Image, ImageDraw
 
 from .utils.chat import cleanup_xml_tags, embed_list_lines
@@ -830,7 +830,7 @@ class SkillsMixin:
                         embed.title = f"{embed.title} {suffix}"
                     if quantity > 1:
                         embed.title = f"{quantity} {embed.title}"
-                    return await message.channel.send(embed=embed)
+                    return await message.reply(embed=embed, mention_author=False)
                 case "NPC text string":
                     # Currently disabled
                     return
@@ -857,7 +857,7 @@ class SkillsMixin:
                     emoji = self.get_emoji(message, poi_type)
                     embed.add_field(name=emoji + poi_type,
                                     value=poi_doc.get("name", "Unnamed"))
-                    return await message.channel.send(embed=embed)
+                    return await message.reply(embed=embed, mention_author=False)
                 case "PvP Game":
                     # Can't do much here
                     return
@@ -870,7 +870,7 @@ class SkillsMixin:
                     new_embed = await self.skill_embed(skill_doc, message)
                     new_embed.set_footer(text=embed.footer.text,
                                         icon_url=embed.footer.icon_url)
-                    return await message.channel.send(embed=new_embed)
+                    return await message.reply(embed=new_embed, mention_author=False)
                 case "Trait":
                     data = struct.unpack("<I", data[1:])
                     trait_id = data[0]
@@ -880,7 +880,7 @@ class SkillsMixin:
                     new_embed = await self.skill_embed(trait_doc, message)
                     new_embed.set_footer(text=embed.footer.text,
 icon_url=embed.footer.icon_url)
-                    return await message.channel.send(embed=new_embed)
+                    return await message.reply(embed=new_embed, mention_author=False)
                 case "User":
                     # Can't do much
                     return
@@ -921,7 +921,7 @@ icon_url=embed.footer.icon_url)
                     value = "\n".join(value)
                     if value:
                         embed.add_field(name="Ingredients", value=value)
-                    return await message.channel.send(embed=embed)
+                    return await message.reply(embed=embed, mention_author=False)
 
                 case "Wardrobe":
                     data = struct.unpack("<I", data[1:])
@@ -931,7 +931,7 @@ icon_url=embed.footer.icon_url)
                         return
                     embed.set_thumbnail(url=skin_doc["icon"])
                     embed.title = skin_doc["name"]
-                    return await message.channel.send(embed=embed)
+                    return await message.reply(embed=embed, mention_author=False)
 
                 case "Outfit":
                     data = struct.unpack("<I", data[1:])
@@ -941,7 +941,7 @@ icon_url=embed.footer.icon_url)
                         return
                     embed.set_thumbnail(url=outfit_doc["icon"])
                     embed.title = outfit_doc["name"]
-                    return await message.channel.send(embed=embed)
+                    return await message.reply(embed=embed, mention_author=False)
 
                 case "WvW objective":
                     # TODO
@@ -952,7 +952,7 @@ icon_url=embed.footer.icon_url)
                     embed.color = build.profession.color
                     embed.set_thumbnail(url=build.profession.icon)
                     embed.set_image(url=f"attachment://{file.filename}")
-                    await message.channel.send(embed=embed, file=file)
+                    await message.reply(embed=embed, file=file, mention_author=False)
         except Exception as e:
             self.log.exception(exc_info=e)
             pass
