@@ -313,9 +313,18 @@ class EvtcMixin:
                 break
         else:
             return
+        autodelete = False
         if not message.guild:
             doc = await self.bot.database.get(message.channel, self)
             settings = doc.get("evtc", {})
             if not settings.get("enabled"):
                 return
+            autodelete = settings.get("autodelete", False)
         await self.process_evtc(message, None)
+        if autodelete:
+            try:
+                if message.channel.permissions_for(
+                        message.channel.me).manage_messages:
+                    await message.delete()
+            except discord.Forbidden:
+                pass
