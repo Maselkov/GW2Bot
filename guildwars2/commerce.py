@@ -102,7 +102,8 @@ class CommerceMixin:
     async def tp_price(self, ctx, item: str):
         """Check price of an item"""
         flags = ["AccountBound", "SoulbindOnAcquire"]
-        items = await self.itemname_to_id(ctx, item, ctx.author, flags=flags)
+        await ctx.defer()
+        items = await self.itemname_to_id(ctx, item, flags=flags)
         if not items:
             return
         if len(items) > 1:
@@ -128,6 +129,8 @@ class CommerceMixin:
                     break
                 except asyncio.TimeoutError:
                     await msg.edit(components=None)
+        else:
+            choice = items[0]
         try:
             commerce = 'commerce/prices/'
             choiceid = str(choice["_id"])
