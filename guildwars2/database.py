@@ -3,7 +3,6 @@ import collections
 import datetime
 import re
 import time
-from unicodedata import name
 
 import discord
 from discord.ext import commands
@@ -192,12 +191,18 @@ class DatabaseMixin:
             ep = "achievements/daily"
             if tomorrow:
                 ep += "/tomorrow"
-            results = await self.call_api(ep)
+            results = await self.call_api(
+                ep, schema_string="2021-07-15T13:00:00.000Z")
             doc = {}
             for category, dailies in results.items():
                 daily_list = []
                 for daily in dailies:
                     if not daily["level"]["max"] == 80:
+                        continue
+                    print(daily)
+                    required_access = daily.get("required_access", {})
+                    if required_access.get("condition", "") == "NoAccess":
+                        print("WEh")
                         continue
                     daily_doc = await self.db.achievements.find_one(
                         {"_id": daily["id"]})
@@ -281,8 +286,8 @@ class DatabaseMixin:
                 self.log.exception("BWE while caching {}".format(endpoint),
                                    exc_info=e)
 
-        schema = datetime.datetime(2019, 12, 19)
-        items = await self.call_api(endpoint, schema_version=schema)
+        items = await self.call_api(endpoint,
+                                    schema_string="2021-07-15T13:00:00.000Z")
         if not all_at_once:
             counter = 0
             total = len(items)
@@ -293,13 +298,15 @@ class DatabaseMixin:
                 if not ids:
                     print("{} done".format(endpoint))
                     break
-                itemgroup = await self.call_api(f"{endpoint}?ids={ids}",
-                                                schema_version=schema)
+                itemgroup = await self.call_api(
+                    f"{endpoint}?ids={ids}",
+                    schema_string="2021-07-15T13:00:00.000Z")
                 await bulk_write(itemgroup)
                 counter += 200
         else:
-            itemgroup = await self.call_api("{}?ids=all".format(endpoint),
-                                            schema_version=schema)
+            itemgroup = await self.call_api(
+                "{}?ids=all".format(endpoint),
+                schema_string="2021-07-15T13:00:00.000Z")
             await bulk_write(itemgroup)
 
     async def rebuild_database(self):
@@ -435,7 +442,7 @@ class DatabaseMixin:
                                   placeholder=ph)))
 
         if len(rows) > 1:
-            content = f"Due to Discord limitations, your selection had been split into several."
+            content = "Due to Discord limitations, your selection had been split into several."
         else:
             content = "** **"
         if component_context:
