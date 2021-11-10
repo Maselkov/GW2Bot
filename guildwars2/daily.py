@@ -202,7 +202,8 @@ class DailyMixin:
             if re.match("[0-9]{1,3}", fractal_level):
                 recommended_fractals.append(fractal_level)
             else:
-                line = self.get_emoji(ctx, "daily fractal") + fractal
+                line = self.get_emoji(ctx, "daily fractal") + re.sub(
+                    r"(?:Daily|Tier 4) ", "", fractal)
                 try:
                     scale = self.gamedata["fractals"][fractal[13:]][-1]
                     instabilities = self.get_instabilities(scale,
