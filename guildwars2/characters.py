@@ -53,8 +53,8 @@ class Character:
             return self.profession.title()
 
         def get_icon_url(prof_name):
-            base_url = ("https://api.gw2bot.info/"
-                        "resources/professions/{}_icon.png")
+            base_url = ("https://resources.gw2bot.info/"
+                        "professions/{}_icon.png")
             return base_url.format(prof_name.replace(" ", "_").lower())
 
         name = await get_elite_spec()
@@ -1343,8 +1343,8 @@ class CharactersMixin:
             return None
 
         def get_icon_url(prof_name):
-            base_url = ("https://api.gw2bot.info/"
-                        "resources/professions/{}_icon.png")
+            base_url = ("https://resources.gw2bot.info/"
+                        "professions/{}_icon.png")
             return base_url.format(prof_name.replace(" ", "_").lower())
 
         Profession = collections.namedtuple("Profession",
@@ -1356,5 +1356,5 @@ class CharactersMixin:
         return Profession(name.title(), icon, color)
 
     def get_profession_icon(self, prof_name):
-        url = ("https://api.gw2bot.info/" "resources/professions/{}_icon.png")
+        url = ("https://resources.gw2bot.info/professions/{}_icon.png")
         return url.format(prof_name.replace(" ", "_").lower())
