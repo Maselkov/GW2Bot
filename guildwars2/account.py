@@ -90,7 +90,8 @@ class AccountMixin:
                 return " ".join(re.findall(r'[A-Z\d][^A-Z\d]*', name))
 
             access = "\n".join([format_name(e) for e in access])
-            data.add_field(name="Expansion access", value=access)
+            if access:
+                data.add_field(name="Expansion access", value=access)
         data.set_author(name=accountname, icon_url=user.avatar_url)
         data.set_footer(text=self.bot.user.name,
                         icon_url=self.bot.user.avatar_url)
@@ -169,8 +170,7 @@ class AccountMixin:
         embed.description = "{} on hand, {} used in crafting".format(
             total - crafted_total, crafted_total)
         embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
-        embed.set_thumbnail(
-            url="https://api.gw2bot.info/resources/icons/lild.png")
+        embed.set_thumbnail(url="https://resources.gw2bot.info/icons/lild.png")
         embed.set_footer(text=self.bot.user.name,
                          icon_url=self.bot.user.avatar_url)
         await ctx.send(embed=embed)
