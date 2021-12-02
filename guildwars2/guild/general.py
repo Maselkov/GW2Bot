@@ -273,6 +273,7 @@ class GeneralGuild:
         member_list = [
             "invited", "joined", "invite_declined", "rank_change", "kick"
         ]
+        await ctx.defer()
         try:
             guild = await self.get_guild(ctx, guild_name=guild_name)
             if not guild and not guild_name:
