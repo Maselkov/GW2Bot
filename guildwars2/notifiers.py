@@ -726,6 +726,7 @@ class NotiifiersMixin:
                 return
             except Exception:
                 pass
+            await asyncio.sleep(0.1)
 
     @boss_notifier.before_loop
     async def before_boss_notifier(self):
