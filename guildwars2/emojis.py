@@ -2,6 +2,7 @@ import re
 
 import discord
 from discord.ext import commands
+from discord_slash.context import InteractionContext
 
 
 class EmojiMixin:
@@ -15,7 +16,27 @@ class EmojiMixin:
                   *,
                   fallback=False,
                   fallback_fmt="{}",
-                  return_obj=False):
+                  return_obj=False,
+                  force_emoji=False):
+        def get_emoji():
+            search_str = emoji.lower().replace(" ", "_")
+            # Remove illegal emoji characters
+            search_str = re.sub('[\.,\,,\',\:,\;,!\?]', '', search_str)
+            emoji_id = self.emojis.get(search_str)
+            if emoji_id:
+                emoji_obj = self.bot.get_emoji(emoji_id)
+                if emoji_obj:
+                    if return_obj:
+                        return emoji_obj
+                    return str(emoji_obj)
+
+        if force_emoji:
+            em = get_emoji()
+            if em:
+                return em
+            elif fallback:
+                return fallback_fmt.format(emoji)
+            return
         if isinstance(ctx, (discord.Message, discord.TextChannel)):
             if ctx.guild:
                 me = ctx.guild.me
@@ -26,27 +47,21 @@ class EmojiMixin:
         else:
             me = None
         if ctx:
-            if isinstance(ctx, discord.TextChannel):
-                channel = ctx
-            elif ctx.channel:
-                channel = ctx.channel
+            if isinstance(ctx, InteractionContext):
+                can_use = ctx.channel.permissions_for(me).add_reactions
             else:
-                channel = None
-            if channel:
-                can_use = channel.permissions_for(me).external_emojis
-            else:
-                can_use = True
+                if isinstance(ctx, discord.TextChannel):
+                    channel = ctx
+                elif ctx.channel:
+                    channel = ctx.channel
+                else:
+                    channel = None
+                if channel:
+                    can_use = channel.permissions_for(me).external_emojis
+                else:
+                    can_use = True
             if can_use:
-                search_str = emoji.lower().replace(" ", "_")
-                # Remove illegal emoji characters
-                search_str = re.sub('[\.,\,,\',\:,\;,!\?]', '', search_str)
-                emoji_id = self.emojis.get(search_str)
-                if emoji_id:
-                    emoji_obj = self.bot.get_emoji(emoji_id)
-                    if emoji_obj:
-                        if return_obj:
-                            return emoji_obj
-                        return str(emoji_obj)
+                return get_emoji()
         if fallback:
             return fallback_fmt.format(emoji)
         return ""

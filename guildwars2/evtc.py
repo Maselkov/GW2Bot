@@ -1,10 +1,19 @@
+import asyncio
 import datetime
+import secrets
+from typing import Union
 
 import aiohttp
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord_slash import MenuContext, cog_ext
-from discord_slash.model import ContextMenuType, SlashCommandOptionType
+from discord_slash.model import (ButtonStyle, ContextMenuType,
+                                 SlashCommandOptionType)
+from discord_slash.utils.manage_components import (create_actionrow,
+                                                   create_button,
+                                                   create_select,
+                                                   create_select_option,
+                                                   wait_for_component)
 
 from .exceptions import APIError
 from .utils.chat import (embed_list_lines, en_space, magic_space,
@@ -68,13 +77,14 @@ class EvtcMixin:
         })
         return True if doc else False
 
-    async def upload_embed(self, ctx, result):
-        if not result["encounter"]["jsonAvailable"]:
-            return None
+    async def get_encounter_data(self, encounter_id):
         async with self.session.get(JSON_URL, params={"id":
-                                                      result["id"]}) as r:
-            data = await r.json()
+                                                      encounter_id}) as r:
+            return await r.json()
+
+    async def upload_embed(self, ctx, data, permalink):
         lines = []
+        force_emoji = False if ctx else True
         targets = data["phases"][0]["targets"]
         group_dps = 0
         for target in targets:
@@ -109,16 +119,23 @@ class EvtcMixin:
         players.sort(key=lambda p: p["dps"], reverse=True)
         for player in players:
             down_count = player["defenses"][0]["downCount"]
-            prof = self.get_emoji(ctx, player["profession"])
+            prof = self.get_emoji(ctx,
+                                  player["profession"],
+                                  force_emoji=force_emoji)
             line = f"{prof} **{player['name']}** *({player['account']})*"
             if down_count:
-                line += (f" | {self.get_emoji(ctx, 'downed')}Downed "
-                         f"count: **{down_count}**")
+                line += (
+                    f" | {self.get_emoji(ctx, 'downed', force_emoji=force_emoji)}Downed "
+                    f"count: **{down_count}**")
             lines.append(line)
         dpses = []
         charater_name_max_length = 19
         for player in players:
-            line = self.get_emoji(ctx, player["profession"])
+            line = self.get_emoji(ctx,
+                                  player["profession"],
+                                  force_emoji=force_emoji,
+                                  fallback=True,
+                                  fallback_fmt="")
             align = (charater_name_max_length - len(player["name"])) * " "
             line += "`" + player["name"] + align + get_dps(player)
             dpses.append(line)
@@ -132,7 +149,7 @@ class EvtcMixin:
         duration = f"**{minutes}** minutes, **{seconds}** seconds"
         embed = discord.Embed(title="DPS Report",
                               description="Encounter duration: " + duration,
-                              url=result["permalink"],
+                              url=permalink,
                               color=color)
         boss_lines = []
         for target in targets:
@@ -163,7 +180,7 @@ class EvtcMixin:
         separator = 2 * en_space
         line = zero_width_space + (en_space * (charater_name_max_length + 6))
         icon_line = line
-        blank = self.get_emoji(ctx, "blank")
+        blank = self.get_emoji(ctx, "blank", force_emoji=force_emoji)
         first = True
         for buff in sought_buffs:
             if first and not blank:
@@ -176,7 +193,8 @@ class EvtcMixin:
             icon_line += self.get_emoji(ctx,
                                         buff,
                                         fallback=True,
-                                        fallback_fmt="{:1.1}")
+                                        fallback_fmt="{:1.1}",
+                                        force_emoji=force_emoji)
             first = False
         groups = []
         for player in players:
@@ -193,7 +211,11 @@ class EvtcMixin:
                     current_group = player["group"]
                     buff_lines.append(f"> **GROUP {current_group}**")
             line = "`"
-            line = self.get_emoji(ctx, player["profession"])
+            line = self.get_emoji(ctx,
+                                  player["profession"],
+                                  force_emoji=force_emoji,
+                                  fallback=True,
+                                  fallback_fmt="")
             align = (3 + charater_name_max_length - len(player["name"])) * " "
             line += "`" + player["name"] + align
             for buff in buffs:
@@ -229,7 +251,7 @@ class EvtcMixin:
             "date": date,
             "players":
             sorted([player["account"] for player in data["players"]]),
-            "permalink": result["permalink"],
+            "permalink": permalink,
             "success": data["success"],
             "duration": duration_time
         }
@@ -313,6 +335,235 @@ class EvtcMixin:
             msg = ("Automatic EVTC processing diasbled")
         await ctx.send(msg)
 
+    def generate_evtc_api_key(self) -> None:
+        return secrets.token_urlsafe(64)
+
+    async def get_user_evtc_api_key(self,
+                                    user: discord.User) -> Union[str, None]:
+        doc = await self.db.evtc.api_keys.find_one({"user": user.id}) or {}
+        return doc.get("token", None)
+
+    @cog_ext.cog_subcommand(base="evtc",
+                            name="api_key",
+                            base_description="EVTC related commands",
+                            options=[{
+                                "name":
+                                "operation",
+                                "description":
+                                "The operaiton to perform.",
+                                "type":
+                                SlashCommandOptionType.STRING,
+                                "required":
+                                True,
+                                "choices": [{
+                                    "value": "view",
+                                    "name": "View your API key."
+                                }, {
+                                    "value":
+                                    "generate",
+                                    "name":
+                                    "Generate or regenerate your API key."
+                                }, {
+                                    "value": "delete",
+                                    "name": "Delete your API key."
+                                }]
+                            }])
+    async def evtc_api_key(self, ctx, operation):
+        """Generate an API key for third-party apps that automatically upload EVTC logs"""
+        await ctx.defer(hidden=True)
+        existing_key = await self.get_user_evtc_api_key(ctx.author)
+        if operation == "delete":
+            if not existing_key:
+                return await ctx.send(
+                    "You don't have an EVTC API key generated.")
+            await self.db.evtc.api_keys.delete_one({"_id": ctx.author.id})
+            return await ctx.send("Your EVTC API key has been deleted.")
+        if operation == "view":
+            if not existing_key:
+                return await ctx.send(
+                    "You don't have an EVTC API key generated. Use "
+                    "`/evtc api_key generate` to generate one.")
+            return await ctx.send(f"Your EVTC API key is ```{existing_key}```")
+        if operation == "generate":
+            key = self.generate_evtc_api_key()
+            await self.db.evtc.api_keys.insert_one({
+                "user": ctx.author.id,
+                "token": key
+            })
+            new = "new " if existing_key else ""
+            return await ctx.send(
+                f"Your {new}new EVTC API key is:\n```{key}```You may use "
+                "it with utilities that automatically upload logs to link "
+                "them with your account, and potentially post them to "
+                "certain channels. See `/evtc autopost` for more\n\nYou may "
+                "revoke the key at any time with `/evtc api_key delete`, or "
+                "regenerate it with `/evtc api_key generate`. Don't share "
+                "this key with anyone.\nYou can also use this "
+                "key without setting any upload destinations. Doing so will "
+                "still append the report links to `/bosses` results")
+
+    async def get_evtc_notification_channel(self, id, user):
+        await self.db.evtc.channels.find_one({
+            "channel_id": id,
+            "user": user.id
+        })
+
+    @cog_ext.cog_subcommand(
+        base="evtc",
+        subcommand_group="autopost",
+        sub_group_desc="Automatically post processed EVTC logs uploaded by "
+        "third party utilities",
+        name="add_destination",
+        base_description="EVTC related commands",
+    )
+    async def evtc_autoupload_add(self, ctx):
+        """Add this channel as a destination to autopost EVTC logs too"""
+        await ctx.defer(hidden=True)
+        key = await self.get_user_evtc_api_key(ctx.author)
+        if not key:
+            return await ctx.send(
+                "You don't have an EVTC API key generated. Use "
+                "`/evtc api_key generate` to generate one. Confused about "
+                "what this is? The aforementioned command includes a tutorial")
+        doc = await self.db.evtc.destinations.find_one(
+            {
+                "user_id": ctx.author.id,
+                "channel_id": ctx.channel.id
+            }) or {}
+        channel_doc = await self.bot.database.get(ctx.channel, self)
+        if channel_doc.get("evtc.disabled", False):
+            return await ctx.send(
+                "This channel is disabled for EVTC processing.")
+        if ctx.guild:
+            channel = ctx.channel
+            members = [channel.guild.me, ctx.author]
+            for member in members:
+                if not channel.permissions_for(member).embed_links:
+                    return await ctx.send(
+                        "Make sure that both the bot and you have "
+                        "Embed Links permission in this channel.")
+                if not channel.permissions_for(member).send_messages:
+                    return await ctx.send(
+                        "Make sure that both the bot and you have "
+                        "Send Messages permission in this channel.")
+                if not channel.permissions_for(member).use_external_emojis:
+                    return await ctx.send(
+                        "Make sure that both the bot and you have "
+                        "Use External Emojis permission in this channel.")
+        if doc:
+            return await ctx.send(
+                "This channel is already a destination. If you're "
+                "looking to remove it, see "
+                "`/evtc autopost remove_destinations`")
+        try:
+            results = await self.call_api("account", ctx.author, ["account"])
+            # TODO test guilds
+        except APIError as e:
+            return await self.error_handler(ctx, e)
+        guild_ids = results.get("guilds")
+        if guild_ids:
+            endpoints = [f"guild/{gid}" for gid in guild_ids]
+            try:
+                guilds = await self.call_multiple(endpoints)
+            except APIError as e:
+                return await self.error_handler(ctx, e)
+        options = []
+        for guild in guilds:
+            name = f"{guild['name']} [{guild['tag']}]"
+            options.append(create_select_option(name, value=guild["id"]))
+        select = create_select(min_values=1,
+                               max_values=len(options),
+                               options=options,
+                               placeholder="Select guilds.")
+        button = create_button(style=ButtonStyle.blue,
+                               emoji="➡️",
+                               label="Next",
+                               custom_id="next")
+        components = [create_actionrow(button), create_actionrow(select)]
+        msg = await ctx.send(
+            "If you wish to use this channel to post only "
+            "the logs made while representing a specific guild, select "
+            "them from the list below. Otherwise, click `Next`.",
+            components=components,
+            hidden=True)
+        try:
+            answer = await wait_for_component(self.bot,
+                                              components=components,
+                                              timeout=120)
+
+            selected_guilds = answer.selected_options or []
+        except asyncio.TimeoutError:
+            return await msg.edit(content="Timed out.", components=None)
+        await self.db.evtc.destinations.insert_one({
+            "user_id":
+            ctx.author.id,
+            "channel_id":
+            ctx.channel.id,
+            "guild_ids":
+            selected_guilds,
+            "guild_tags": [
+                guild["tag"] for guild in guilds
+                if guild["id"] in selected_guilds
+            ]
+        })
+        await answer.edit_origin(
+            content="This channel is now a destination for EVTC logs. "
+            "Logs uploaded using third-party utilities with your GW2Bot "
+            "EVTC API key will be posted here. You can have multiple "
+            "destinations at the same time. DMs also work.\nYou can always "
+            "remove it using `/evtc autopost remove_destinations`",
+            components=None)
+
+    @cog_ext.cog_subcommand(
+        base="evtc",
+        subcommand_group="autopost",
+        sub_group_desc="Automatically post processed EVTC logs uploaded by "
+        "third party utilities",
+        name="remove_destinations",
+        base_description="EVTC related commands",
+    )
+    async def evtc_autoupload_remove(self, ctx):
+        """Remove EVTC autoupload destinations from a list"""
+        await ctx.defer(hidden=True)
+        destinations = await self.db.evtc.destinations.find({
+            "user_id":
+            ctx.author.id
+        }).to_list(None)
+        channels = [
+            self.bot.get_channel(dest["channel_id"]) for dest in destinations
+        ]
+        if not channels:
+            return await ctx.send(
+                "You don't have any autopost destinations yet.")
+        options = []
+        for i, channel in enumerate(channels):
+            # if dm channel
+            if isinstance(channel, discord.DMChannel):
+                name = "DM"
+            else:
+                if not channel:
+                    name = "Inaccessible Channel"
+                name = f"{channel.guild.name} - {channel.name}"
+            options.append(create_select_option(name, value=str(i)))
+        select = create_select(
+            min_values=1,
+            max_values=len(options),
+            options=options,
+            placeholder="Select the destinations that you want removed")
+        components = [create_actionrow(select)]
+        msg = await ctx.send("** **", components=components)
+        try:
+            answer = await wait_for_component(self.bot,
+                                              components=components,
+                                              timeout=120)
+            choices = [destinations[int(i)] for i in answer.selected_options]
+        except asyncio.TimeoutError:
+            return await msg.edit(content="Timed out.", components=None)
+        for choice in choices:
+            await self.db.evtc.destinations.delete_one({"_id": choice["_id"]})
+        await answer.edit_origin(content="Removed selected destinations.",
+                                 components=None)
+
     async def process_evtc(self, message, ctx):
         embeds = []
         destination = ctx or message.channel
@@ -320,7 +571,10 @@ class EvtcMixin:
             if attachment.filename.endswith(ALLOWED_FORMATS):
                 try:
                     resp = await self.upload_log(attachment, message.author)
-                    embeds.append(await self.upload_embed(message, resp))
+                    data = await self.get_encounter_data(resp["id"])
+                    embeds.append(await
+                                  self.upload_embed(message, data,
+                                                    resp["permalink"]))
                 except Exception as e:
                     self.log.exception("Exception processing EVTC log ",
                                        exc_info=e)
@@ -328,6 +582,91 @@ class EvtcMixin:
                         content="Error processing your log! :x:", hidden=True)
         for embed in embeds:
             await destination.send(embed=embed)
+
+    @tasks.loop(seconds=5)
+    async def post_evtc_notifications(self):
+        cursor = self.db.evtc.notifications.find({"posted": False})
+        async for doc in cursor:
+            try:
+                user = self.bot.get_user(doc["user_id"])
+                destinations = await self.db.evtc.destinations.find({
+                    "user_id":
+                    user.id
+                }).to_list(None)
+                for destination in destinations:
+                    destination["channel"] = self.bot.get_channel(
+                        destination["channel_id"])
+                data = await self.get_encounter_data(doc["encounter_id"])
+                recorded_by = data.get("recordedBy", None)
+                recorded_player_guild = None
+                for player in data["players"]:
+                    if player["name"] == recorded_by:
+                        recorded_player_guild = player.get("guildID")
+                        break
+                embed = await self.upload_embed(None, data, doc["permalink"])
+                embed.set_footer(
+                    text="Autoposted by "
+                    f"{user.name}#{user.discriminator}({user.id})."
+                    " The bot respects the user's permissions; remove their "
+                    "permission to send messages or embed "
+                    "links to stop these messsages.")
+                for destination in destinations:
+                    try:
+                        channel = destination["channel"]
+                        if destination[
+                                "guild_ids"] and recorded_by and recorded_player_guild:
+                            if destination["guild_ids"]:
+                                if recorded_player_guild not in destination[
+                                        "guild_ids"]:
+                                    continue
+                        if not channel:
+                            continue
+                        has_permission = False
+                        if guild := channel.guild:
+                            members = [
+                                channel.guild.me,
+                                guild.get_member(user.id)
+                            ]
+                            for member in members:
+                                if not channel.permissions_for(
+                                        member).embed_links:
+                                    break
+                                if not channel.permissions_for(
+                                        member).send_messages:
+                                    break
+                                if not channel.permissions_for(
+                                        member).use_external_emojis:
+                                    break
+                            else:
+                                has_permission = True
+                        else:
+                            has_permission = True
+                    except asyncio.TimeoutError:
+                        raise
+                    except Exception as e:
+                        self.log.exception(
+                            "Exception during evtc notificaitons", exc_info=e)
+                        continue
+                    if has_permission:
+                        try:
+                            await channel.send(embed=embed)
+                        except discord.HTTPException as e:
+                            self.log.exception(e)
+                            continue
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                self.log.exception("Exception during evtc notificaitons",
+                                   exc_info=e)
+            finally:
+                await self.db.evtc.notifications.update_one(
+                    {"_id": doc["_id"]}, {"$set": {
+                        "posted": True
+                    }})
+
+    @post_evtc_notifications.before_loop
+    async def before_post_evtc_notifications(self):
+        await self.bot.wait_until_ready()
 
     @commands.Cog.listener()
     async def on_message(self, message):
