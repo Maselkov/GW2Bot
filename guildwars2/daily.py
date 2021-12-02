@@ -166,6 +166,7 @@ class DailyMixin:
         else:
             embed.set_footer(text=self.bot.user.name,
                              icon_url=self.bot.user.avatar_url)
+        embed.timestamp = datetime.datetime.utcnow()
         return embed
 
     def get_lw_dailies(self, tomorrow=False):
