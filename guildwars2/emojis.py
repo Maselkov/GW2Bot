@@ -61,7 +61,12 @@ class EmojiMixin:
                 else:
                     can_use = True
             if can_use:
-                return get_emoji()
+                em = get_emoji()
+                if em:
+                    return em
+                elif fallback:
+                    return fallback_fmt.format(emoji)
+                return ""
         if fallback:
             return fallback_fmt.format(emoji)
         return ""
