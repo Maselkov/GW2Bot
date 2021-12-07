@@ -323,6 +323,131 @@ class NotiifiersMixin:
         await ctx.send(
             f"I will now send boss notifications to {channel.mention}.")
 
+    @cog_ext.cog_subcommand(
+        base="notifier",
+        name="mystic_forger",
+        base_description="Notifier Commands",
+        options=[{
+            "name":
+            "reminder_frequency",
+            "description":
+            "Select when you want to be notified.",
+            "type":
+            SlashCommandOptionType.STRING,
+            "choices": [{
+                "value":
+                "on_reset",
+                "name":
+                "Get a message about Mystic Forger when "
+                "it becomes active."
+            }, {
+                "value":
+                "24_hours_before",
+                "name":
+                "Get a message about Mystic Forger when it "
+                "becomes active AND 24 hours before that."
+            }, {
+                "value": "disable",
+                "name": "Disable the Mystic Forger reminder."
+            }],
+            "required":
+            True
+        }])
+    async def mystic_forger_notifier(self, ctx, reminder_frequency):
+        """Get a personal reminder whenever Daily Mystic Forget becomes active. Get those Mystic Coins!"""
+        await ctx.defer(hidden=True)
+        doc = await self.bot.database.get(ctx.author, self)
+        doc = doc.get("mystic_forger", {})
+        if reminder_frequency == "disable":
+            if doc.get("enabled", False):
+                await self.bot.database.set(ctx.author,
+                                            {"mystic_forger.enabled": False},
+                                            self)
+                return await ctx.send("Mystic Forger reminder disabled.",
+                                      hidden=True)
+            else:
+                return await ctx.send(
+                    "Mystic Forger reminder is already disabled.", hidden=True)
+        await self.bot.database.set(
+            ctx.author, {
+                "mystic_forger.enabled": True,
+                "mystic_forger.reminder_frequency": reminder_frequency
+            }, self)
+        return await ctx.send(
+            "Mystic Forger reminder enabled. Make sure "
+            "you're not blocking DMs, else you will not get it.",
+            hidden=True)
+
+    async def send_mystic_forger_notifiations(self, tomorrow=False):
+        async def send_notification(user, embed):
+            if not user:
+                return
+            try:
+                await user.send(embed=embed)
+            except discord.HTTPException:
+                pass
+
+        embed = discord.Embed(title="Daily Mystic Forger",
+                              color=self.embed_color)
+        tomorrow_reset_time = int(
+            (datetime.datetime.utcnow() + datetime.timedelta(days=1)).replace(
+                hour=0, minute=0, second=0, microsecond=0).timestamp())
+        embed.set_thumbnail(
+            url="https://wiki.guildwars2.com/images/b/b5/Mystic_Coin.png")
+        search = {"enabled": True}
+        if tomorrow:
+            search["reminder_frequency"] = "24_hours_before"
+            embed.description = ("Daily Mystic Forger will become "
+                                 f"active in <t:{tomorrow_reset_time}:R>!")
+        else:
+            search["reminder_frequency"] = "on_reset"
+            embed.description = "Daily Mystic Forger is a part of today's "
+            "dailies!"
+        embed.timestamp = datetime.datetime.utcnow()
+        embed.set_footer(text="You can disable "
+                         "these notifications with /notifier mystic_forger",
+                         icon_url=self.bot.user.avatar_url)
+        cursor = self.bot.database.iter("users", {"mystic_forger": search},
+                                        self)
+        async for doc in cursor:
+            try:
+                user = doc["_obj"]
+                asyncio.create_task(send_notification(user, embed))
+                await asyncio.sleep(0.1)
+            except asyncio.CancelledError:
+                return
+        pass
+
+    @tasks.loop(seconds=30)
+    async def daily_mystic_forger_checker_task(self):
+        achievement_name = "Daily Mystic Forger"
+        doc = await self.bot.database.get_cog_config(self)
+        notified = doc["cache"].get("mystic_forger", {})
+        sent_24 = notified.get("sent_24_before", False)
+        sent_reset = notified.get("sent_reset", False)
+        dailies = doc["cache"]["dailies"]
+        dailies_tomorrow = doc["cache"]["dailies_tomorrow"]
+        mf_today = achievement_name in dailies
+        mf_tomorrow = achievement_name in dailies_tomorrow
+        if sent_reset and not mf_today:
+            await self.bot.database.set_cog_config(
+                self, {"cache.mystic_forger.sent_reset": False})
+        if mf_today and not sent_reset:
+            await self.bot.database.set_cog_config(
+                self, {"cache.mystic_forger.sent_reset": True})
+            await self.send_mystic_forger_notifiations(False)
+        if not mf_tomorrow and sent_24:
+            await self.bot.database.set_cog_config(
+                self, {"cache.mystic_forger.sent_24_before": False})
+        if mf_tomorrow and not sent_24:
+            await self.bot.database.set_cog_config(
+                self, {"cache.mystic_forger.sent_24_before": True})
+            await self.send_mystic_forger_notifiations(True)
+
+    @daily_mystic_forger_checker_task.before_loop
+    async def before_mystic_forger_task(self):
+        await self.bot.wait_until_ready()
+
     async def update_notification(self, new_build):
         def get_short_patchnotes(body, url):
             if len(body) < 1000:

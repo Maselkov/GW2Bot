@@ -71,7 +71,7 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
             self.guild_synchronizer, self.boss_notifier,
             self.forced_account_names, self.event_reminder_task,
             self.worldsync_task, self.guildsync_consumer,
-            self.post_evtc_notifications
+            self.post_evtc_notifications, self.daily_mystic_forger_checker_task
         ]
         for task in self.tasks:
             task.start()
