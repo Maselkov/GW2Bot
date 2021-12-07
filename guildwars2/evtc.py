@@ -419,23 +419,22 @@ class EvtcMixin:
     async def evtc_autoupload_add(self, ctx):
         """Add this channel as a destination to autopost EVTC logs too"""
         await ctx.defer(hidden=True)
+        channel = self.bot.get_channel(ctx.channel_id)
         key = await self.get_user_evtc_api_key(ctx.author)
         if not key:
             return await ctx.send(
                 "You don't have an EVTC API key generated. Use "
                 "`/evtc api_key generate` to generate one. Confused about "
                 "what this is? The aforementioned command includes a tutorial")
-        doc = await self.db.evtc.destinations.find_one(
-            {
-                "user_id": ctx.author.id,
-                "channel_id": ctx.channel.id
-            }) or {}
-        channel_doc = await self.bot.database.get(ctx.channel, self)
-        if channel_doc.get("evtc.disabled", False):
-            return await ctx.send(
-                "This channel is disabled for EVTC processing.")
+        doc = await self.db.evtc.destinations.find_one({
+            "user_id": ctx.author.id,
+            "channel_id": channel.id
+        }) or {}
         if ctx.guild:
-            channel = ctx.channel
+            channel_doc = await self.bot.database.get(ctx.channel, self)
+            if channel_doc.get("evtc.disabled", False):
+                return await ctx.send(
+                    "This channel is disabled for EVTC processing.")
             members = [channel.guild.me, ctx.author]
             for member in members:
                 if not channel.permissions_for(member).embed_links:
@@ -490,7 +489,7 @@ class EvtcMixin:
             answer = await wait_for_component(self.bot,
                                               components=components,
                                               timeout=120)
-
+            await answer.defer()
             selected_guilds = answer.selected_options or []
         except asyncio.TimeoutError:
             return await msg.edit(content="Timed out.", components=None)
@@ -498,7 +497,7 @@ class EvtcMixin:
             "user_id":
             ctx.author.id,
             "channel_id":
-            ctx.channel.id,
+            channel.id,
             "guild_ids":
             selected_guilds,
             "guild_tags": [
