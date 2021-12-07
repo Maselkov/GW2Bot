@@ -199,10 +199,8 @@ class DatabaseMixin:
                 for daily in dailies:
                     if not daily["level"]["max"] == 80:
                         continue
-                    print(daily)
                     required_access = daily.get("required_access", {})
                     if required_access.get("condition", "") == "NoAccess":
-                        print("WEh")
                         continue
                     daily_doc = await self.db.achievements.find_one(
                         {"_id": daily["id"]})
