@@ -122,9 +122,12 @@ class WalletMixin:
                     return await answer.edit_origin(embed=embed,
                                                     components=None)
                 return await ctx.send(embed=embed)
-        ids_cur = [1, 4, 2, 3, 18, 23, 15, 16, 50, 47, 26, 33]
+        ids_cur = [1, 4, 2, 3, 18, 23, 16, 50, 47]
         ids_keys = [43, 40, 41, 37, 42, 38, 44, 49, 51]
         ids_maps = [32, 45, 25, 27, 19, 22, 20, 29, 34, 35]
+        ids_wvw_cur = [15, 26, 31, 36, 65]
+        ids_pvp_cur = [33]
+        ids_pvp = [70820]
         ids_maps_items = [46682]
         ids_token = [5, 9, 11, 10, 13, 12, 14, 6, 7, 24, 59]
         ids_raid = [28, 39]
@@ -132,12 +135,13 @@ class WalletMixin:
         ids_l4 = [86069, 86977, 87645, 88955, 89537, 90783]
         ids_ibs = [92072, 92272]
         ids_ibs_cur = [58, 60]
-        ids_strikes_cur = [52, 56, 53, 55, 57, 54]
+        ids_eod_cur = [61, 62, 64, 67, 68]
+        ids_strikes_cur = [53, 55, 57, 54]
         ids_wallet = [
-            ids_cur, ids_keys, ids_maps, ids_token, ids_raid, ids_ibs_cur,
-            ids_strikes_cur
+            ids_cur, ids_keys, ids_maps, ids_token, ids_raid, ids_ibs_cur, 
+            ids_strikes_cur, ids_eod_cur, ids_wvw_cur, ids_pvp_cur
         ]
-        ids_items = [ids_l3, ids_l4, ids_ibs, ids_maps_items]
+        ids_items = [ids_l3, ids_l4, ids_ibs, ids_maps_items, ids_pvp]
         try:
             currencies_wallet = await self.get_wallet(ctx, ids_wallet)
             currencies_items = await self.get_item_currency(ctx, ids_items)
@@ -181,8 +185,17 @@ class WalletMixin:
                                  f"> **{saga_title}**",
                                  inline=True)
         embed = embed_list_lines(embed,
+                                 currencies_wallet[7],
+                                 "> **END OF DRAGONS**",
+                                 inline=True)
+        embed = embed_list_lines(embed,
                                  currencies_wallet[6],
                                  "> **STRIKE MISSIONS**",
+                                 inline=True)
+        embed = embed_list_lines(embed,
+                                 currencies_wallet[8] + currencies_items[4] + 
+                                 currencies_wallet[9],
+                                 "> **COMPETITION**",
                                  inline=True)
         embed = embed_list_lines(embed,
                                  currencies_wallet[4],
