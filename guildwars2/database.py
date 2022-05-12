@@ -18,6 +18,7 @@ from .exceptions import APIError, APIKeyError
 
 
 class DatabaseMixin:
+
     @commands.group(case_insensitive=True)
     @commands.is_owner()
     async def database(self, ctx):
@@ -199,7 +200,7 @@ class DatabaseMixin:
                 for daily in dailies:
                     if not daily["level"]["max"] == 80:
                         continue
-                    required_access = daily.get("required_access", {})
+                    required_access = daily.get("required_access", [])
                     if required_access.get("condition", "") == "NoAccess":
                         continue
                     daily_doc = await self.db.achievements.find_one(
@@ -239,6 +240,7 @@ class DatabaseMixin:
         await self.bot.database.set_cog_config(self, {"cache.raids": raids})
 
     async def cache_pois(self):
+
         async def bulk_write(group):
             requests = []
             for item in group:
@@ -272,6 +274,7 @@ class DatabaseMixin:
         return config["cache"].get("raids")
 
     async def cache_endpoint(self, endpoint, all_at_once=False):
+
         async def bulk_write(item_group):
             requests = []
             for item in itemgroup:
@@ -359,6 +362,7 @@ class DatabaseMixin:
                              hidden=False,
                              placeholder="Select the item you want..."
                              ):  # TODO cleanup this monstrosity
+
         def consolidate_duplicates(items):
             unique_items = collections.OrderedDict()
             for item in items:
