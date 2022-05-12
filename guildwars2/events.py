@@ -29,7 +29,7 @@ class EventsMixin:
                     "name": "HoT - Heart of Thorns"
                 },
                 {
-                    "value": "hot",
+                    "value": "pof",
                     "name": "PoF - Path of Fire"
                 },
                 {
