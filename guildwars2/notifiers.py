@@ -18,6 +18,7 @@ from .exceptions import APIError
 
 
 class NotiifiersMixin:
+
     @cog_ext.cog_subcommand(
         base="notifier",
         name="daily",
@@ -379,6 +380,7 @@ class NotiifiersMixin:
             hidden=True)
 
     async def send_mystic_forger_notifiations(self, tomorrow=False):
+
         async def send_notification(user, embed):
             if not user:
                 return
@@ -401,8 +403,8 @@ class NotiifiersMixin:
                                  f"active in <t:{tomorrow_reset_time}:R>!")
         else:
             search["reminder_frequency"] = "on_reset"
-            embed.description = "Daily Mystic Forger is a part of today's "
-            "dailies!"
+            embed.description = ("Daily Mystic Forger is "
+                                 "a part of today's dailies!")
         embed.timestamp = datetime.datetime.utcnow()
         embed.set_footer(text="You can disable "
                          "these notifications with /notifier mystic_forger",
@@ -413,7 +415,7 @@ class NotiifiersMixin:
             try:
                 user = doc["_obj"]
                 asyncio.create_task(send_notification(user, embed))
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.2)
             except asyncio.CancelledError:
                 return
         pass
@@ -425,8 +427,8 @@ class NotiifiersMixin:
         notified = doc["cache"].get("mystic_forger", {})
         sent_24 = notified.get("sent_24_before", False)
         sent_reset = notified.get("sent_reset", False)
-        dailies = doc["cache"]["dailies"]
-        dailies_tomorrow = doc["cache"]["dailies_tomorrow"]
+        dailies = doc["cache"]["dailies"]["pve"]
+        dailies_tomorrow = doc["cache"]["dailies_tomorrow"]["pve"]
         mf_today = achievement_name in dailies
         mf_tomorrow = achievement_name in dailies_tomorrow
         if sent_reset and not mf_today:
@@ -449,6 +451,7 @@ class NotiifiersMixin:
         await self.bot.wait_until_ready()
 
     async def update_notification(self, new_build):
+
         def get_short_patchnotes(body, url):
             if len(body) < 1000:
                 return body
