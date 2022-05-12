@@ -562,7 +562,7 @@ class GuildSync:
             try:
                 await self.call_api(base_ep + "/members", ctx.author,
                                     ["guilds"])
-                key_doc = await self.fetch_key(user_to_prompt, ["guilds"])
+                key_doc = await self.fetch_key(ctx.author, ["guilds"])
                 key = key_doc["key"]
             except (APIForbidden, APIKeyError):
                 return await ctx.send("You are not the guild leader.",
