@@ -87,6 +87,7 @@ class EvtcMixin:
         force_emoji = False if ctx else True
         targets = data["phases"][0]["targets"]
         group_dps = 0
+        wvw = data["triggerID"] == 1
         for target in targets:
             group_dps += sum(p["dpsTargets"][target][0]["dps"]
                              for p in data["players"])
@@ -233,7 +234,10 @@ class EvtcMixin:
                 line += separator + ((6 - len(uptime)) * magic_space)
             line += '`'
             buff_lines.append(line.strip())
-        embed = embed_list_lines(embed, lines, "> **PLAYERS**")
+        if not wvw:
+            embed = embed_list_lines(embed, lines, "> **PLAYERS**")
+        if wvw:
+            dpses = dpses[:15]
         embed = embed_list_lines(embed, dpses, "> **DPS**")
         embed.add_field(name="> **BUFFS**", value=icon_line)
 
