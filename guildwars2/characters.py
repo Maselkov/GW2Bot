@@ -22,6 +22,7 @@ LETTERS = ["🇦", "🇧", "🇨", "🇩", "🇪", "🇫", "🇬", "🇭", "🇮
 
 
 class Character:
+
     def __init__(self, cog, data):
         self.cog = cog
         self.data = data
@@ -40,6 +41,7 @@ class Character:
         self.spec_cache = {}
 
     async def get_spec_info(self, mode="pve"):
+
         async def get_elite_spec():
             if not self.specializations:
                 return self.profession.title()
@@ -65,6 +67,7 @@ class Character:
 
 
 class CharactersMixin:
+
     @staticmethod
     def format_age(age, *, short=False):
         hours, seconds = divmod(age, 3600)
@@ -759,6 +762,7 @@ class CharactersMixin:
                             base_description="Character related commands")
     async def character_birthdays(self, ctx):
         """Lists days until the next birthday for each of your characters."""
+
         def suffix(year):
             if year == 1:
                 return 'st'
@@ -1200,6 +1204,7 @@ class CharactersMixin:
         base_description="Super Adventure Box related commands")
     async def sab_unlocks(self, ctx, *, character):
         """Displays missing SAB unlocks for specified character"""
+
         def readable(_id):
             return _id.replace("_", " ").title()
 
@@ -1231,6 +1236,7 @@ class CharactersMixin:
         base_description="Super Adventure Box related commands")
     async def sab_zones(self, ctx, *, character):
         """Displays missing SAB zones for specified character"""
+
         def missing_zones(zones):
             modes = ["infantile", "normal", "tribulation"]
             worlds = 1, 2
@@ -1331,6 +1337,7 @@ class CharactersMixin:
                                          specializations)
 
     async def get_profession(self, profession, specializations):
+
         async def get_elite_spec():
             try:
                 spec = specializations[-1]
