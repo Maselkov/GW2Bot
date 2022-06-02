@@ -1052,7 +1052,7 @@
         ]
       },
       {
-        "name": "Strike Missions",
+        "name": "Icebrood Saga Strike Missions",
         "encounters": [
           {
             "name": "Shiverpeaks Pass",
@@ -1089,6 +1089,76 @@
             "type": "progressed_achievement",
             "id": 5247,
             "progress": 1
+          }
+        ]
+      },
+      {
+        "name": "End of Dragons Strike Missions",
+        "encounters": [
+          {
+            "name": "Aetherblade Hideout",
+            "type": "single_achievement",
+            "id": 6354
+          },
+          {
+            "name": "Aetherblade Hideout: \"Leaps Abound\"",
+            "type": "single_achievement",
+            "id": 6527
+          },
+          {
+            "name": "Aetherblade Hideout: Triangulation",
+            "type": "single_achievement",
+            "id": 6530
+          },
+          {
+            "name": "Aetherblade Hideout: \"Total Coverage\"",
+            "type": "single_achievement",
+            "id": 6550
+          },
+          {
+            "name": "Xunlai Jade Junkyard",
+            "type": "single_achievement",
+            "id": 6084
+          },
+          {
+            "name": "Xunlai Jade Junkyard: \"Clarity\"",
+            "type": "single_achievement",
+            "id": 6549
+          },
+          {
+            "name": "Legendary Xunlai Jade Junkyard",
+            "type": "single_achievement",
+            "id": 6411
+          },
+          {
+            "name": "Xunlai Jade Junkyard: Gaze into the Void",
+            "type": "single_achievement",
+            "id": 6526
+          },
+          {
+            "name": "Kaineng Overlook",
+            "type": "single_achievement",
+            "id": 6243
+          },
+          {
+            "name": "Kaineng Overlook: \"Out of Focus\"",
+            "type": "single_achievement",
+            "id": 6546
+          },
+          {
+            "name": "Legendary Kaineng Overlook",
+            "type": "single_achievement",
+            "id": 6431
+          },
+          {
+            "name": "Kaineng Overlook: \"A Test of Your Reflexes\"",
+            "type": "single_achievement",
+            "id": 6542
+          },
+          {
+            "name": "Harvest Temple",
+            "type": "single_achievement",
+            "id": 6513
           }
         ]
       }
