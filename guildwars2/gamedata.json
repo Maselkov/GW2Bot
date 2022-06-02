@@ -1101,9 +1101,9 @@
             "id": 6354
           },
           {
-            "name": "Aetherblade Hideout: \"Leaps Abound\"",
+            "name": "Legendary Aetherblade Hideout",
             "type": "single_achievement",
-            "id": 6527
+            "id": 6433
           },
           {
             "name": "Aetherblade Hideout: Triangulation",
@@ -1111,19 +1111,9 @@
             "id": 6530
           },
           {
-            "name": "Aetherblade Hideout: \"Total Coverage\"",
-            "type": "single_achievement",
-            "id": 6550
-          },
-          {
             "name": "Xunlai Jade Junkyard",
             "type": "single_achievement",
             "id": 6084
-          },
-          {
-            "name": "Xunlai Jade Junkyard: \"Clarity\"",
-            "type": "single_achievement",
-            "id": 6549
           },
           {
             "name": "Legendary Xunlai Jade Junkyard",
@@ -1141,19 +1131,14 @@
             "id": 6243
           },
           {
-            "name": "Kaineng Overlook: \"Out of Focus\"",
-            "type": "single_achievement",
-            "id": 6546
-          },
-          {
             "name": "Legendary Kaineng Overlook",
             "type": "single_achievement",
             "id": 6431
           },
           {
-            "name": "Kaineng Overlook: \"A Test of Your Reflexes\"",
+            "name": "Kaineng Overlook: The Path of Most Resistance",
             "type": "single_achievement",
-            "id": 6542
+            "id": 6534
           },
           {
             "name": "Harvest Temple",
