@@ -759,7 +759,7 @@ class SkillsMixin:
             if message.guild:
                 embed.set_footer(text=(
                     "Server admins can opt out of chat link "
-                    "previewing by using the \"previewchatlinks\" command"),
+                    "previewing by using the \"/server preview_chat_links\" command"),
                                  icon_url=self.bot.user.avatar_url)
             else:
                 embed.set_footer(icon_url=self.bot.user.avatar_url)
