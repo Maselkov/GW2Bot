@@ -9,6 +9,7 @@ from .utils.db import prepare_search
 
 
 class AchievementsMixin:
+
     @cog_ext.cog_slash(name="achievement")
     async def achievementinfo(self, ctx: SlashContext, achievement):
         """Display achievement information and your completion status"""
@@ -113,7 +114,7 @@ class AchievementsMixin:
         data.add_field(name="AP earned",
                        value="{}/{}".format(earned_ap, max_ap),
                        inline=False)
-
+        footer += f" | ID: {ach['id']}"
         data.set_footer(text=footer, icon_url=self.bot.user.avatar_url)
         return data
 
