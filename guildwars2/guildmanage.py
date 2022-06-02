@@ -1,5 +1,6 @@
 import asyncio
-
+import discord
+from discord.ext import tasks
 from discord_slash import cog_ext
 from discord_slash.model import ButtonStyle, SlashCommandOptionType
 from discord_slash.utils.manage_components import (create_actionrow,
@@ -8,6 +9,7 @@ from discord_slash.utils.manage_components import (create_actionrow,
 
 
 class GuildManageMixin:
+
     @cog_ext.cog_subcommand(base="server",
                             name="force_account_names",
                             base_description="Server management commands")
@@ -116,6 +118,113 @@ class GuildManageMixin:
         await self.guildsync_now(ctx)
         await self.worldsync_now(ctx)
 
+    @cog_ext.cog_subcommand(
+        base="server",
+        name="api_key_role",
+        base_description="Server management commands",
+        options=[{
+            "name": "enabled",
+            "description":
+            "Enable or disable giving members with an API key a role",
+            "type": SlashCommandOptionType.BOOLEAN,
+            "required": True,
+        }, {
+            "name": "role",
+            "description":
+            "The role that will be given to members with an API key added",
+            "type": SlashCommandOptionType.ROLE,
+            "required": True,
+        }])
+    async def server_key_sync(self, ctx, enabled: bool, role: discord.Role):
+        """A feature to automatically add a role to members that have added an API key to the bot."""
+        guild = ctx.guild
+        if not ctx.guild:
+            return await ctx.send("This command can only be used in servers.",
+                                  hidden=True)
+        if enabled:
+            if not ctx.author.guild_permissions.manage_roles:
+                return await ctx.send("You need the manage roles permission "
+                                      "to enable this feature.")
+            if not ctx.guild.me.guild_permissions.manage_roles:
+                return await ctx.send("I need the manage roles permission "
+                                      "for this feature")
+        await self.bot.database.set(guild, {
+            "key_sync.enabled": enabled,
+            "key_sync.role": role.id
+        }, self)
+        if enabled:
+            await ctx.send(
+                "Key sync enabled. Members with valid API keys will now be given the selected role"
+            )
+            return await self.key_sync_guild(guild)
+        await ctx.send("Key sync disabled.")
+
+    @tasks.loop(minutes=5)
+    async def key_sync_task(self):
+        cursor = self.bot.database.iter("guilds", {"key_sync.enabled": True},
+                                        self)
+        async for doc in cursor:
+            try:
+                guild = doc["_obj"]
+                role = guild.get_role(doc["key_sync"]["role"])
+                if not role:
+                    continue
+                await self.key_sync_guild(guild, role)
+            except asyncio.CancelledError:
+                return
+            except Exception:
+                pass
+
+    async def key_sync_guild(self, guild, role=None):
+        if not role:
+            doc = await self.bot.database.get(guild, self)
+            enabled = doc.get("key_sync", {}).get("enabled")
+            if not enabled:
+                return
+            role = guild.get_role(doc["key_sync"]["role"])
+        if not role:
+            return
+        doc = await self.bot.database.get(guild, self)
+        role = guild.get_role(doc["key_sync"]["role"])
+        if not role:
+            return
+        for member in guild.members:
+            await self.key_sync_user(member, role)
+
+    async def key_sync_user(self, member, role=None):
+        guild = member.guild
+        if not guild.me.guild_permissions.manage_roles:
+            return
+        if not role:
+            doc = await self.bot.database.get(guild, self)
+            enabled = doc.get("key_sync", {}).get("enabled")
+            if not enabled:
+                return
+            role = guild.get_role(doc["key_sync"]["role"])
+        if not role:
+            return
+        user_doc = await self.bot.database.get(member, self)
+        has_key = False
+        if user_doc.get("key", {}).get("key"):
+            has_key = True
+        try:
+            if has_key:
+                if role not in member.roles:
+                    await member.add_roles(role, reason="/server api_key_role")
+            else:
+                if role in member.roles:
+                    await member.remove_roles(
+                        role,
+                        reason=
+                        "/server api_key_role is enabled. Member lacks a valid API key."
+                    )
+        except discord.Forbidden:
+            return
+
+    @key_sync_task.before_loop
+    async def before_forced_account_names(self):
+        await self.bot.wait_until_ready()
+
     async def force_guild_account_names(self, guild):
         for member in guild.members:
             try:
@@ -123,6 +232,6 @@ class GuildManageMixin:
                 name = key["account_name"]
                 if name.lower() not in member.display_name.lower():
                     await member.edit(nick=name,
-                                      reason="Force account names - $server")
+                                      reason="Force account names - /server")
             except Exception:
                 pass

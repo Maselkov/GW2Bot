@@ -14,6 +14,7 @@ from .exceptions import APIError, APIInactiveError
 
 
 class KeyMixin:
+
     @cog_ext.cog_subcommand(
         base="key",
         name="add",
@@ -87,6 +88,7 @@ class KeyMixin:
             if ctx.guild:
                 await self.worldsync_on_member_join(ctx.author)
                 await self.guildsync_on_member_join(ctx.author)
+                await self.key_sync_user(ctx.author)
                 return
             for guild in self.bot.guilds:
                 try:
@@ -94,16 +96,16 @@ class KeyMixin:
                         continue
                     if ctx.author not in guild.members:
                         continue
+                    member = guild.get_member(ctx.author.id)
+                    await self.key_sync_user(member)
                     doc = await self.bot.database.get(guild, self)
                     worldsync = doc.get("worldsync", {})
                     worldsync_enabled = worldsync.get("enabled", False)
                     if worldsync_enabled:
-                        member = guild.get_member(ctx.author.id)
                         await self.worldsync_on_member_join(member)
                     guildsync = doc.get("sync", {})
                     if guildsync.get("on", False) and guildsync.get(
                             "setupdone", False):
-                        member = guild.get_member(ctx.author.id)
                         await self.guildsync_on_member_join(member)
                 except Exception:
                     pass
@@ -260,6 +262,7 @@ class KeyMixin:
                            display_permissions=True,
                            show_tokens=False,
                            reveal_tokens=False):
+
         def get_value(key):
             lines = []
             if display_permissions:

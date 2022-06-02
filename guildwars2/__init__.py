@@ -36,6 +36,7 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
                  GuildManageMixin, KeyMixin, MiscMixin, NotiifiersMixin,
                  PvpMixin, SkillsMixin, WalletMixin, WorldsyncMixin, WvwMixin):
     """Guild Wars 2 commands"""
+
     def __init__(self, bot):
         self.bot = bot
         self.db = self.bot.database.db.gw2
@@ -71,7 +72,8 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
             self.guild_synchronizer, self.boss_notifier,
             self.forced_account_names, self.event_reminder_task,
             self.worldsync_task, self.guildsync_consumer,
-            self.post_evtc_notifications, self.daily_mystic_forger_checker_task
+            self.post_evtc_notifications,
+            self.daily_mystic_forger_checker_task, self.key_sync_task
         ]
         for task in self.tasks:
             task.start()
