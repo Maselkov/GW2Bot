@@ -328,6 +328,15 @@
           ],
           "interval": 3,
           "waypoint": "[&BHoCAAA=]"
+        },
+        {
+          "name": "Ley-Line Anomaly",
+          "start_time": [
+            0,
+            20
+          ],
+          "interval": 5,
+          "waypoint": "[&BEwCAAA=], [&BOYBAAA=], [&BJEBAAA=]"
         }
       ],
       "hardcore": [
@@ -535,7 +544,7 @@
         "name": "Crystal Oasis",
         "phases": [
           {
-            "name": "Nothing",
+            "name": null,
             "duration": 5
           },
           {
@@ -547,7 +556,7 @@
             "duration": 9
           },
           {
-            "name": "Nothing",
+            "name": null,
             "duration": 90
           }
         ]
@@ -556,7 +565,7 @@
         "name": "Desert Highlands",
         "phases": [
           {
-            "name": "Nothing",
+            "name": null,
             "duration": 60
           },
           {
@@ -564,7 +573,7 @@
             "duration": 15
           },
           {
-            "name": "Nothing",
+            "name": null,
             "duration": 45
           }
         ]
@@ -581,7 +590,7 @@
             "duration": 15
           },
           {
-            "name": "Nothing",
+            "name": null,
             "duration": 65
           },
           {
@@ -594,7 +603,7 @@
         "name": "The Desolation",
         "phases": [
           {
-            "name": "Nothing",
+            "name": null,
             "duration": 30
           },
           {
@@ -602,7 +611,7 @@
             "duration": 20
           },
           {
-            "name": "Nothing",
+            "name": null,
             "duration": 10
           },
           {
@@ -610,7 +619,7 @@
             "duration": 20
           },
           {
-            "name": "Nothing",
+            "name": null,
             "duration": 10
           },
           {
@@ -618,7 +627,7 @@
             "duration": 20
           },
           {
-            "name": "Nothing",
+            "name": null,
             "duration": 10
           }
         ]
@@ -639,7 +648,7 @@
             "duration": 30
           },
           {
-            "name": "Nothing",
+            "name": null,
             "duration": 30
           }
         ]
@@ -652,7 +661,7 @@
             "duration": 15
           },
           {
-            "name": "Nothing",
+            "name": null,
             "duration": 90
           },
           {
@@ -660,11 +669,220 @@
             "duration": 15
           }
         ]
+      },
+      {
+        "name": "Jahai Bluffs",
+        "phases": [
+          {
+            "name": null,
+            "duration": 60
+          },
+          {
+            "name": "Escort Event",
+            "duration": 15
+          },
+          {
+            "name": "Death-Branded Shatterer",
+            "duration": 15
+          },
+          {
+            "name": null,
+            "duration": 30
+          }
+        ]
+      },
+      {
+        "name": "Thunderhead Peaks",
+        "phases": [
+          {
+            "name": null,
+            "duration": 45
+          },
+          {
+            "name": "Oil Floes",
+            "duration": 15
+          },
+          {
+            "name": null,
+            "duration": 45
+          },
+          {
+            "name": "Thunderhead Keep",
+            "duration": 15
+          }
+        ]
+      }
+    ],
+    "ibs": [
+      {
+        "name": "Grothmar Valley",
+        "phases": [
+          {
+            "name": null,
+            "duration": 10
+          },
+          {
+            "name": "Effigy",
+            "duration": 15
+          },
+          {
+            "name": null,
+            "duration": 13
+          },
+          {
+            "name": "Doomlore Shrine",
+            "duration": 22
+          },
+          {
+            "name": null,
+            "duration": 5
+          },
+          {
+            "name": "Ooze Pits",
+            "duration": 20
+          },
+          {
+            "name": null,
+            "duration": 15
+          },
+          {
+            "name": "Metal Concert",
+            "duration": 15
+          },
+          {
+            "name": null,
+            "duration": 5
+          }
+        ]
+      },
+      {
+        "name": "Bjora Marches",
+        "phases": [
+          {
+            "name": "Shards and Construct",
+            "duration": 5
+          },
+          {
+            "name": "Icebrood Champions",
+            "duration": 15
+          },
+          {
+            "name": null,
+            "duration": 45
+          },
+          {
+            "name": "Drakkar",
+            "duration": 35
+          },
+          {
+            "name": null,
+            "duration": 5
+          },
+          {
+            "name": "Defend Jora's Keep",
+            "duration": 15
+          }
+        ]
+      },
+      {
+        "name": "Hall of Monuments",
+        "phases": [
+          {
+            "name": null,
+            "duration": 60
+          },
+          {
+            "name": "Dragonstorm",
+            "duration": 20
+          },
+          {
+            "name": null,
+            "duration": 40
+          }
+        ]
+      }
+    ],
+    "eod": [
+      {
+        "name": "Seitung Province",
+        "phases": [
+          {
+            "name": null,
+            "duration": 90
+          },
+          {
+            "name": "Aetherblade Assault",
+            "duration": 30
+          }
+        ]
+      },
+      {
+        "name": "New Kaineng City",
+        "phases": [
+          {
+            "name": "Kaineng Blackout",
+            "duration": 40
+          },
+          {
+            "name": null,
+            "duration": 80
+          }
+        ]
+      },
+      {
+        "name": "Echovald Wilds",
+        "phases": [
+          {
+            "name": null,
+            "duration": 30
+          },
+          {
+            "name": "Gang War",
+            "duration": 35
+          },
+          {
+            "name": null,
+            "duration": 35
+          },
+          {
+            "name": "Aspenwood",
+            "duration": 20
+          }
+        ]
+      },
+      {
+        "name": "Dragon's End",
+        "phases": [
+          {
+            "name": null,
+            "duration": 5
+          },
+          {
+            "name": "Jade Maw",
+            "duration": 8
+          },
+          {
+            "name": null,
+            "duration": 32
+          },
+          {
+            "name": "Jade Maw",
+            "duration": 8
+          },
+          {
+            "name": null,
+            "duration": 7
+          },
+          {
+            "name": "Battle for the Jade Sea",
+            "duration": 60
+          }
+        ]
       }
     ],
     "day": [
       {
-        "name": "Day/night cycle",
+        "name": "Tyrian cycle",
         "phases": [
           {
             "name": "Night",
@@ -685,6 +903,27 @@
           {
             "name": "Night",
             "duration": 15
+          }
+        ]
+      },
+      {
+        "name": "Canthan cycle",
+        "phases": [
+          {
+            "name": "Canthan Night",
+            "duration": 35
+          },
+          {
+            "name": "Canthan Dawn",
+            "duration": 5
+          },
+          {
+            "name": "Canthan Day",
+            "duration": 55
+          },
+          {
+            "name": "Canthan Dusk",
+            "duration": 20
           }
         ]
       }
