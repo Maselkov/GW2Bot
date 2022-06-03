@@ -13,6 +13,7 @@ UTC_TZ = datetime.timezone.utc
 
 
 class EventsMixin:
+
     @cog_ext.cog_slash(
         options=[{
             "name":
@@ -31,6 +32,14 @@ class EventsMixin:
                 {
                     "value": "pof",
                     "name": "PoF - Path of Fire"
+                },
+                {
+                    "value": "ibs",
+                    "name": "IBS - The Icebrood Saga"
+                },
+                {
+                    "value": "eod",
+                    "name": "EoD- End of Dragons"
                 },
                 {
                     "value": "day",
@@ -83,7 +92,7 @@ class EventsMixin:
                 reminder["type"] = "boss"
                 reminder["name"] = boss["name"]
         if not reminder:
-            for group in "hot", "pof":
+            for group in "hot", "pof", "day", "ibs", "eod":
                 maps = self.gamedata["event_timers"][group]
                 for location in maps:
                     for phase in location["phases"]:
@@ -275,7 +284,7 @@ class EventsMixin:
             return "{} minutes".format(minutes)
 
     async def timer_embed(self, ctx, group):
-        time = datetime.datetime.utcnow()
+        time = datetime.datetime.now(datetime.timezone.utc)
         position = (
             60 * time.hour + time.minute
         ) % 120  # this gets the minutes elapsed in the current 2 hour window
@@ -284,6 +293,8 @@ class EventsMixin:
             "hot": "HoT Event Timer",
             "pof": "PoF Event Timer",
             "day": "Day/Night cycle",
+            "eod": "End of Dragons",
+            "ibs": "The Icebrood Saga"
         }.get(group)
         embed = discord.Embed(title=title,
                               color=await self.get_embed_color(ctx))
@@ -292,24 +303,32 @@ class EventsMixin:
             current_phase = None
             index = 0
             phases = location["phases"]
+            # TODO null handling
             for i, phase in enumerate(phases):
                 if position < duration_so_far:
                     break
                 current_phase = phase["name"]
                 index = i
                 duration_so_far += phase["duration"]
-            index += 1
-            if index == len(phases):
-                if phases[0]["name"] == phases[index - 1]["name"]:
-                    index = 1
-                    duration_so_far += phases[0]["duration"]
-                else:
-                    index = 0
-            next_phase = phases[index]["name"]
+            double = phases + phases
+            for phase in double[index + 1:]:
+                if not phase["name"]:
+                    duration_so_far += phase["duration"]
+                    continue
+                if phase["name"] == current_phase:
+                    duration_so_far += phase["duration"]
+                    continue
+                break
+            next_phase = phase["name"]
             time_until = duration_so_far - position
-            value = ("Current phase: **{}**"
-                     "\nNext phase: **{}** in **{}** minutes".format(
-                         current_phase, next_phase, time_until))
+            event_time = time + datetime.timedelta(minutes=time_until)
+            timestamp = f"<t:{int(event_time.timestamp())}:R>"
+            if current_phase:
+                current = f"Current phase: **{current_phase}**"
+            else:
+                current = "No events currently active."
+            value = (current +
+                     "\nNext phase: **{}** {}".format(next_phase, timestamp))
             embed.add_field(name=location["name"], value=value, inline=False)
         embed.set_footer(text=self.bot.user.name,
                          icon_url=self.bot.user.avatar_url)
