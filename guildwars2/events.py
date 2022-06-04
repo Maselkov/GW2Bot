@@ -96,6 +96,8 @@ class EventsMixin:
                 maps = self.gamedata["event_timers"][group]
                 for location in maps:
                     for phase in location["phases"]:
+                        if not phase["name"]:
+                            continue
                         if phase["name"].lower() == event_name:
                             reminder["type"] = "phase"
                             reminder["name"] = phase["name"]
