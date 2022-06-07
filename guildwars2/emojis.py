@@ -1,11 +1,12 @@
+from dis import disco
 import re
 
 import discord
 from discord.ext import commands
-from discord_slash.context import InteractionContext
 
 
 class EmojiMixin:
+
     async def prepare_emojis(self):
         doc = await self.bot.database.get_cog_config(self)
         self.emojis = doc.get("emojis", {})
@@ -18,6 +19,7 @@ class EmojiMixin:
                   fallback_fmt="{}",
                   return_obj=False,
                   force_emoji=False):
+
         def get_emoji():
             search_str = emoji.lower().replace(" ", "_")
             # Remove illegal emoji characters
@@ -42,12 +44,17 @@ class EmojiMixin:
                 me = ctx.guild.me
             else:
                 me = self.bot.user
+        elif isinstance(ctx, discord.Interaction):
+            if isinstance(ctx.channel, (discord.TextChannel, discord.Thread)):
+                me = ctx.channel.guild.me
+            else:
+                me = ctx.client.user
         elif ctx:
             me = ctx.me
         else:
             me = None
         if ctx:
-            if isinstance(ctx, InteractionContext):
+            if isinstance(ctx, discord.Interaction):
                 can_use = ctx.channel.permissions_for(me).add_reactions
             else:
                 if isinstance(ctx, discord.TextChannel):

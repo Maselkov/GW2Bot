@@ -1,58 +1,89 @@
 import datetime
+from unicodedata import name
+from click import Choice
 
 import discord
+from discord.app_commands import Choice
+from discord import app_commands
 from discord.ext import commands
 from discord.ext.commands.cooldowns import BucketType
 from discord.ext.commands.errors import BadArgument
-from discord_slash import cog_ext
-from discord_slash.model import SlashCommandOptionType
 
 from ..exceptions import APIError, APIForbidden, APINotFound
 from ..utils.chat import embed_list_lines, zero_width_space
 
 
 class GeneralGuild:
-    @cog_ext.cog_subcommand(base="guild",
-                            name="info",
-                            base_description="Guild related commands",
-                            options=[{
-                                "name":
-                                "guild_name",
-                                "description":
-                                "Guild name. Can be blank if this "
-                                "server has a default "
-                                "guild. Required otherwise.",
-                                "type":
-                                SlashCommandOptionType.STRING,
-                                "required":
-                                False
-                            }])
-    async def guild_info(self, ctx, *, guild_name=None):
+
+    guild_group = app_commands.Group(name="guild",
+                                     description="Guild related commands")
+
+    async def guild_name_autocomplete(self, interaction: discord.Interaction,
+                                      current: str):
+        choices = []
+        current = current.lower()
+        if not current and interaction.guild:
+            doc = await self.bot.database.get(interaction.guild, self)
+            guild_id = doc.get("guild_ingame")
+            if guild_id:
+                choices.append(
+                    Choice(name="Server's default guild", value=guild_id))
+        doc = await self.bot.database.get(interaction.user, self)
+        key = doc.get("key", {})
+        if not key:
+            return choices
+        account_key = key["account_name"].replace(".", "_")
+        cache = doc.get("guild_cache", {}).get(account_key, {})
+        if not cache or cache["last_update"] < datetime.datetime.utcnow(
+        ) - datetime.timedelta(days=7):
+            try:
+                results = await self.call_api("account",
+                                              scopes=["account"],
+                                              key=key)
+            except APIError:
+                return choices
+            guild_ids = results.get("guilds", [])
+            endpoints = [f"guild/{gid}" for gid in guild_ids]
+            try:
+                guilds = await self.call_multiple(endpoints)
+            except APIError:
+                return choices
+            guild_list = []
+            for guild in guilds:
+                guild_list.append({"name": guild[name], "id": guild["id"]})
+            cache = {
+                "last_update": datetime.datetime.utcnow(),
+                "guild_list": guild_list
+            }
+        if cache:
+            choices += [
+                Choice(name=guild["name"], value=guild["id"])
+                for guild in cache["guild_list"]
+                if current in guild["name"].lower()
+            ]
+        return choices
+
+    @guild_group.command(name="info")
+    @app_commands.describe(guild="Guild name.")
+    @app_commands.autocomplete(guild=guild_name_autocomplete)
+    async def guild_info(self, interaction: discord.Interaction, guild: str):
         """General guild stats"""
+        endpoint = "guild/" + guild
+        await interaction.response.defer()
         try:
-            guild = await self.get_guild(ctx, guild_name=guild_name)
-            if not guild and not guild_name:
-                # TODO guild dropdown
-                return await ctx.send(
-                    "You need to specify a guild name or "
-                    "have a default guild set.",
-                    hidden=True)
-            guild_id = guild["id"]
-            guild_name = guild["name"]
-            endpoint = "guild/{0}".format(guild_id)
-            results = await self.call_api(endpoint, ctx.author, ["guilds"])
+            results = await self.call_api(endpoint, interaction.user,
+                                          ["guilds"])
         except (IndexError, APINotFound):
-            return await ctx.send("Invalid guild name", hidden=True)
+            return await interaction.followup.send_message(
+                "Invalid guild name", hidden=True)
         except APIForbidden:
-            return await ctx.send(
+            return await interaction.followup.send_message(
                 "You don't have enough permissions in game to "
                 "use this command",
                 hidden=True)
-        except APIError as e:
-            return await self.error_handler(ctx, e)
-        data = discord.Embed(
-            description='General Info about {0}'.format(guild_name),
-            colour=await self.get_embed_color(ctx))
+        data = discord.Embed(description='General Info about {0}'.format(
+            results["name"]),
+                             colour=await self.get_embed_color(interaction))
         data.set_author(name="{} [{}]".format(results["name"], results["tag"]))
         guild_currencies = [
             "influence", "aetherium", "resonance", "favor", "member_count"
@@ -61,73 +92,55 @@ class GeneralGuild:
             if cur == "member_count":
                 data.add_field(name='Members',
                                value="{} {}/{}".format(
-                                   self.get_emoji(ctx, "friends"),
+                                   self.get_emoji(interaction, "friends"),
                                    results["member_count"],
                                    str(results["member_capacity"])))
             else:
                 data.add_field(name=cur.capitalize(),
-                               value='{} {}'.format(self.get_emoji(ctx, cur),
-                                                    results[cur]))
+                               value='{} {}'.format(
+                                   self.get_emoji(interaction, cur),
+                                   results[cur]))
         if "motd" in results:
             data.add_field(name='Message of the day:',
                            value=results["motd"],
                            inline=False)
         data.set_footer(text='A level {} guild'.format(results["level"]))
-        await ctx.send(embed=data)
+        await interaction.followup.send(embed=data)
 
-    @cog_ext.cog_subcommand(base="guild",
-                            name="members",
-                            base_description="Guild related commands",
-                            options=[{
-                                "name":
-                                "guild_name",
-                                "description":
-                                "Guild name. Can be blank if this "
-                                "server has a default "
-                                "guild. Required otherwise.",
-                                "type":
-                                SlashCommandOptionType.STRING,
-                                "required":
-                                False
-                            }])
-    async def guild_members(self, ctx, *, guild_name=None):
+    @guild_group.command(name="members")
+    @app_commands.describe(guild="Guild name.")
+    @app_commands.autocomplete(guild=guild_name_autocomplete)
+    async def guild_members(self, interaction: discord.Interaction,
+                            guild: str):
         """Shows a list of members and their ranks."""
-        user = ctx.author
+        user = interaction.user
         scopes = ["guilds"]
-        await ctx.defer()
+        await interaction.response.defer()
+        endpoints = [
+            f"guild/{guild}", f"guild/{guild}/members", f"guild/{guild}/ranks"
+        ]
         try:
-            guild = await self.get_guild(ctx, guild_name=guild_name)
-            if not guild and not guild_name:
-                # TODO guild dropdown
-                return await ctx.send(
-                    "You need to specify a guild name or "
-                    "have a default guild set.",
-                    hidden=True)
-            guild_id = guild["id"]
-            guild_name = guild["name"]
-            endpoints = [
-                "guild/{}/members".format(guild_id),
-                "guild/{}/ranks".format(guild_id)
-            ]
-            results, ranks = await self.call_multiple(endpoints, user, scopes)
+            base, results, ranks = await self.call_multiple(
+                endpoints, user, scopes)
         except (IndexError, APINotFound):
-            return await ctx.send("Invalid guild name", hidden=True)
+            return await interaction.followup.send("Invalid guild name",
+                                                   hidden=True)
         except APIForbidden:
-            return await ctx.send(
+            return await interaction.followup.send(
                 "You don't have enough permissions in game to "
                 "use this command",
                 hidden=True)
-        except APIError as e:
-            return await self.error_handler(ctx, e)
-        data = discord.Embed(description=zero_width_space,
-                             colour=await self.get_embed_color(ctx))
-        data.set_author(name=guild_name.title())
+        embed = discord.Embed(description=zero_width_space,
+                              colour=await self.get_embed_color(interaction))
+        embed.set_author(name=base["name"])
         order_id = 1
         # For each order the rank has, go through each member and add it with
         # the current order increment to the embed
         lines = []
 
         async def get_guild_member_mention(account_name):
+            if not interaction.guild:
+                return ""
             cursor = self.bot.database.iter(
                 "users", {
                     "$or": [{
@@ -137,7 +150,7 @@ class GeneralGuild:
                     }]
                 })
             async for doc in cursor:
-                member = ctx.guild.get_member(doc["_id"])
+                member = interaction.guild.get_member(doc["_id"])
                 if member:
                     return member.mention
             return ""
@@ -160,50 +173,35 @@ class GeneralGuild:
                                 if len(str(lines)) + len(line) < 6000:
                                     lines.append(line)
             order_id += 1
-        data = embed_list_lines(data, lines, "> **MEMBERS**", inline=True)
-        await ctx.send(embed=data)
+        embed = embed_list_lines(embed, lines, "> **MEMBERS**", inline=True)
+        await interaction.followup.send(embed=embed)
 
-    @cog_ext.cog_subcommand(base="guild",
-                            name="treasury",
-                            base_description="Guild related commands",
-                            options=[{
-                                "name":
-                                "guild_name",
-                                "description":
-                                "Guild name. Can be blank if this "
-                                "server has a default "
-                                "guild. Required otherwise.",
-                                "type":
-                                SlashCommandOptionType.STRING,
-                                "required":
-                                False
-                            }])
-    async def guild_treasury(self, ctx, *, guild_name=None):
+    @guild_group.command(name="treasury")
+    @app_commands.describe(guild="Guild name.")
+    @app_commands.autocomplete(guild=guild_name_autocomplete)
+    async def guild_treasury(self,
+                             interaction: discord.Interaction,
+                             guild: str = None):
         """Get list of current and needed items for upgrades"""
+        await interaction.response.defer()
+        guild_id = guild["id"]
+        guild_name = guild["name"]
+        endpoints = [f"guild/{guild}", f"guild/{guild}/treasury"]
         try:
-            guild = await self.get_guild(ctx, guild_name=guild_name)
-            if not guild and not guild_name:
-                # TODO guild dropdown
-                return await ctx.send(
-                    "You need to specify a guild name or "
-                    "have a default guild set.",
-                    hidden=True)
-            guild_id = guild["id"]
-            guild_name = guild["name"]
-            endpoint = "guild/{0}/treasury".format(guild_id)
-            treasury = await self.call_api(endpoint, ctx.author, ["guilds"])
+            base, treasury = await self.call_multiple(endpoints,
+                                                      interaction.user,
+                                                      ["guilds"])
         except (IndexError, APINotFound):
-            return await ctx.send("Invalid guild name", hidden=True)
+            return await interaction.followup.send("Invalid guild name",
+                                                   hidden=True)
         except APIForbidden:
-            return await ctx.send(
+            return await interaction.followup.send(
                 "You don't have enough permissions in game to "
                 "use this command",
                 hidden=True)
-        except APIError as e:
-            return await self.error_handler(ctx, e)
-        data = discord.Embed(description=zero_width_space,
-                             colour=await self.get_embed_color(ctx))
-        data.set_author(name=guild_name.title())
+        embed = discord.Embed(description=zero_width_space,
+                              colour=await self.get_embed_color(interaction))
+        embed.set_author(name=base["name"])
         item_counter = 0
         amount = 0
         lines = []
@@ -228,77 +226,41 @@ class GeneralGuild:
                 amount = 0
                 item_counter += 1
         else:
-            await ctx.send("Treasury is empty!")
-            return
-        data = embed_list_lines(data, lines, "> **TREASURY**", inline=True)
-        await ctx.send(embed=data)
+            return await interaction.followup.send("Treasury is empty!")
+        embed = embed_list_lines(embed, lines, "> **TREASURY**", inline=True)
+        await interaction.followup.send(embed=embed)
 
-    @cog_ext.cog_subcommand(base="guild",
-                            name="log",
-                            base_description="Guild related commands",
-                            options=[{
-                                "name":
-                                "log_type",
-                                "description":
-                                "The type of log to inspect"
-                                "guild. Required otherwise.",
-                                "type":
-                                SlashCommandOptionType.STRING,
-                                "required":
-                                True,
-                                "choices": [{
-                                    "name": "Stash",
-                                    "value": "stash"
-                                }, {
-                                    "name": "Treasury",
-                                    "value": "treasury"
-                                }, {
-                                    "name": "Roster",
-                                    "value": "members"
-                                }]
-                            }, {
-                                "name":
-                                "guild_name",
-                                "description":
-                                "Guild name. Can be blank if this "
-                                "server has a default "
-                                "guild. Required otherwise.",
-                                "type":
-                                SlashCommandOptionType.STRING,
-                                "required":
-                                False
-                            }])
-    async def guild_log(self, ctx, log_type, *, guild_name=None):
+    @guild_group.command(name="log")
+    @app_commands.describe(log_type="The type of log to inspect",
+                           guild="Guild name.")
+    @app_commands.choices(log_type=[
+        Choice(name=it.title(), value=it)
+        for it in ["stash", "treasury", "members"]
+    ])
+    @app_commands.autocomplete(guild=guild_name_autocomplete)
+    async def guild_log(self, interaction: discord.Interaction, log_type: str,
+                        guild: str):
         """Get log of stash/treasury/members"""
         member_list = [
             "invited", "joined", "invite_declined", "rank_change", "kick"
         ]
-        await ctx.defer()
+        await interaction.response.defer()
+        endpoints = [f"guild/{guild}", f"guild/{guild}/log/"]
         try:
-            guild = await self.get_guild(ctx, guild_name=guild_name)
-            if not guild and not guild_name:
-                # TODO guild dropdown
-                return await ctx.send(
-                    "You need to specify a guild name or "
-                    "have a default guild set.",
-                    hidden=True)
-            guild_id = guild["id"]
-            guild_name = guild["name"]
-            endpoint = "guild/{0}/log/".format(guild_id)
-            log = await self.call_api(endpoint, ctx.author, ["guilds"])
+            base, log = await self.call_api(endpoints, interaction.user,
+                                            ["guilds"])
         except (IndexError, APINotFound):
-            return await ctx.send("Invalid guild name", hidden=True)
+            return await interaction.followup.send("Invalid guild name",
+                                                   hidden=True)
         except APIForbidden:
-            return await ctx.send(
+            return await interaction.followup.send(
                 "You don't have enough permissions in game to "
                 "use this command",
                 hidden=True)
-        except APIError as e:
-            return await self.error_handler(ctx, e)
 
         data = discord.Embed(description=zero_width_space,
-                             colour=await self.get_embed_color(ctx))
-        data.set_author(name=guild_name.title())
+                             colour=await self.get_embed_color(interaction))
+        data.set_author(name=base["name"])
         lines = []
         length_lines = 0
         for entry in log:
@@ -310,7 +272,8 @@ class GeneralGuild:
                 if log_type == "stash" or log_type == "treasury":
                     quantity = entry["count"]
                     if entry["item_id"] == 0:
-                        item_name = self.gold_to_coins(ctx, entry["coins"])
+                        item_name = self.gold_to_coins(interaction,
+                                                       entry["coins"])
                         quantity = ""
                         multiplier = ""
                     else:
@@ -367,69 +330,24 @@ class GeneralGuild:
                         length_lines += len(line)
                         lines.append(line)
         if not lines:
-            return await ctx.send("No {} log entries yet for {}".format(
-                log_type, guild_name.title()))
+            return await interaction.followup.send(
+                "No {} log entries yet for {}".format(log_type, base["name"]))
         data = embed_list_lines(data, lines,
                                 "> **{0} Log**".format(log_type.capitalize()))
-        await ctx.send(embed=data)
+        await interaction.followup.send(embed=data)
 
-    @cog_ext.cog_subcommand(base="guild",
-                            name="default",
-                            base_description="Guild related commands",
-                            options=[{
-                                "name": "guild_name",
-                                "description":
-                                "Guild name. Leave blank to reset",
-                                "type": SlashCommandOptionType.STRING,
-                                "required": False
-                            }])
-    async def guild_default(self, ctx, *, guild_name=None):
+    @guild_group.command(name="default")
+    @app_commands.describe(guild="Guild name")
+    @app_commands.autocomplete(guild=guild_name_autocomplete)
+    async def guild_default(self, ctx, guild: str):
         """ Set your default guild for guild commands on this server."""
-        if guild_name is None:
-            await self.bot.database.set_guild(ctx.guild, {
-                "guild_ingame": None,
-            }, self)
-            return await ctx.send(
-                "Your default guild is now reset for "
-                "this server. Invoke this command with a guild "
-                "name to set a default guild.")
-        endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
-        # Guild ID to Guild Name
-        try:
-            guild_id = await self.call_api(endpoint_id)
-            guild_id = guild_id[0]
-        except (IndexError, APINotFound):
-            return await ctx.send("Invalid guild name", hidden=True)
-        except APIForbidden:
-            return await ctx.send(
-                "You don't have enough permissions in game to "
-                "use this command",
-                hidden=True)
-        except APIError as e:
-            return await self.error_handler(ctx, e)
-
-        # Write to DB, overwrites existing guild
+        results = await self.call_api(f"guild/{guild}")
         await self.bot.database.set_guild(ctx.guild, {
-            "guild_ingame": guild_id,
+            "guild_ingame": guild,
         }, self)
         await ctx.send(
-            f"Your default guild is now set to {guild_name.title()} for this server. "
-            "All commands from the `guild` command group "
+            f"Your default guild is now set to {results['name']} for this "
+            "server. All commands from the `guild` command group "
             "invoked without a specified guild will default to "
             "this guild. To reset, simply invoke this command "
             "without specifying a guild")
-
-    async def get_guild(self, ctx, guild_id=None, guild_name=None):
-        if guild_name:
-            endpoint_id = "guild/search?name=" + guild_name.replace(' ', '%20')
-            guild_id = await self.call_api(endpoint_id)
-            guild_id = guild_id[0]
-        elif not guild_id:
-            if not ctx.guild:
-                return None
-            doc = await self.bot.database.get_guild(ctx.guild, self) or {}
-            guild_id = doc.get("guild_ingame")
-        if not guild_id:
-            return None
-        endpoint = "guild/{0}".format(guild_id)
-        return await self.call_api(endpoint, ctx.author, ["guilds"])

@@ -9,15 +9,17 @@ from PIL import ImageFont
 from .account import AccountMixin
 from .achievements import AchievementsMixin
 from .api import ApiMixin
-from .bt import BtMixin
 from .characters import CharactersMixin
 from .commerce import CommerceMixin
 from .daily import DailyMixin
 from .database import DatabaseMixin
+from discord.app_commands import AppCommandError
+from discord import Interaction
 from .emojis import EmojiMixin
 from .events import EventsMixin
 from .evtc import EvtcMixin
 from .exceptions import APIError, APIInactiveError, APIInvalidKey, APIKeyError
+
 from .guild import GuildMixin
 from .guildmanage import GuildManageMixin
 from .key import KeyMixin
@@ -31,7 +33,7 @@ from .wvw import WvwMixin
 
 
 class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
-                 ApiMixin, BtMixin, CharactersMixin, CommerceMixin, DailyMixin,
+                 ApiMixin, CharactersMixin, CommerceMixin, DailyMixin,
                  DatabaseMixin, EmojiMixin, EventsMixin, EvtcMixin, GuildMixin,
                  GuildManageMixin, KeyMixin, MiscMixin, NotiifiersMixin,
                  PvpMixin, SkillsMixin, WalletMixin, WorldsyncMixin, WvwMixin):
@@ -78,28 +80,38 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
         for task in self.tasks:
             task.start()
 
+        @bot.tree.error
+        async def on_app_command_error(interaction: Interaction,
+                                       error: AppCommandError):
+            user = interaction.user
+            exc = error.original
+            responded = interaction.response.is_done()
+            msg = ""
+            if isinstance(exc, APIKeyError):
+                msg = str(exc)
+            elif isinstance(exc, APIInactiveError):
+                msg = (f"{user.mention}, the API is currently down. "
+                       "Try again later.".format)
+            elif isinstance(exc, APIInvalidKey):
+                msg = (f"{user.mention}, your API key is invalid! Remove your "
+                       "key and add a new one")
+            elif isinstance(exc, APIError):
+                msg = (f"{user.mention}, API has responded with the "
+                       "following error: "
+                       f"`{exc}`".format(user, exc))
+            else:
+                self.log.exception("Exception in command, ", exc_info=exc)
+                msg = ("Something went wrong. If this problem persists, "
+                       "please report it or ask about it in the "
+                       "support server- https://discord.gg/VyQTrwP")
+            if not responded:
+                await interaction.response.send(msg)
+            else:
+                await interaction.followup.send(msg)
+
     def cog_unload(self):
         for task in self.tasks:
             task.cancel()
-
-    async def error_handler(self, ctx, exc):
-        user = ctx.author
-        if isinstance(exc, APIKeyError):
-            await ctx.send(str(exc))
-            return
-        if isinstance(exc, APIInactiveError):
-            await ctx.send("{.mention}, the API is currently down. "
-                           "Try again later.".format(user))
-            return
-        if isinstance(exc, APIInvalidKey):
-            await ctx.send("{.mention}, your API key is invalid! Remove your "
-                           "key and add a new one".format(user))
-            return
-        if isinstance(exc, APIError):
-            await ctx.send(
-                "{.mention}, API has responded with the following error: "
-                "`{}`".format(user, exc))
-            return
 
     def can_embed_links(self, ctx):
         if not isinstance(ctx.channel, discord.abc.GuildChannel):
@@ -123,19 +135,17 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
         self.bot.loop.create_task(component_context.send(message, hidden=True))
 
 
-def setup(bot):
+async def setup(bot):
     cog = GuildWars2(bot)
-    loop = bot.loop
-    loop.create_task(
-        bot.database.setup_cog(
-            cog, {
-                "cache": {
-                    "day": datetime.datetime.utcnow().weekday(),
-                    "news": [],
-                    "build": 0,
-                    "dailies": {},
-                    "dailies_tomorrow": {}
-                },
-                "emojis": {}
-            }))
-    bot.add_cog(cog)
+    await bot.database.setup_cog(
+        cog, {
+            "cache": {
+                "day": datetime.datetime.utcnow().weekday(),
+                "news": [],
+                "build": 0,
+                "dailies": {},
+                "dailies_tomorrow": {}
+            },
+            "emojis": {}
+        })
+    await bot.add_cog(cog)

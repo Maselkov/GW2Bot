@@ -1,103 +1,70 @@
 import asyncio
 import datetime
+from dis import disco
 import unicodedata
 import xml.etree.ElementTree as et
-
 import discord
 from bs4 import BeautifulSoup
 from discord.ext import tasks
-from discord_slash import cog_ext
-from discord_slash.model import SlashCommandOptionType
-from discord_slash.utils.manage_components import (create_actionrow,
-                                                   create_select,
-                                                   create_select_option,
-                                                   wait_for_component)
+from discord import AppCommandOptionType, app_commands
+from discord.app_commands import Choice
 
 from .daily import DAILY_CATEGORIES
 from .exceptions import APIError
 
 
 class NotiifiersMixin:
+    notifier_group = app_commands.Group(name="notifierr",
+                                        description="Notifier Commands")
 
-    @cog_ext.cog_subcommand(
-        base="notifier",
-        name="daily",
-        base_description="Notifier Commands",
-        options=[{
-            "name":
-            "channel",
-            "description":
-            "The channel to post to. Leave blank to disable, required "
-            "otherwise",
-            "type":
-            SlashCommandOptionType.CHANNEL,
-            "required":
-            False,
-            "channel_types": [0]
-        }, {
-            "name": "pin_message",
-            "description":
-            "Toggle whether to automatically pin the daily message or not",
-            "type": SlashCommandOptionType.BOOLEAN,
-            "required": False,
-        }, {
-            "name":
-            "behavior",
-            "description":
-            "Select additional behavior for deleting/editing the message. "
-            "Leave blank for standard behavior.",
-            "type":
-            SlashCommandOptionType.STRING,
-            "choices": [
-                {
-                    "value":
-                    "autodelete",
-                    "name":
-                    "Delete the previous day's message. Causes an unread "
-                    "notification."
-                },
-                {
-                    "value":
-                    "autoedit",
-                    "name":
-                    "Edit the previous day's message. No unread notification."
-                },
-            ],
-            "required":
-            False
-        }])
+    @notifier_group.command(name="daily")
+    @app_commands.checks.has_permissions(manage_guild=True)
+    @app_commands.guild_only()
+    @app_commands.describe(
+        enabled="Enable or disable Daily Notifier. If "
+        "enabling, channel argument must be set",
+        channel="The channel to post to.",
+        pin_message="Toggle whether to "
+        "automatically pin the daily message or not.",
+        behavior="Select additional behavior for "
+        "deleting/editing the message. Leave blank for standard behavior.")
+    @app_commands.choices(behavior=[
+        Choice(name="Delete the previous day's message. "
+               "Causes an unread notification.",
+               value="autodelete"),
+        Choice(name="Edit the previous day's message. No unread notification.",
+               value="autoedit")
+    ])
     async def daily_notifier(self,
-                             ctx,
-                             *,
-                             channel=None,
-                             pin_message=False,
-                             behavior=None):
+                             interaction: discord.Interaction,
+                             enabled: bool,
+                             channel: discord.TextChannel = None,
+                             pin_message: bool = False,
+                             behavior: str = None):
         """Send daily achievements to a channel every day"""
-        if not ctx.guild:
-            return await ctx.send(
-                "This command can only be used in servers at the time.",
-                hidden=True)
-        if not ctx.author.guild_permissions.manage_guild:
-            return await ctx.send("You need the `manage server` permission "
-                                  "to use this command.")
-        doc = await self.bot.database.get(ctx.guild, self)
+        doc = await self.bot.database.get(interaction.guild, self)
         enabled = doc.get("daily", {}).get("on", False)
+
+        # IF ENABLED AND NOT CHANNEL
+
         if not enabled and not channel:
-            return await ctx.send(
+            return await interaction.response.send_message(
                 "Daily notifier is aleady disabled. If "
                 "you were trying to enable it, make sure to fill out "
                 "the `channel` argument.",
                 hidden=True)
         if enabled and not channel:
-            await self.bot.database.set(ctx.guild, {"daily.on": False}, self)
-            return await ctx.send("Daily notifier disabled.")
-        if not ctx.guild.me.permissions_in(channel).send_messages:
-            return await ctx.send(
+            await self.bot.database.set(interaction.guild, {"daily.on": False},
+                                        self)
+            return await interaction.response.send_message(
+                "Daily notifier disabled.")
+        if not interaction.guild.me.permissions_in(channel).send_messages:
+            return await interaction.response.send_message(
                 "I do not have permissions to send "
                 f"messages to {channel.mention}",
                 hidden=True)
-        if not ctx.guild.me.permissions_in(channel).embed_links:
-            return await ctx.send(
+        if not interaction.guild.me.permissions_in(channel).embed_links:
+            return await interaction.response.send_message(
                 "I do not have permissions to embed links in "
                 f"{channel.mention}",
                 hidden=True)
@@ -153,31 +120,19 @@ class NotiifiersMixin:
             embed=embed,
             components=None)
 
-    @cog_ext.cog_subcommand(
-        base="notifier",
-        name="news",
-        base_description="Notifier Commands",
-        options=[{
-            "name":
-            "channel",
-            "description":
-            "The channel to post to. Leave blank to disable, required "
-            "otherwise",
-            "type":
-            SlashCommandOptionType.CHANNEL,
-            "required":
-            False,
-            "channel_types": [0]
-        }])
-    async def newsfeed(self, ctx, *, channel=None):
+    @notifier_group.command(name="news")
+    @app_commands.checks.has_permissions(manage_guild=True)
+    @app_commands.describe(enabled="Enable or disable game news notifier. If "
+                           "enabling, channel argument must be set",
+                           channel="The channel to post to.")
+    async def newsfeed(self,
+                       interaction: discord.Interaction,
+                       enabled: bool,
+                       channel: discord.TextChannel = None):
         """Automatically sends news from guildwars2.com to a specified channel"""
-        if not ctx.guild:
-            return await ctx.send(
-                "This command can only be used in servers at the time.",
-                hidden=True)
-        if not ctx.author.guild_permissions.manage_guild:
-            return await ctx.send("You need the `manage server` permission "
-                                  "to use this command.")
+
+        # IF ENABLED AND NOT CHANNEL
+
         doc = await self.bot.database.get(ctx.guild, self)
         enabled = doc.get("news", {}).get("on", False)
         if not enabled and not channel:
@@ -203,30 +158,18 @@ class NotiifiersMixin:
         await self.bot.database.set(ctx.guild, settings, self)
         await ctx.send(f"I will now send news to {channel.mention}.")
 
-    @cog_ext.cog_subcommand(
-        base="notifier",
-        name="update",
-        base_description="Notifier Commands",
-        options=[{
-            "name":
-            "channel",
-            "description":
-            "The channel to post to. Leave blank to disable, required "
-            "otherwise",
-            "type":
-            SlashCommandOptionType.CHANNEL,
-            "required":
-            False,
-            "channel_types": [0]
-        }, {
-            "name": "mention",
-            "description":
-            "The mention to ping when posting the notification. Can be a role, or everyone, or even a user.",
-            "type": SlashCommandOptionType.MENTIONABLE,
-            "required": False,
-            "channel_types": [0]
-        }])
-    async def updatenotifier(self, ctx, *, channel=None, mention=None):
+    @notifier_group.command(name="update")
+    @app_commands.checks.has_permissions(manage_guild=True)
+    @app_commands.describe(
+        enabled="Enable or disable game update notifier. If "
+        "enabling, channel argument must be set",
+        channel="The channel to post to.",
+        mention="The role to ping when posting the notification..")
+    async def updatenotifier(self,
+                             ctx,
+                             enabled: bool,
+                             channel: discord.TextChannel = None,
+                             mention: discord.Role = None):
         """Send a notification whenever the game is updated"""
         if not ctx.guild:
             return await ctx.send(
@@ -265,35 +208,20 @@ class NotiifiersMixin:
         await ctx.send(
             f"I will now send update notifications to {channel.mention}.")
 
-    @cog_ext.cog_subcommand(
-        base="notifier",
-        name="bosses",
-        base_description="Notifier Commands",
-        options=[{
-            "name":
-            "channel",
-            "description":
-            "The channel to post to. Leave blank to disable, required "
-            "otherwise",
-            "type":
-            SlashCommandOptionType.CHANNEL,
-            "required":
-            False,
-            "channel_types": [0]
-        }, {
-            "name":
-            "edit",
-            "description":
-            "Edit the previous message instead of deleting it. If not, posts "
-            "a new message. Defaults to False",
-            "type":
-            SlashCommandOptionType.BOOLEAN,
-            "required":
-            False
-        }])
-    async def bossnotifier(self, ctx, *, channel=None, edit=False):
+    @notifier_group.command(name="bosses")
+    @app_commands.checks.has_permissions(manage_guild=True)
+    @app_commands.describe(enabled="Enable or disable boss notifier. "
+                           "If enabling, channel argument must be set",
+                           channel="The channel to post to.",
+                           edit="Edit the previous message instead of "
+                           "deleting it. If not, posts a new message.")
+    async def bossnotifier(self,
+                           interaction: discord.Interaction,
+                           enabled: bool,
+                           channel: discord.TextChannel = None,
+                           edit: bool = False):
         """Send the next two bosses every 15 minutes to a channel"""
-        await ctx.defer()
+        await interaction.response.defer()
         key = "bossnotifs"
         if not ctx.guild:
             return await ctx.send(
@@ -324,37 +252,20 @@ class NotiifiersMixin:
         await ctx.send(
             f"I will now send boss notifications to {channel.mention}.")
 
-    @cog_ext.cog_subcommand(
-        base="notifier",
-        name="mystic_forger",
-        base_description="Notifier Commands",
-        options=[{
-            "name":
-            "reminder_frequency",
-            "description":
-            "Select when you want to be notified.",
-            "type":
-            SlashCommandOptionType.STRING,
-            "choices": [{
-                "value":
-                "on_reset",
-                "name":
-                "Get a message about Mystic Forger when "
-                "it becomes active."
-            }, {
-                "value":
-                "24_hours_before",
-                "name":
-                "Get a message about Mystic Forger when it "
-                "becomes active AND 24 hours before that."
-            }, {
-                "value": "disable",
-                "name": "Disable the Mystic Forger reminder."
-            }],
-            "required":
-            True
-        }])
-    async def mystic_forger_notifier(self, ctx, reminder_frequency):
+    @notifier_group.command(name="mystic_forger")
+    @app_commands.describe(
+        reminder_frequency="Select when you want to be notified.")
+    @app_commands.choices(reminder_frequency=[
+        Choice(
+            name="Get a message about Mystic Forger when it becomes active.",
+            value="on_reset"),
+        Choice(name="Get a message about Mystic Forger when "
+               "it becomes active AND 24 hours before that.",
+               value="24_hours_before"),
+        Choice(name="Disable the Mystic Forger reminder.", value="disable")
+    ])
+    async def mystic_forger_notifier(self, interaction: discord.Interaction,
+                                     reminder_frequency: str):
         """Get a personal reminder whenever Daily Mystic Forget becomes active. Get those Mystic Coins!"""
         await ctx.defer(hidden=True)
         doc = await self.bot.database.get(ctx.author, self)
@@ -408,7 +319,7 @@ class NotiifiersMixin:
         embed.timestamp = datetime.datetime.utcnow()
         embed.set_footer(text="You can disable "
                          "these notifications with /notifier mystic_forger",
-                         icon_url=self.bot.user.avatar_url)
+                         icon_url=self.bot.user.avatar.url)
         cursor = self.bot.database.iter("users", {"mystic_forger": search},
                                         self)
         async for doc in cursor:

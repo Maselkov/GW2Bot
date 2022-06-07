@@ -6,15 +6,13 @@ import time
 
 import discord
 from discord.ext import commands
-from discord_slash.context import ComponentContext
-from discord_slash.utils.manage_components import (create_actionrow,
-                                                   create_select,
-                                                   create_select_option,
-                                                   wait_for_component)
+from discord import app_commands
+from discord.app_commands import Choice
 from pymongo import ReplaceOne
 from pymongo.errors import BulkWriteError
 
 from .exceptions import APIError, APIKeyError
+from .utils.db import prepare_search
 
 
 class DatabaseMixin:
@@ -347,6 +345,38 @@ class DatabaseMixin:
         print("Done")
         self.log.info("Database done! Time elapsed: {} seconds".format(end -
                                                                        start))
+
+    async def item_autocomplete(self, interaction: discord.Interaction,
+                                current: str):
+
+        def consolidate_duplicates(items):
+            unique_items = collections.OrderedDict()
+            for item in items:
+                item_tuple = item["name"], item["rarity"], item["type"]
+                if item_tuple not in unique_items:
+                    unique_items[item_tuple] = []
+                unique_items[item_tuple].append(item["_id"])
+            unique_list = []
+            for k, v in unique_items.items():
+                unique_list.append({
+                    "name": k[0],
+                    "rarity": k[1],
+                    "ids": " ".join(v),
+                    "type": k[2]
+                })
+            return unique_list
+
+        query = prepare_search(current)
+        query = {
+            "name": query,
+        }
+        items = await self.db.items.find(query).to_list(25)
+        items = sorted(consolidate_duplicates(current),
+                       key=lambda c: c["name"])
+        return [
+            Choice(name=f"{it['name']} - {it['rarity']}", value=it["ids"])
+            for it in items
+        ]
 
     async def itemname_to_id(self,
                              ctx,

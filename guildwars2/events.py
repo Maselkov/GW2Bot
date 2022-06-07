@@ -3,78 +3,74 @@ import datetime
 
 import discord
 from discord.ext import commands, tasks
-from discord_slash import cog_ext
-from discord_slash.context import ComponentContext
-from discord_slash.model import ButtonStyle, SlashCommandOptionType
-from discord_slash.utils.manage_components import (create_actionrow,
-                                                   create_button)
+from discord import app_commands
+from discord.app_commands import Choice
 
 UTC_TZ = datetime.timezone.utc
+
+ET_CATEGORIES = [{
+    "value": "hot",
+    "name": "HoT - Heart of Thorns"
+}, {
+    "value": "pof",
+    "name": "PoF - Path of Fire"
+}, {
+    "value": "ibs",
+    "name": "IBS - The Icebrood Saga"
+}, {
+    "value": "eod",
+    "name": "EoD- End of Dragons"
+}, {
+    "value": "day",
+    "name": "Day/night cycle"
+}, {
+    "value": "bosses",
+    "name": "World bosses"
+}]
 
 
 class EventsMixin:
 
-    @cog_ext.cog_slash(
-        options=[{
-            "name":
-            "category",
-            "description":
-            "Event timer category",
-            "type":
-            SlashCommandOptionType.STRING,
-            "required":
-            True,
-            "choices": [
-                {
-                    "value": "hot",
-                    "name": "HoT - Heart of Thorns"
-                },
-                {
-                    "value": "pof",
-                    "name": "PoF - Path of Fire"
-                },
-                {
-                    "value": "ibs",
-                    "name": "IBS - The Icebrood Saga"
-                },
-                {
-                    "value": "eod",
-                    "name": "EoD- End of Dragons"
-                },
-                {
-                    "value": "day",
-                    "name": "Day/night cycle"
-                },
-                {
-                    "value": "bosses",
-                    "name": "World bosses"
-                },
-            ],
-        }], )
-    async def et(self, ctx, category):
+    @app_commands.command()
+    @app_commands.describe(category="Event timer category")
+    @app_commands.choices(category=[Choice(**c) for c in ET_CATEGORIES])
+    async def et(self, interaction: discord.Interaction, category: str):
         """Event timer"""
         if category == "bosses":
             embed = self.schedule_embed()
         else:
-            embed = await self.timer_embed(ctx, category)
-        await ctx.send(embed=embed)
+            embed = await self.timer_embed(interaction, category)
+        await interaction.response.send_message(embed=embed)
 
-    @cog_ext.cog_slash(options=[
-        {
-            "name": "event_name",
-            "description":
-            "Event name. Examples: Shadow Behemoth. Gerent Preparation",
-            "type": SlashCommandOptionType.STRING,
-            "required": True,
-        },
-        {
-            "name": "minutes_before_event",
-            "description":
-            "The number of minutes before the event that you'll be notified at",
-            "type": SlashCommandOptionType.INTEGER,
-            "required": True,
-        },
-    ])
+    async def event_name_autocomplete(self, interaction: discord.Interaction,
+                                      current):
+        if not current:
+            return []
+        current = current.lower()
+        names = set()
+        timers = self.gamedata["event_timers"]
+        for category in timers:
+            if category == "bosses":
+                subtypes = "normal", "hardcore"
+                for subtype in subtypes:
+                    for boss in timers[category][subtype]:
+                        names.add(boss["name"])
+            else:
+                for subcategory in timers[category]:
+                    for event in subcategory["phases"]:
+                        if event["name"]:
+                            names.add(event["name"])
+        return sorted([
+            Choice(name=n, value=n) for n in names if current in n.lower()
+        ][:25],
+                      key=lambda c: c.name)
+
+    @app_commands.command()
+    @app_commands.describe(
+        event_name="Event name. Examples: Shadow Behemoth. Gerent Preparation",
+        minutes_before_event="The number of minutes before "
+        "the event that you'll be notified at")
+    @app_commands.autocomplete(event_name=event_name_autocomplete)
     async def event_reminder(self,
                              ctx,
                              event_name: str,
@@ -273,7 +269,7 @@ class EventsMixin:
             )
         data.set_footer(
             text="The timestamps are dynamically adjusted to your timezone",
-            icon_url=self.bot.user.avatar_url,
+            icon_url=self.bot.user.avatar.url,
         )
         return data
 
@@ -333,7 +329,7 @@ class EventsMixin:
                      "\nNext phase: **{}** {}".format(next_phase, timestamp))
             embed.add_field(name=location["name"], value=value, inline=False)
         embed.set_footer(text=self.bot.user.name,
-                         icon_url=self.bot.user.avatar_url)
+                         icon_url=self.bot.user.avatar.url)
         return embed
 
     async def get_timezone(self, guild):
@@ -393,6 +389,7 @@ class EventsMixin:
                         duration_so_far += phase["duration"]
                 return (duration_so_far - position) * 60
 
+    # TODO
     async def process_reminder(self, user, reminder, i):
         time = self.get_time_until_event(reminder)
         if time < reminder["time"] + 30:
@@ -458,7 +455,7 @@ class EventsMixin:
         await self.bot.wait_until_ready()
 
     @commands.Cog.listener()
-    async def on_component(self, ctx: ComponentContext):
+    async def on_component(self, ctx):
         if ctx.guild:
             return
         update_result = await self.bot.database.set(

@@ -1,9 +1,9 @@
 import discord
 import io
+from discord import app_commands
+from discord.app_commands import Choice
 
-from discord_slash import cog_ext
-from discord_slash.model import SlashCommandOptionType
-
+from cogs.guildwars2.utils.db import prepare_search
 try:
     import matplotlib
     matplotlib.use("agg")
@@ -61,43 +61,43 @@ def generate_population_graph(data):
 
 
 class WvwMixin:
-    @cog_ext.cog_subcommand(
-        base="wvw",
-        name="info",
-        base_description="WvW related commands",
-        options=[{
-            "name": "world",
-            "description":
-            "World name. Leave blank to use your account's world",
-            "type": SlashCommandOptionType.STRING,
-            "required": False
-        }])
-    async def wvw_info(self, ctx, *, world: str = None):
+
+    wvw_group = app_commands.Group(name="wvw",
+                                   description="WvW related commands")
+
+    async def world_autocomplete(self, interaction: discord.Interaction,
+                                 current: str):
+        if not current:
+            return []
+        current = current.lower()
+        query = prepare_search(current)
+        query = {"name": query, "professions": {"$ne": None}}
+        items = await self.db.worlds.find(query).to_list(25)
+        return [Choice(name=it["name"], value=it["_id"]) for it in items]
+
+    @wvw_group.command(name="info")
+    @app_commands.describe(
+        world="World name. Leave blank to use your account's world")
+    @app_commands.autocomplete(world=world_autocomplete)
+    async def wvw_info(self,
+                       interaction: discord.Interaction,
+                       *,
+                       world: str = None):
         """Info about a world. Defaults to account"s world"""
-        user = ctx.author
-        await ctx.defer()
+        user = interaction.user
+        await interaction.response.defer()
         if not world:
-            try:
-                endpoint = "account"
-                results = await self.call_api(endpoint, user)
-                wid = results["world"]
-            except APIKeyError as e:
-                return await ctx.send(
-                    "No world name or key associated with your account")
-            except APIError as e:
-                return await self.error_handler(ctx, e)
+            endpoint = "account"
+            results = await self.call_api(endpoint, user)
+            wid = results["world"]
         else:
-            wid = await self.get_world_id(world)
+            wid = world
         if not wid:
-            return await ctx.send("Invalid world name")
-        try:
-            endpoints = [
-                "wvw/matches?world={0}".format(wid),
-                "worlds?id={0}".format(wid)
-            ]
-            matches, worldinfo = await self.call_multiple(endpoints)
-        except APIError as e:
-            return await self.error_handler(ctx, e)
+            return await interaction.followup.send("Invalid world name")
+        endpoints = [
+            "wvw/matches?world={0}".format(wid), "worlds?id={0}".format(wid)
+        ]
+        matches, worldinfo = await self.call_multiple(endpoints)
         linked_worlds = []
         worldcolor = "green"
         for key, value in matches["all_worlds"].items():
@@ -138,38 +138,31 @@ class WvwMixin:
         if MATPLOTLIB_AVAILABLE:
             graph = await self.get_population_graph(worldinfo)
             data.set_image(url=f"attachment://{graph.filename}")
-            return await ctx.send(embed=data, file=graph)
-        await ctx.send(embed=data)
+            return await interaction.followup.send(embed=data, file=graph)
+        await interaction.followup.send(embed=data)
 
-    @cog_ext.cog_subcommand(
-        base="wvw",
-        name="poptrack",
-        base_description="WvW related commands",
-        options=[{
-            "name": "world",
-            "description":
-            "World name. Leave blank to use your account's world",
-            "type": SlashCommandOptionType.STRING,
-            "required": True
-        }])
-    async def wvw_population_track(self, ctx, *, world):
+    @wvw_group.command(name="population_track")
+    @app_commands.describe(world="World to track.")
+    @app_commands.autocomplete(world=world_autocomplete)
+    async def wvw_population_track(self, interaction: discord.Interaction,
+                                   world: str):
         """Receive a notification when the world is no longer full"""
-        user = ctx.author
-        await ctx.defer(hidden=True)
-        wid = await self.get_world_id(world)
+        user = interaction.user
+        await interaction.response.defer(ephemeral=True)
+        wid = world
         if not wid:
-            return await ctx.send("Invalid world name")
+            return await interaction.followup.send("Invalid world name")
         doc = await self.bot.database.get_user(user, self)
         if doc and wid in doc.get("poptrack", []):
-            return await ctx.send("You're already tracking this world")
-        try:
-            results = await self.call_api("worlds/{}".format(wid))
-        except APIError as e:
-            return await self.error_handler(ctx, e)
+            return await interaction.followup.send(
+                "You're already tracking this world")
+        results = await self.call_api("worlds/{}".format(wid))
         if results["population"] != "Full":
-            return await ctx.send("This world is currently not full!")
-        await ctx.send("You will be notiifed when {} is no longer full "
-                       "".format(world.title()))
+            return await interaction.followup.send(
+                "This world is currently not full!")
+        await interaction.followup.send(
+            "You will be notiifed when {} is no longer full "
+            "".format(world.title()))
         await self.bot.database.set(user, {"poptrack": wid},
                                     self,
                                     operator="$push")

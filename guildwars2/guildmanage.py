@@ -1,37 +1,33 @@
 import asyncio
+from code import interact
 import discord
 from discord.ext import tasks
-from discord_slash import cog_ext
-from discord_slash.model import ButtonStyle, SlashCommandOptionType
-from discord_slash.utils.manage_components import (create_actionrow,
-                                                   create_button,
-                                                   wait_for_component)
+from discord import app_commands
 
 
 class GuildManageMixin:
 
-    @cog_ext.cog_subcommand(base="server",
-                            name="force_account_names",
-                            base_description="Server management commands")
-    async def server_force_account_names(self, ctx, enabled: bool):
+    server_group = app_commands.Group(name="server",
+                                      description="Server management commands",
+                                      guild_only=True)
+
+    @server_group.command(name="force_account_names")
+    @app_commands.checks.has_permissions(manage_nicknames=True)
+    @app_commands.checks.bot_has_permissions(manage_nicknames=True)
+    async def server_force_account_names(self,
+                                         interaction: discord.Interaction,
+                                         enabled: bool):
         """Automatically change nicknames to in-game names"""
-        guild = ctx.guild
-        if not ctx.guild:
-            return await ctx.send("This command can only be used in servers.",
-                                  hidden=True)
-        if not ctx.author.guild_permissions.manage_nicknames:
-            return await ctx.send("You need the manage nicknames permission "
-                                  "to enable this feature.")
+        guild = interaction.guild
         doc = await self.bot.database.get(guild, self)
         if doc and enabled and doc.get("forced_account_names"):
-            return await ctx.send("Forced account names are already enabled")
+            return await interaction.response.send_message(
+                "Forced account names are already enabled")
         if not enabled:
             await self.bot.database.set(guild, {"force_account_names": False},
                                         self)
-            return await ctx.send("Forced account names disabled")
-        if not ctx.guild.me.guild_permissions.manage_nicknames:
-            return await ctx.send("I need the manage nicknames permission "
-                                  "for this feature")
+            return await interaction.response.send_message(
+                "Forced account names disabled")
 
         button = create_button(style=ButtonStyle.green,
                                emoji="✅",
@@ -59,105 +55,72 @@ class GuildManageMixin:
             "bot cannot change nicknames for roles above the bot.",
             components=None)
 
-    @cog_ext.cog_subcommand(
-        base="server",
-        name="preview_chat_links",
-        base_description="Server management commands",
-        options=[{
-            "name": "enabled",
-            "description": "Enable or disable automatic chat link preview",
-            "type": SlashCommandOptionType.BOOLEAN,
-            "required": True,
-        }])
-    async def previewchatlinks(self, ctx, *, enabled):
+    @server_group.command(name="preview_chat_links")
+    @app_commands.checks.has_permissions(manage_guild=True)
+    @app_commands.describe(
+        enabled="Enable or disable automatic chat link preview")
+    async def previewchatlinks(self, interaction: discord.Interaction,
+                               enabled: bool):
         """Enable or disable automatic GW2 chat link preview"""
-        if not ctx.guild:
-            return await ctx.send("This command can only be used in a server.",
-                                  hidden=True)
-        if not ctx.author.guild_permissions.manage_guild:
-            return await ctx.send(
-                "You need the manage server permission to use this command.",
-                hidden=True)
-        doc = await self.bot.database.get(ctx.guild, self)
+        guild = interaction.guild
+        doc = await self.bot.database.get(interaction.guild, self)
         disabled = doc.get("link_preview_disabled", False)
         if disabled and not enabled:
-            return await ctx.send("Chat link preview is aleady disabled.",
-                                  hidden=True)
+            return await interaction.response.send_message(
+                "Chat link preview is aleady disabled.", hidden=True)
         if not disabled and enabled:
-            return await ctx.send("Chat link preview is aleady enabled.",
-                                  hidden=True)
+            return await interaction.response.send_message(
+                "Chat link preview is aleady enabled.", hidden=True)
         if not disabled and not enabled:
-            self.chatcode_preview_opted_out_guilds.add(ctx.guild.id)
-            return await ctx.send("Chat link preview is now disabled.",
-                                  hidden=True)
+            self.chatcode_preview_opted_out_guilds.add(guild.id)
+            return await interaction.response.send_message(
+                "Chat link preview is now disabled.", hidden=True)
         if disabled and enabled:
             await self.bot.database.set_guild(
-                ctx.guild, {"link_preview_disabled": not enabled}, self)
+                guild, {"link_preview_disabled": not enabled}, self)
             await self.bot.database.set_guild(
-                ctx.guild, {"link_preview_disabled": not enabled}, self)
+                guild, {"link_preview_disabled": not enabled}, self)
             try:
-                self.chatcode_preview_opted_out_guilds.remove(ctx.guild.id)
+                self.chatcode_preview_opted_out_guilds.remove(guild.id)
             except KeyError:
                 pass
-            return await ctx.send("Chat link preview is now enabled.",
-                                  hidden=True)
+            return await interaction.response.send_message(
+                "Chat link preview is now enabled.", hidden=True)
 
-    @cog_ext.cog_subcommand(base="server",
-                            name="sync",
-                            base_description="Server management commands")
-    async def sync_now(self, ctx):
+    @server_group.command(name="sync_now")
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def sync_now(self, interaction: discord.Interaction):
         """Force a sync for any Guildsyncs and Worldsyncs you have"""
-        if not ctx.guild:
-            return await ctx.send("This command can only be used in a server.",
-                                  hidden=True)
-        if not ctx.author.guild_permissions.manage_guild:
-            return await ctx.send(
-                "You need the manage server permission to use this command.",
-                hidden=True)
-        await ctx.send("Syncs scheduled!")
-        await self.guildsync_now(ctx)
-        await self.worldsync_now(ctx)
+        guild = interaction.guild
+        await interaction.response.send_message("Syncs scheduled!")
+        await self.guildsync_now(interaction)
+        await self.worldsync_now(interaction)
 
-    @cog_ext.cog_subcommand(
-        base="server",
-        name="api_key_role",
-        base_description="Server management commands",
-        options=[{
-            "name": "enabled",
-            "description":
-            "Enable or disable giving members with an API key a role",
-            "type": SlashCommandOptionType.BOOLEAN,
-            "required": True,
-        }, {
-            "name": "role",
-            "description":
-            "The role that will be given to members with an API key added",
-            "type": SlashCommandOptionType.ROLE,
-            "required": True,
-        }])
-    async def server_key_sync(self, ctx, enabled: bool, role: discord.Role):
+    @server_group.command(name="api_key_role")
+    @app_commands.checks.has_permissions(manage_roles=True)
+    @app_commands.checks.bot_has_permissions(manage_roles=True)
+    @app_commands.describe(
+        enabled="Enable or disable giving members with an API key a role",
+        role="The role that will be given to members with an API key added")
+    async def server_key_sync(self,
+                              interaction: discord.Interaction,
+                              enabled: bool,
+                              role: discord.Role = None):
         """A feature to automatically add a role to members that have added an API key to the bot."""
-        guild = ctx.guild
-        if not ctx.guild:
-            return await ctx.send("This command can only be used in servers.",
-                                  hidden=True)
-        if enabled:
-            if not ctx.author.guild_permissions.manage_roles:
-                return await ctx.send("You need the manage roles permission "
-                                      "to enable this feature.")
-            if not ctx.guild.me.guild_permissions.manage_roles:
-                return await ctx.send("I need the manage roles permission "
-                                      "for this feature")
+        guild = interaction.guild
         await self.bot.database.set(guild, {
             "key_sync.enabled": enabled,
             "key_sync.role": role.id
         }, self)
         if enabled:
-            await ctx.send(
+            if not role:
+                return await interaction.response.send_message(
+                    "Please specify a role.")
+            await interaction.response.send_message(
                 "Key sync enabled. Members with valid API keys will now be given the selected role"
             )
             return await self.key_sync_guild(guild)
-        await ctx.send("Key sync disabled.")
+        await interaction.response.send_message("Key sync disabled.")
 
     @tasks.loop(minutes=5)
     async def key_sync_task(self):

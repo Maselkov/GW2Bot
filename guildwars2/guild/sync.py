@@ -1,20 +1,14 @@
 from __future__ import annotations
-
 import asyncio
 from datetime import datetime
 
 import discord
+from discord import app_commands
+from discord.app_commands import Choice
 from discord.ext import commands, tasks
-from discord_slash import cog_ext, ComponentContext
-from discord_slash.model import ButtonStyle, SlashCommandOptionType
 
 from ..exceptions import (APIError, APIForbidden, APIInvalidKey, APIKeyError,
                           APINotFound)
-from discord_slash.utils.manage_components import (create_actionrow,
-                                                   create_button,
-                                                   create_select,
-                                                   create_select_option,
-                                                   wait_for_component)
 
 PROMPT_EMOJIS = ["✅", "❌"]
 GUILDSYNC_LIMIT = 8
@@ -34,7 +28,13 @@ GUILDSYNC_LIMIT = 8
 
 class GuildSync:
     # The good ol switcheroo
+
+    guildsync_group = app_commands.Group(
+        name="guildsync",
+        description="Sync your in-game guild roster with server roles")
+
     class SyncGuild:
+
         def __init__(self, cog, doc, guild) -> None:
             self.doc_id = doc["_id"]
             self.guild = guild
@@ -190,6 +190,7 @@ class GuildSync:
                 await self.save(error=True)
 
     class SyncTarget:
+
         @classmethod
         async def create(cls, cog, member) -> GuildSync.SyncTarget:
             self = cls()
@@ -263,55 +264,31 @@ class GuildSync:
             if to_remove:
                 await self.remove_roles(to_remove)
 
-    @cog_ext.cog_subcommand(
-        base="guildsync",
-        name="edit",
-        base_description="Sync your in-game guild roster with server roles",
-        options=[{
-            "name":
-            "operation",
-            "description":
-            "Select the operation. You will be prompted to select the sync "
-            "after the command",
-            "type":
-            SlashCommandOptionType.STRING,
-            "choices": [{
-                "value":
-                "ranks",
-                "name":
-                "Toggle syncing ranks.  If disabled, this will delete the "
-                "role created by the bot."
-            }, {
-                "value":
-                "guild_role",
-                "name":
-                "Toggle guild role. If disabled, this will delete the role "
-                "created by the bot."
-            }, {
-                "value":
-                "change_key",
-                "name":
-                "Change API key. Make sure to fill out the api_key optional "
-                "argument"
-            }, {
-                "value": "delete",
-                "name": "Delete a guildsync"
-            }],
-            "required":
-            True
-        }, {
-            "name":
-            "api_key",
-            "description":
-            "The api key to use for authorization. Use only if you've "
-            "selected it as the authentication_method.",
-            "type":
-            SlashCommandOptionType.STRING,
-            "required":
-            False
-        }])
-    async def guildsync_edit(self, ctx, operation, api_key=None):
+    @guildsync_group.command(name="edit")
+    @app_commands.describe(
+        api_key="The api key to use for authorization. Use only if "
+        "you've selected it as the authentication_method.",
+        operation="Select the operation. You will be prompted to "
+        "select the sync after the command")
+    @app_commands.choices(operation=[
+        Choice(name="Toggle syncing ranks.  If disabled, this will delete "
+               "the role created by the bot.",
+               value="ranks"),
+        Choice(value="guild_role",
+               name="Toggle guild role. If disabled, this will delete "
+               "the role created by the bot."),
+        Choice(name="Change API key. Make sure to "
+               "fill out the api_key optional argument",
+               value="change_key"),
+        Choice(name="Delete a guildsync", value="change_key")
+    ])
+    # TODO autofill guildsync
+    async def guildsync_edit(self,
+                             interaction: discord.Interaction,
+                             operation: str,
+                             api_key: str = None):
         """Change settings and delete guildsyncs."""
+
         def bool_to_on(setting):
             if setting:
                 return "**ON**"
@@ -395,7 +372,7 @@ class GuildSync:
             if not sync.tag_enabled and initial_tag:
                 lines[1] = f"*{lines[1]}*"
         elif operation == "change_key":
-            await ctx.defer()
+            await interaction.response.defer()
             verified = await self.verify_leader_permissions(api_key, sync.id)
             if not verified:
                 if answer:
@@ -434,97 +411,51 @@ class GuildSync:
             await ctx.send("Successfully edited!", embed=embed)
         self.schedule_guildsync(ctx.guild, 1)
 
-    @cog_ext.cog_subcommand(
-        base="guildsync",
-        name="add",
-        base_description="Sync your in-game guild roster with server roles",
-        options=[{
-            "name": "guild_name",
-            "description":
-            "The guild name of the guild you wish to sync with.",
-            "type": SlashCommandOptionType.STRING,
-            "required": True
-        }, {
-            "name":
-            "sync_type",
-            "description":
-            "Select how you want the synced roles to behave.",
-            "type":
-            SlashCommandOptionType.STRING,
-            "choices": [{
-                "value": "ranks",
-                "name": "Sync only the in-game ranks"
-            }, {
-                "value":
-                "guild_role",
-                "name":
-                "Give every member of your guild a single, guild "
-                "specific role."
-            }, {
-                "value":
-                "ranks_and_role",
-                "name":
-                "Sync both the ranks, and give every member a guild "
-                "specific role"
-            }],
-            "required":
-            True
-        }, {
-            "name":
-            "authentication_method",
-            "description":
-            "Select how you want to authenticate the leadership of the guild",
-            "type":
-            SlashCommandOptionType.STRING,
-            "choices": [{
-                "value":
-                "use_key",
-                "name":
-                "Use your own currently active API key. You need to be the "
-                "guild leader"
-            }, {
-                "value":
-                "prompt_user",
-                "name":
-                "Have the bot prompt another user for authorization. If "
-                "selected, fill out user_to_prompt argument"
-            }, {
-                "value":
-                "enter_key",
-                "name":
-                "Enter a key. If selected, fill out the api_key argument"
-            }],
-            "required":
-            True
-        }, {
-            "name":
-            "user_to_prompt",
-            "description":
-            "The user to prompt for authorization. Use only if you've "
-            "selected it as the authentication_method.",
-            "type":
-            SlashCommandOptionType.USER,
-            "required":
-            False
-        }, {
-            "name":
-            "api_key",
-            "description":
-            "The api key to use for authorization. Use only if you've "
-            "selected it as the authentication_method.",
-            "type":
-            SlashCommandOptionType.STRING,
-            "required":
-            False
-        }])
+    @guildsync_group.command(name="add")
+    @app_commands.guild_only()
+    @app_commands.checks.has_permissions(manage_guild=True, manage_roles=True)
+    @app_commands.checks.bot_has_permissions(manage_roles=True)
+    @app_commands.choices(
+        authentication_method=[
+            Choice(name="Use your own currently active API key. "
+                   "You need to be the guild leader",
+                   value="use_key"),
+            Choice(
+                name="Have the bot prompt another user for "
+                "authorization. If selected, fill out user_to_prompt argument",
+                value="prompt_user"),
+            Choice(
+                name="Enter a key. If selected, fill out the api_key argument",
+                value="enter_key")
+        ],
+        sync_type=[
+            Choice(name="Sync only the in-game ranks", value="ranks"),
+            Choice(
+                name=
+                "Give every member of your guild a single, guild specific role.",
+                value="guild_role"),
+            Choice(
+                name=
+                "Sync both the ranks, and give every member a guild specific role",
+                value="ranks_and_role")
+        ])
+    @app_commands.describe(
+        guild_name="The guild name of the guild you wish to sync with.",
+        authentication_method=
+        "Select how you want to authenticate the leadership of the guild",
+        sync_type="Select how you want the synced roles to behave.",
+        user_to_prompt=
+        "The user to prompt for authorization. Use only if you've selected it as the authentication_method.",
+        api_key=
+        "The api key to use for authorization. Use only if you've selected it as the authentication_method."
+    )
     async def guildsync_add(self,
-                            ctx,
-                            *,
-                            guild_name,
-                            sync_type,
-                            authentication_method,
-                            user_to_prompt=None,
-                            api_key=None):
+                            interaction: discord.Interaction,
+                            guild_name: str,
+                            sync_type: str,
+                            authentication_method: str,
+                            user_to_prompt: discord.User = None,
+                            api_key: str = None):
         """Sync your in-game guild ranks with Discord. Add a guild."""
         if not ctx.guild:
             return await ctx.send("This command can only be used in a server.",
@@ -543,7 +474,7 @@ class GuildSync:
                 hidden=True)
         endpoint_id = "guild/search?name=" + guild_name.title().replace(
             ' ', '%20')
-        await ctx.defer()
+        await interaction.response.defer()
         try:
             guild_ids = await self.call_api(endpoint_id)
             guild_id = guild_ids[0]
@@ -696,17 +627,13 @@ class GuildSync:
         await destination.send("Guildsync succesfully added!")
         self.schedule_guildsync(guild, 0)
 
-    @cog_ext.cog_subcommand(
-        base="guildsync",
-        name="toggle",
-        base_description="Sync your in-game guild roster with server roles",
-        options=[{
-            "name": "enabled",
-            "description": "Enable or disable guildsync for this server",
-            "type": SlashCommandOptionType.BOOLEAN,
-            "required": True
-        }])
-    async def sync_toggle(self, ctx, enabled):
+    @guildsync_group.command(name="toggle")
+    @app_commands.guild_only()
+    @app_commands.describe(
+        enabled="Enable or disable guildsync for this server")
+    @app_commands.checks.has_permissions(manage_guild=True, manage_roles=True)
+    async def sync_toggle(self, interaction: discord.Interaction,
+                          enabled: bool):
         """Global toggle for guildsync - does not wipe the settings"""
         if not ctx.guild:
             return await ctx.send("This command can only be used in a server.",
@@ -731,18 +658,14 @@ class GuildSync:
         """Force a synchronization"""
         self.schedule_guildsync(ctx.guild, 0)
 
-    @cog_ext.cog_subcommand(
-        base="guildsync",
-        name="purge",
-        base_description="Sync your in-game guild roster with server roles",
-        options=[{
-            "name": "enabled",
-            "description": "Enable or disable purge. You'll be asked to "
-            "confirm your selection afterwards.",
-            "type": SlashCommandOptionType.BOOLEAN,
-            "required": True
-        }])
-    async def sync_purge(self, ctx, enabled):
+    @guildsync_group.command(name="purge")
+    @app_commands.guild_only()
+    @app_commands.describe(
+        enabled="Enable or disable purge. You'll be asked to confirm your "
+        "selection afterwards.")
+    @app_commands.checks.has_permissions(manage_guild=True, manage_roles=True)
+    async def sync_purge(self, interaction: discord.Interaction,
+                         enabled: bool):
         """Toggle kicking of users that are not in any of the synced guilds."""
         if not ctx.guild:
             return await ctx.send("This command can only be used in a server.",
@@ -906,7 +829,7 @@ class GuildSync:
                 "the server.",
                 components=None,
                 embed=None)
-        await ctx.defer()
+        await interaction.response.defer()
         try:
             key = await self.fetch_key(ctx.author, scopes=["guilds"])
             key = key["key"]

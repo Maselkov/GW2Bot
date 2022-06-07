@@ -1,4 +1,5 @@
 import asyncio
+import collections
 import datetime
 import re
 from collections import OrderedDict, defaultdict
@@ -6,78 +7,76 @@ from itertools import chain
 
 import discord
 import pymongo
-from discord_slash import SlashContext, cog_ext
-from discord_slash.utils.manage_components import (ComponentContext,
-                                                   create_actionrow,
-                                                   create_select,
-                                                   create_select_option,
-                                                   wait_for_component)
+from discord import app_commands
+from discord.app_commands import Choice
 
 from .exceptions import APIError, APINotFound
 from .utils.chat import embed_list_lines
+from .utils.db import prepare_search
 
 
 class AccountMixin:
-    @cog_ext.cog_slash()
-    async def account(self, ctx: SlashContext):
+
+    @app_commands.command()
+    async def account(self, interaction: discord.Interaction):
         """General information about your account
 
         Required permissions: account
         """
-        await ctx.defer()
-        user = ctx.author
+        await interaction.response.defer()
+        user = interaction.user
         try:
             doc = await self.fetch_key(user, ["account"])
             results = await self.call_api("account", key=doc["key"])
         except APIError as e:
-            return await self.error_handler(ctx, e)
+            return await self.error_handler(interaction, e)
         accountname = doc["account_name"]
         created = results["created"].split("T", 1)[0]
         hascommander = "Yes" if results["commander"] else "No"
-        data = discord.Embed(colour=await self.get_embed_color(ctx))
-        data.add_field(name="Created account on", value=created)
+        embed = discord.Embed(colour=await self.get_embed_color(interaction))
+        embed.add_field(name="Created account on", value=created)
         # Add world name to account info
         wid = results["world"]
         world = await self.get_world_name(wid)
-        data.add_field(name="WvW Server", value=world)
+        embed.add_field(name="WvW Server", value=world)
         if "progression" in doc["permissions"]:
             try:
                 endpoints = ["account/achievements", "account"]
                 achievements, account = await self.call_multiple(
-                    endpoints, ctx.author, ["progression"])
+                    endpoints, user, ["progression"])
             except APIError as e:
-                return await self.error_handler(ctx, e)
+                return await self.error_handler(interaction, e)
             possible_ap = await self.total_possible_ap()
             user_ap = await self.calculate_user_ap(achievements, account)
-            data.add_field(name="Achievement Points",
-                           value="{} earned out of {} possible".format(
-                               user_ap, possible_ap),
-                           inline=False)
-        data.add_field(name="Commander tag", value=hascommander, inline=False)
+            embed.add_field(name="Achievement Points",
+                            value="{} earned out of {} possible".format(
+                                user_ap, possible_ap),
+                            inline=False)
+        embed.add_field(name="Commander tag", value=hascommander, inline=False)
         if "fractal_level" in results:
             fractallevel = results["fractal_level"]
-            data.add_field(name="Fractal level", value=fractallevel)
+            embed.add_field(name="Fractal level", value=fractallevel)
         if "wvw_rank" in results:
             wvwrank = results["wvw_rank"]
-            data.add_field(name="WvW rank", value=wvwrank)
+            embed.add_field(name="WvW rank", value=wvwrank)
         if "pvp" in doc["permissions"]:
             try:
                 pvp = await self.call_api("pvp/stats", user)
             except APIError as e:
-                return await self.error_handler(ctx, e)
+                return await self.error_handler(interaction, e)
             pvprank = pvp["pvp_rank"] + pvp["pvp_rank_rollovers"]
-            data.add_field(name="PVP rank", value=pvprank)
+            embed.add_field(name="PVP rank", value=pvprank)
         if "characters" in doc["permissions"]:
             try:
                 characters = await self.get_all_characters(user)
                 total_played = 0
                 for character in characters:
                     total_played += character.age
-                data.add_field(name="Total time played",
-                               value=self.format_age(total_played),
-                               inline=False)
+                embed.add_field(name="Total time played",
+                                value=self.format_age(total_played),
+                                inline=False)
             except APIError as e:
-                return await self.error_handler(ctx, e)
+                return await self.error_handler(interaction, e)
         if "access" in results:
             access = results["access"]
             if len(access) > 1:
@@ -91,31 +90,25 @@ class AccountMixin:
 
             access = "\n".join([format_name(e) for e in access])
             if access:
-                data.add_field(name="Expansion access", value=access)
-        data.set_author(name=accountname, icon_url=user.avatar_url)
-        data.set_footer(text=self.bot.user.name,
-                        icon_url=self.bot.user.avatar_url)
-        await ctx.send(embed=data)
+                embed.add_field(name="Expansion access", value=access)
+        embed.set_author(name=accountname, icon_url=user.avatar.url)
+        embed.set_footer(text=self.bot.user.name,
+                         icon_url=self.bot.user.avatar.url)
+        await interaction.followup.send(embed=embed)
 
-    @cog_ext.cog_slash()
-    async def li(self, ctx):
+    @app_commands.command()
+    async def li(self, interaction: discord.Interaction):
         """Shows how many Legendary Insights and Divinations you have earned"""
-        await ctx.defer()
-        user = ctx.author
+        await interaction.response.defer()
+        user = interaction.user
         scopes = ["inventories", "characters"]
-
         trophies = self.gamedata["raid_trophies"]
         ids = []
         for trophy in trophies:
             for items in trophy["items"]:
                 ids += items["items"]
-        try:
-            doc = await self.fetch_key(user, scopes)
-            search_results = await self.find_items_in_account(ctx,
-                                                              ids,
-                                                              doc=doc)
-        except APIError as e:
-            return await self.error_handler(ctx, e)
+        doc = await self.fetch_key(user, scopes)
+        search_results = await self.find_items_in_account(user, ids, doc=doc)
         embed = discord.Embed(color=0x4C139D)
         total = 0
         crafted_total = 0
@@ -169,17 +162,17 @@ class AccountMixin:
             total, ', '.join(trophy_names[:-1]), trophy_names[-1])
         embed.description = "{} on hand, {} used in crafting".format(
             total - crafted_total, crafted_total)
-        embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
+        embed.set_author(name=doc["account_name"], icon_url=user.avatar.url)
         embed.set_thumbnail(url="https://resources.gw2bot.info/icons/lild.png")
         embed.set_footer(text=self.bot.user.name,
-                         icon_url=self.bot.user.avatar_url)
-        await ctx.send(embed=embed)
+                         icon_url=self.bot.user.avatar.url)
+        await interaction.followup.send(embed=embed)
 
-    @cog_ext.cog_slash()
-    async def kp(self, ctx):
+    @app_commands.command()
+    async def kp(self, interaction: discord.Interaction):
         """Shows completed raids and fractals"""
-        await ctx.defer()
-        user = ctx.author
+        await interaction.response.defer()
+        user = interaction.user
         scopes = ["progression"]
         areas = self.gamedata["killproofs"]["areas"]
         # Create a list of lists of all achievement ids we need to check.
@@ -202,8 +195,8 @@ class AccountMixin:
             # Not Found is returned by the API when none of the searched
             # achievements have been completed yet.
             results = []
-        except APIError as e:
-            return await self.error_handler(ctx, e)
+        except APIError:
+            raise
 
         def is_completed(encounter):
             # One achievement has to be completed
@@ -234,8 +227,8 @@ class AccountMixin:
                 return "-✖"
 
         embed = discord.Embed(title="Kill Proof",
-                              color=await self.get_embed_color(ctx))
-        embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
+                              color=await self.get_embed_color(interaction))
+        embed.set_author(name=doc["account_name"], icon_url=user.avatar.url)
         for area in areas:
             value = ["```diff"]
             encounters = area["encounters"]
@@ -249,34 +242,70 @@ class AccountMixin:
         embed.set_footer(text="Green (+) means completed. Red (-) means not. "
                          "CM stands for Challenge Mode.")
 
-        await ctx.send(embed=embed)
+        await interaction.followup.send(embed=embed)
 
-    @cog_ext.cog_slash()
-    async def bosses(self, ctx):
+    @app_commands.command()
+    async def bosses(self, interaction: discord.Interaction):
         """Shows your raid progression for the week"""
-        await ctx.defer()
-        user = ctx.author
+        await interaction.response.defer()
+        user = interaction.user
         scopes = ["progression"]
         endpoints = ["account/raids", "account"]
-        try:
-            doc = await self.fetch_key(user, scopes)
-            schema = datetime.datetime(2019, 2, 21)
-            results, account = await self.call_multiple(endpoints,
-                                                        key=doc["key"],
-                                                        schema_version=schema)
-        except APIError as e:
-            return await self.error_handler(ctx, e)
+        doc = await self.fetch_key(user, scopes)
+        schema = datetime.datetime(2019, 2, 21)
+        results, account = await self.call_multiple(endpoints,
+                                                    key=doc["key"],
+                                                    schema_version=schema)
         last_modified = datetime.datetime.strptime(account["last_modified"],
                                                    "%Y-%m-%dT%H:%M:%Sz")
         raids = await self.get_raids()
-        embed = await self.boss_embed(ctx, raids, results, doc["account_name"],
-                                      last_modified)
-        embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
-        await ctx.send(embed=embed)
+        embed = await self.boss_embed(interaction, raids, results,
+                                      doc["account_name"], last_modified)
+        embed.set_author(name=doc["account_name"], icon_url=user.avatar.url)
+        await interaction.followup.send(embed=embed)
 
-    @cog_ext.cog_slash()
-    async def search(self, ctx: SlashContext, item: str):
+    async def item_autocomplete(self, interaction: discord.Interaction,
+                                current: str):
+        if not current:
+            return []
+
+        def consolidate_duplicates(items):
+            unique_items = collections.OrderedDict()
+            for item in items:
+                item_tuple = item["name"], item["rarity"], item["type"]
+                if item_tuple not in unique_items:
+                    unique_items[item_tuple] = []
+                unique_items[item_tuple].append(item["_id"])
+            unique_list = []
+            for k, v in unique_items.items():
+                ids = " ".join(str(i) for i in v)
+                if len(ids) > 100:
+                    continue
+                unique_list.append({
+                    "name": k[0],
+                    "rarity": k[1],
+                    "ids": ids,
+                    "type": k[2]
+                })
+            return unique_list
+
+        query = prepare_search(current)
+        query = {
+            "name": query,
+        }
+        items = await self.db.items.find(query).to_list(25)
+        items = sorted(consolidate_duplicates(items), key=lambda c: c["name"])
+        return [
+            Choice(name=f"{it['name']} - {it['rarity']}", value=it["ids"])
+            for it in items
+        ]
+
+    @app_commands.command()
+    @app_commands.autocomplete(item=item_autocomplete)
+    async def search(self, interaction: discord.Interaction, item: str):
         """Find items on your account"""
+        await interaction.response.defer()
+
         async def generate_results_embed(results):
             seq = [k for k, v in results.items() if v]
             if not seq:
@@ -357,25 +386,18 @@ class AccountMixin:
             else:
                 data.add_field(name=choice["name"],
                                value="```ml\n{}\n```".format(value))
-            data.set_author(name=doc["account_name"], icon_url=user.avatar_url)
+            data.set_author(name=doc["account_name"], icon_url=user.avatar.url)
             if 'is_upgrade' in choice and choice['is_upgrade']:
                 data.set_footer(text="Amount in inventory / Amount in gear",
-                                icon_url=self.bot.user.avatar_url)
+                                icon_url=self.bot.user.avatar.url)
             else:
                 data.set_footer(text=self.bot.user.name,
-                                icon_url=self.bot.user.avatar_url)
+                                icon_url=self.bot.user.avatar.url)
             data.set_thumbnail(url=icon_url)
             return data
 
-        user = ctx.author
-        try:
-            doc = await self.fetch_key(user, ["inventories", "characters"])
-        except APIError as e:
-            await self.error_handler(ctx, e)
-        await ctx.defer()
-        items = await self.itemname_to_id(ctx, item, group_duplicates=True)
-        if not items:
-            return
+        user = interaction.user
+        doc = await self.fetch_key(user, ["inventories", "characters"])
         endpoints = [
             "account/bank", "account/inventory", "account/materials",
             "characters?page=0&page_size=200"
@@ -385,147 +407,72 @@ class AccountMixin:
                                key=doc["key"],
                                schema_string="2021-07-15T13:00:00.000Z"))
         storage = None
+        items = [int(it) for it in item.split(" ")]
         if len(items) == 1:
             if (not task.done()):
                 storage = await task
             if exc := task.exception():
                 raise exc
             choice = items[0]
-            search_results = await self.find_items_in_account(ctx,
-                                                              choice["ids"],
+            search_results = await self.find_items_in_account(interaction,
+                                                              items,
                                                               flatten=True,
                                                               search=True,
                                                               results=storage)
             embed = await generate_results_embed(search_results)
             if not embed:
-                return await ctx.send(
+                return await interaction.followup.send(
                     content=f"`{choice['name']}`: Not found on your account.")
-            return await ctx.send(embed=embed)
-        rows = []
-        options = []
-        for i, item in enumerate(sorted(items, key=lambda c: c["name"]), 1):
-            if not i % 25:
-                rows.append(options)
-                options = []
-            emoji = self.get_emoji(ctx, item["type"], return_obj=True)
-            options.append(
-                create_select_option(item["name"],
-                                     description=item["rarity"],
-                                     emoji=emoji or None,
-                                     value=i - 1))
-        rows.append(options)
-        action_rows = []
-        for row in rows:
-            placeholder = "Select the item..."
-            if len(rows) > 1:
-                first_letter = row[0]["label"][0]
-                last_letter = row[-1]["label"][0]
-                if first_letter != last_letter:
-                    placeholder += f" [{first_letter}-{last_letter}]"
-                else:
-                    placeholder += f" [{first_letter}]"
-            action_rows.append(
-                create_actionrow(
-                    create_select(row,
-                                  min_values=1,
-                                  max_values=1,
-                                  placeholder=placeholder)))
+            return await interaction.followup.send(embed=embed)
 
-        if len(rows) > 1:
-            content = ("Due to Discord limitations, your selection had "
-                       "been split into several.")
-        else:
-            content = "** **"
-        msg = await ctx.send(content, components=action_rows)
-
-        while True:
-            try:
-                answer = await wait_for_component(self.bot,
-                                                  components=action_rows,
-                                                  timeout=120)
-                if answer.author != ctx.author:
-                    self.tell_off(answer)
-                    continue
-                await answer.defer(edit_origin=True)
-                if (not task.done()):
-                    storage = await task
-                if exc := task.exception():
-                    raise exc
-                choice = items[int(answer.selected_options[0])]
-                search_results = await self.find_items_in_account(
-                    ctx,
-                    choice["ids"],
-                    flatten=True,
-                    search=True,
-                    results=storage)
-                embed = await generate_results_embed(search_results)
-                if not embed:
-                    await answer.edit_origin(
-                        content=
-                        f"`{choice['name']}`: Not found on your account.",
-                        embed=None)
-                    continue
-                await answer.edit_origin(content="** **", embed=embed)
-            except APIError as e:
-                return await self.error_handler(ctx, e)
-            except asyncio.TimeoutError:
-                await msg.edit(components=None)
-
-    @cog_ext.cog_slash()
-    async def cats(self, ctx):
+    @app_commands.command()
+    async def cats(self, interaction: discord.Interaction):
         """Displays the cats you haven't unlocked yet"""
-        await ctx.defer()
-        user = ctx.author
+        await interaction.response.defer()
+        user = interaction.user
         endpoint = "account/home/cats"
-        try:
-            doc = await self.fetch_key(user, ["progression"])
-            results = await self.call_api(endpoint, key=doc["key"])
-        except APIError as e:
-            return await self.error_handler(ctx, e)
+        doc = await self.fetch_key(user, ["progression"])
+        results = await self.call_api(endpoint, key=doc["key"])
         owned_cats = [cat["id"] for cat in results]
         lines = []
         for cat in self.gamedata["cats"]:
             if cat["id"] not in owned_cats:
                 lines.append(cat["guide"])
         if not lines:
-            return await ctx.send("You have collected all the "
-                                  "cats! Congratulations! :cat2:")
-        embed = discord.Embed(color=await self.get_embed_color(ctx))
+            return await interaction.followup.send(
+                "You have collected all the "
+                "cats! Congratulations! :cat2:")
+        embed = discord.Embed(color=await self.get_embed_color(interaction))
         embed = embed_list_lines(embed, lines,
                                  "Cats you haven't collected yet")
-        embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
+        embed.set_author(name=doc["account_name"], icon_url=user.avatar.url)
         embed.set_footer(text=self.bot.user.name,
-                         icon_url=self.bot.user.avatar_url)
-        await ctx.send(embed=embed)
+                         icon_url=self.bot.user.avatar.url)
+        await interaction.followup.send(embed=embed)
 
-    @cog_ext.cog_slash()
-    async def nodes(self, ctx: SlashContext):
-        """Displays the nodes you haven't unlocked.
-
-        Required permissions: progression"""
-        await ctx.defer()
-        user = ctx.author
+    @app_commands.command()
+    async def nodes(self, interaction: discord.Interaction):
+        """Displays the nodes you haven't unlocked."""
+        await interaction.response.defer()
+        user = interaction.user
         endpoint = "account/home/nodes"
-        try:
-            doc = await self.fetch_key(user, ["progression"])
-            results = await self.call_api(endpoint, key=doc["key"])
-        except APIError as e:
-            return await self.error_handler(ctx, e)
+        doc = await self.fetch_key(user, ["progression"])
+        results = await self.call_api(endpoint, key=doc["key"])
         owned_nodes = results
         lines = []
         for nodes in self.gamedata["nodes"]:
             if nodes["id"] not in owned_nodes:
                 lines.append(nodes["guide"])
         if not lines:
-            return await ctx.send(
+            return await interaction.followup.send(
                 "You've collected all home instance nodes! Congratulations!")
-        embed = discord.Embed(color=await self.get_embed_color(ctx))
+        embed = discord.Embed(color=await self.get_embed_color(interaction))
         embed = embed_list_lines(embed, lines,
                                  "Nodes you haven't collected yet:")
-        embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
+        embed.set_author(name=doc["account_name"], icon_url=user.avatar.url)
         embed.set_footer(text=self.bot.user.name,
-                         icon_url=self.bot.user.avatar_url)
-        await ctx.send(embed=embed)
+                         icon_url=self.bot.user.avatar.url)
+        await interaction.followup.send(embed=embed)
 
     async def boss_embed(self, ctx, raids, results, account_name,
                          last_modified):
@@ -636,18 +583,17 @@ class AccountMixin:
         embed.set_footer(text="Logs uploaded via evtc will "
                          "appear here with links - they don't have to be "
                          "uploaded by you",
-                         icon_url=self.bot.user.avatar_url)
+                         icon_url=self.bot.user.avatar.url)
         return embed
 
     async def find_items_in_account(self,
-                                    ctx,
+                                    user,
                                     item_ids,
                                     *,
                                     doc=None,
                                     flatten=False,
                                     search=False,
                                     results=None):
-        user = ctx.author
         if not doc:
             doc = await self.fetch_key(user, ["inventories", "characters"])
         endpoints = [
@@ -695,6 +641,7 @@ class AccountMixin:
                             counts[item_id][space_name] += amt
 
         def get_amount(slot, item_id):
+
             def count_upgrades(slots):
                 return sum(1 for i in slots if i == item_id)
 

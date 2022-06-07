@@ -1,43 +1,28 @@
 import asyncio
+from pydoc import describe
 import discord
 
 from discord.ext import commands, tasks
-from discord_slash import cog_ext
-from discord_slash.model import SlashCommandOptionType
-
+from discord import app_commands
+from discord.app_commands import Choice
 from .exceptions import APIBadRequest, APIError, APIInvalidKey
 import time
 
 
 class WorldsyncMixin:
-    @cog_ext.cog_slash(options=[{
-        "name": "enabled",
-        "description": "Enable or disable Worldsync",
-        "type": SlashCommandOptionType.BOOLEAN,
-        "required": True
-    }, {
-        "name": "world",
-        "description": "The world name to use for Worldsync",
-        "type": SlashCommandOptionType.STRING,
-        "required": False
-    }, {
-        "name": "world_role",
-        "description": "Role to be given to members of the chosen world",
-        "type": SlashCommandOptionType.ROLE,
-        "required": False,
-    }, {
-        "name": "ally_role",
-        "description": "Role to be given to allies of the chosen world",
-        "type": SlashCommandOptionType.ROLE,
-        "required": False,
-    }])
+
+    @app_commands.command()
+    @app_commands.describe(
+        enabled="Enable or disable Worldsync",
+        world="The world name to use for Worldsync",
+        world_role="The role to give to members of the chosen world",
+        ally_role="The role to give to allies of the chosen world")
     async def worldsync(self,
-                        ctx,
-                        *,
-                        enabled,
-                        world=None,
-                        world_role=None,
-                        ally_role=None):
+                        interaction: discord.Interaction,
+                        enabled: bool,
+                        world: str = None,
+                        world_role: discord.Role = None,
+                        ally_role: discord.Role = None):
         """Role management based on in game account world"""
         if not ctx.guild:
             return await ctx.send("This command can only be used in servers.",

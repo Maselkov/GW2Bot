@@ -6,15 +6,8 @@ from typing import Union
 import aiohttp
 import discord
 from discord.ext import commands, tasks
-from discord_slash import MenuContext, cog_ext
-from discord_slash.model import (ButtonStyle, ContextMenuType,
-                                 SlashCommandOptionType)
-from discord_slash.utils.manage_components import (create_actionrow,
-                                                   create_button,
-                                                   create_select,
-                                                   create_select_option,
-                                                   wait_for_component)
-
+from discord import app_commands
+from discord.app_commands import Choice
 from .exceptions import APIError
 from .utils.chat import (embed_list_lines, en_space, magic_space,
                          zero_width_space)
@@ -29,6 +22,17 @@ ALLOWED_FORMATS = (".evtc", ".zevtc", ".zip")
 
 
 class EvtcMixin:
+
+    evtc_automation_group = app_commands.Group(
+        name="evtc_automation",
+        description="Character relating to automating EVTC processing")
+
+    autopost_group = app_commands.Group(
+        name="autopost",
+        description="Automatically post processed EVTC logs uploaded by "
+        "third party utilities",
+        parent=evtc_automation_group)
+
     async def get_dpsreport_usertoken(self, user):
         doc = await self.bot.database.get(user, self)
         token = doc.get("dpsreport_token")
@@ -263,15 +267,20 @@ class EvtcMixin:
         if not duplicate:
             await self.db.encounters.insert_one(doc)
         embed.timestamp = date
-        embed.set_footer(text="Recorded at", icon_url=self.bot.user.avatar_url)
+        embed.set_footer(text="Recorded at", icon_url=self.bot.user.avatar.url)
         if boss:
             embed.set_author(name=data["fightName"], icon_url=boss["icon"])
         return embed
 
-    @cog_ext.cog_context_menu(target=ContextMenuType.MESSAGE,
-                              name="ProcessEVTC")
-    async def evtc(self, ctx: MenuContext):
+    @app_commands.command()
+    @app_commands.describe(
+        file="EVTC file to process. Accepted formats: .evtc, .zip, .zevtc")
+    async def evtc(self, interaction: discord.Interaction,
+                   file: discord.Attachment):
         """Process an EVTC combat log in an attachment"""
+        print("weh")
+        print(attachment)
+        return
         message = ctx.target_message
         if not message.attachments:
             return await ctx.send(
@@ -292,28 +301,17 @@ class EvtcMixin:
         await ctx.defer()
         await self.process_evtc(message, ctx)
 
-    @cog_ext.cog_subcommand(
-        base="evtc",
-        name="channel",
-        base_description="EVTC related commands",
-        options=[{
-            "name": "channel",
-            "description":
-            "The channel to enable automatic EVTC processing on.",
-            "type": SlashCommandOptionType.CHANNEL,
-            "required": True,
-            "channel_types": [0]
-        }, {
-            "name": "autodelete",
-            "description":
-            "Automatically delete message after processing the EVTC log",
-            "type": SlashCommandOptionType.BOOLEAN,
-            "required": True
-        }])
-    async def evtc_channel(self, ctx, channel: discord.TextChannel,
-                           autodelete):
-        """Sets this channel to be automatically used to process EVTC logs"""
-        if not ctx.guild:
+    @evtc_automation_group.command(name="channel")
+    @app_commands.describe(
+        enabled="Disable or enable this feature on the specificed channel",
+        channel="The target channel",
+        autodelete="Toggle automatically deleting "
+        "original message after processing the EVTC log")
+    async def evtc_channel(self, interaction: discord.Interaction,
+                           enabled: bool, channel: discord.TextChannel,
+                           autodelete: bool):
+        """Sets a channel to be automatically used to process EVTC logs posted within"""
+        if not interaction.guild:
             return await ctx.send("This command can only be used in a server.",
                                   hidden=True)
         if not ctx.author.guild_permissions.manage_guild:
@@ -347,32 +345,15 @@ class EvtcMixin:
         doc = await self.db.evtc.api_keys.find_one({"user": user.id}) or {}
         return doc.get("token", None)
 
-    @cog_ext.cog_subcommand(base="evtc",
-                            name="api_key",
-                            base_description="EVTC related commands",
-                            options=[{
-                                "name":
-                                "operation",
-                                "description":
-                                "The operaiton to perform.",
-                                "type":
-                                SlashCommandOptionType.STRING,
-                                "required":
-                                True,
-                                "choices": [{
-                                    "value": "view",
-                                    "name": "View your API key."
-                                }, {
-                                    "value":
-                                    "generate",
-                                    "name":
-                                    "Generate or regenerate your API key."
-                                }, {
-                                    "value": "delete",
-                                    "name": "Delete your API key."
-                                }]
-                            }])
-    async def evtc_api_key(self, ctx, operation):
+    @evtc_automation_group.command(name="api_key")
+    @app_commands.describe(operation="The operation to perform")
+    @app_commands.choices(operation=[
+        Choice(name="View your API key", value="view"),
+        Choice(name="Generate or regenerate your API key", value="generate"),
+        Choice(name="Delete your API key", value="delete")
+    ])
+    async def evtc_api_key(self, interaction: discord.Interaction,
+                           operation: str):
         """Generate an API key for third-party apps that automatically upload EVTC logs"""
         await ctx.defer(hidden=True)
         existing_key = await self.get_user_evtc_api_key(ctx.author)
@@ -412,16 +393,9 @@ class EvtcMixin:
             "user": user.id
         })
 
-    @cog_ext.cog_subcommand(
-        base="evtc",
-        subcommand_group="autopost",
-        sub_group_desc="Automatically post processed EVTC logs uploaded by "
-        "third party utilities",
-        name="add_destination",
-        base_description="EVTC related commands",
-    )
-    async def evtc_autoupload_add(self, ctx):
-        """Add this channel as a destination to autopost EVTC logs too"""
+    @autopost_group.command(name="add_destination")
+    async def evtc_autoupload_add(self, interaction: discord.Interaction):
+        """Add this channel as a personal destination to autopost EVTC logs to"""
         await ctx.defer(hidden=True)
         channel = self.bot.get_channel(ctx.channel_id)
         key = await self.get_user_evtc_api_key(ctx.author)
@@ -517,15 +491,8 @@ class EvtcMixin:
             "remove it using `/evtc autopost remove_destinations`",
             components=None)
 
-    @cog_ext.cog_subcommand(
-        base="evtc",
-        subcommand_group="autopost",
-        sub_group_desc="Automatically post processed EVTC logs uploaded by "
-        "third party utilities",
-        name="remove_destinations",
-        base_description="EVTC related commands",
-    )
-    async def evtc_autoupload_remove(self, ctx):
+    @autopost_group.command(name="remove_destinations")
+    async def evtc_autoupload_remove(self, interaction: discord.Interaction):
         """Remove EVTC autoupload destinations from a list"""
         await ctx.defer(hidden=True)
         destinations = await self.db.evtc.destinations.find({
