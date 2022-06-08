@@ -1,5 +1,4 @@
 import asyncio
-from code import interact
 import collections
 import copy
 import datetime
@@ -15,6 +14,94 @@ from .skills import Build
 from .utils.chat import embed_list_lines, zero_width_space
 
 LETTERS = ["🇦", "🇧", "🇨", "🇩", "🇪", "🇫", "🇬", "🇭", "🇮", "🇯"]
+
+
+class CharacterGearDropdown(discord.ui.Select):
+
+    def __init__(self, tabs, tab_type, emojis):
+        options = []
+        for i, tab in enumerate(tabs):
+            options.append(
+                discord.SelectOption(label=f"{tab_type.title()} Tab {i+1}",
+                                     value=i,
+                                     emoji=emojis[i],
+                                     description=tab["name"]))
+
+        super().__init__(placeholder=f"Select {tab_type} template",
+                         min_values=1,
+                         max_values=1,
+                         options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        if self.type == "equipment":
+            self.view.active_equipment = int(self.values[0])
+        else:
+            self.view.active_build = int(self.values[0])
+        embed = self.view.generate_embed()
+        await interaction.response.edit_message(embed=embed)
+
+
+class CharacterGearView(discord.ui.View):
+
+    def __init__(self, equipment_options, build_options, character, emojis,
+                 emoji_cache):
+        super().__init__()
+        self.value = None
+        self.emojis = emojis
+        self.character = character
+        self.builds = build_options
+        self.equipments = equipment_options
+        self.active_build = character["active_build_tab"] - 1
+        self.active_equipment = character["active_equipment_tab"] - 1
+        self.add_item(
+            CharacterGearDropdown(equipment_options, "equipment", emojis))
+        self.add_item(CharacterGearDropdown(build_options, "build", emojis))
+        self.emojis_cache = emoji_cache
+
+    async def build_template_dropdown(self, interaction: discord.Interaction,
+                                      select: discord.ui.Select):
+        await interaction.response.edit_message("Eggnant")
+
+    def generate_embed(self):
+        build = self.builds[self.active_build]
+        equipment = self.equipments[self.active_equipment]
+        embed = discord.Embed()
+        for field in equipment["fields"]:
+            embed.add_field(name=field[0], value=field[1], inline=field[2])
+        profession = build["build"].profession
+        description = ["Build template:"]
+        line = ""
+        for i in range(len(self.builds)):
+            if i == self.active_build:
+                key = "active"
+            else:
+                key = "inactive"
+            line += str(self.emojis_cache["build"][key][i])
+        if build["name"]:
+            line += f" *{build['name']}*"
+        description.append("> " + line)
+        description.append("Equipment template:")
+        line = ""
+        for i in range(len(self.equipments)):
+            if i == self.active_equipment:
+                key = "active"
+            else:
+                key = "inactive"
+            line += str(self.emojis_cache["equipment"][key][i])
+        if equipment["name"]:
+            line += f" *{equipment['name']}*"
+        description.append("> " + line)
+        description = "\n".join(description)
+        embed.description = description
+        embed.color = profession.color
+        embed.set_footer(text="A level {} {} ".format(self.character["level"],
+                                                      profession.name.lower()))
+        embed.set_author(name=self.character["name"], icon_url=profession.icon)
+        embed.add_field(name="Build code",
+                        value=build["build"].code,
+                        inline=False)
+        embed.set_image(url=build["url"])
+        return embed
 
 
 class Character:
@@ -89,7 +176,7 @@ class CharactersMixin:
         account_key = key["account_name"].replace(".", "_")
         cache = doc.get("character_cache", {}).get(account_key, {})
         if not cache or cache["last_update"] < datetime.datetime.utcnow(
-        ) - datetime.timedelta(days=1):
+        ) - datetime.timedelta(days=3):
             try:
                 character_list = await self.call_api("characters",
                                                      key=key["key"],
@@ -447,58 +534,6 @@ class CharactersMixin:
             if not all(emojis_cache["equipment"]["active"]):
                 can_use_emojis = False
 
-        def generate_embed(builds, equipments, current_build,
-                           current_equipment):
-            build = builds[current_build]
-            equipment = equipments[current_equipment]
-            embed = discord.Embed()
-            for field in equipment["fields"]:
-                embed.add_field(name=field[0], value=field[1], inline=field[2])
-            profession = build["build"].profession
-            if can_use_emojis:
-                description = ["Build template:"]
-                line = ""
-                for i, emoji in enumerate(numbers):
-                    if i == current_build:
-                        key = "active"
-                    else:
-                        key = "inactive"
-                    line += str(emojis_cache["build"][key][i])
-                if build["name"]:
-                    line += f" *{build['name']}*"
-                description.append("> " + line)
-                description.append("Equipment template:")
-                line = ""
-                for i, emoji in enumerate(letters):
-                    if i == current_equipment:
-                        key = "active"
-                    else:
-                        key = "inactive"
-                    line += str(emojis_cache["equipment"][key][i])
-                if equipment["name"]:
-                    line += f" *{equipment['name']}*"
-                description.append("> " + line)
-                description = "\n".join(description)
-            else:
-                description = ("`Selected build template "
-                               f"{' '*4}`**{numbers[current_build]}**")
-                if build["name"]:
-                    description += f": `{build['name']}`"
-                description += ("\n`Selected equipment template "
-                                f"`**{letters[current_equipment]}**")
-                if equipment['name']:
-                    description += f": `{equipment['name']}`"
-            embed.description = description
-            embed.color = profession.color
-            embed.set_footer(text="A level {} {} ".format(
-                results["level"], profession.name.lower()))
-            embed.set_author(name=results["name"], icon_url=profession.icon)
-            embed.add_field(name="Build code",
-                            value=build["build"].code,
-                            inline=False)
-            embed.set_image(url=build["url"])
-            return embed
-
         cog_doc = await self.bot.database.get_cog_config(self)
         if not cog_doc:
             return await interaction.followup.send("Eror reading configuration"
@@ -550,44 +585,12 @@ class CharactersMixin:
                 "fields": await get_equipment_fields(tab, eq),
                 "name": tab["name"]
             })
-        if can_use_emojis:
-            numbers = emojis_cache["build"]["active"][:len(builds)]
-            letters = emojis_cache["equipment"]["active"][:len(equipments)]
-            build_dropdown = []
-            equipment_dropdown = []
-            for i, build in enumerate(builds):
-                build_dropdown.append(
-                    create_select_option(f"Build {i+1}",
-                                         i,
-                                         emoji=numbers[i],
-                                         description=build["name"]))
-            for i, equipment in enumerate(equipments):
-                equipment_dropdown.append(
-                    create_select_option(f"Equipment Tab {i+1}",
-                                         i,
-                                         emoji=numbers[i],
-                                         description=equipment["name"]))
-            build_dropdown = create_actionrow(
-                create_select(build_dropdown,
-                              placeholder="Select build template",
-                              max_values=1,
-                              min_values=1))
-            equipment_dropdown = create_actionrow(
-                create_select(equipment_dropdown,
-                              placeholder="Select equipment template",
-                              max_values=1,
-                              min_values=1))
-            rows = [build_dropdown, equipment_dropdown]
-        else:
-            letters = LETTERS[:len(equipments)]
-            for i in range(1, len(builds) + 1):
-                emoji = f"{i}\N{combining enclosing keycap}"
-                numbers.append(emoji)
-        current_build = results["active_build_tab"] - 1
-        current_equipment = results["active_equipment_tab"] - 1
+        numbers = emojis_cache["build"]["active"][:len(builds)]
+        equipment_dropdown = []
         images_msg = await image_channel.send(
             files=[b["file"] for b in builds if b["file"]])
         urls = [attachment.url for attachment in images_msg.attachments]
+
         for url in urls:
             file_name = re.search(r"build_\d*\.png", url).group(0)
             tab_id = int("".join(c for c in file_name if c.isdigit()))
@@ -595,45 +598,42 @@ class CharactersMixin:
                 if tab["tab"] == tab_id:
                     tab["url"] = url
                     break
-        # for build, url in zip(builds, urls):
-        #     build["file"] = url
-        embed = generate_embed(builds, equipments, current_build,
-                               current_equipment)
-        content = None
-        if edit:
-            await ctx.message.edit(embed=embed,
-                                   content=content,
-                                   components=rows)
-            message = ctx.message
-        else:
-            message = await ctx.send(content, embed=embed, components=rows)
+        view = CharacterGearView(
+            equipments,
+            builds,
+            results,
+            numbers,
+            emojis_cache,
+        )
+        embed = view.generate_embed()
+        await interaction.followup.send(embed=embed, view=view)
 
         def tell_off(answer):
             self.bot.loop.create_task(
                 answer.send("Only the command owner may do that.",
                             hidden=True))
 
-        while True:
-            try:
-                answer = await wait_for_component(self.bot,
-                                                  components=rows,
-                                                  timeout=120)
-                if answer.author != ctx.author:
-                    tell_off(answer)
-                    continue
-                is_equipment = answer.custom_id == equipment_dropdown[
-                    "components"][0]["custom_id"]
-                index = int(answer.selected_options[0])
-                if is_equipment:
-                    current_equipment = index
-                else:
-                    current_build = index
-                embed = generate_embed(builds, equipments, current_build,
-                                       current_equipment)
-                await answer.defer(edit_origin=True)
-                self.bot.loop.create_task(answer.edit_origin(embed=embed))
-            except asyncio.TimeoutError:
-                return await message.edit(components=None)
+        # while True:
+        #     try:
+        #         answer = await wait_for_component(self.bot,
+        #                                           components=rows,
+        #                                           timeout=120)
+        #         if answer.author != ctx.author:
+        #             tell_off(answer)
+        #             continue
+        #         is_equipment = answer.custom_id == equipment_dropdown[
+        #             "components"][0]["custom_id"]
+        #         index = int(answer.selected_options[0])
+        #         if is_equipment:
+        #             current_equipment = index
+        #         else:
+        #             current_build = index
+        #         embed = generate_embed(builds, equipments, current_build,
+        #                                current_equipment)
+        #         await answer.defer(edit_origin=True)
+        #         self.bot.loop.create_task(answer.edit_origin(embed=embed))
+        #     except asyncio.TimeoutError:
+        #         return await message.edit(components=None)
 
     # @cog_ext.cog_subcommand(base="character",
     #                         name="birthdays",
