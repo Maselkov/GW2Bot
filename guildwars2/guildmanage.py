@@ -1,5 +1,4 @@
 import asyncio
-from code import interact
 import discord
 from discord.ext import tasks
 from discord import app_commands
@@ -17,7 +16,7 @@ class GuildManageMixin:
     async def server_force_account_names(self,
                                          interaction: discord.Interaction,
                                          enabled: bool):
-        """Automatically change nicknames to in-game names"""
+        """Automatically change all server member nicknames to in-game names"""
         guild = interaction.guild
         doc = await self.bot.database.get(guild, self)
         if doc and enabled and doc.get("forced_account_names"):
@@ -28,32 +27,12 @@ class GuildManageMixin:
                                         self)
             return await interaction.response.send_message(
                 "Forced account names disabled")
-
-        button = create_button(style=ButtonStyle.green,
-                               emoji="✅",
-                               label="Confirm")
-        components = [create_actionrow(button)]
-        await ctx.send(
-            "Enabling this option will change all members' nicknames with "
-            "registered keys to their in game account names. This will wipe "
-            "their existing nicknames, if they don't include their account "
-            "name.\nTo proceed, click on the button below",
-            components=components)
-        try:
-            ans = await wait_for_component(
-                self.bot,
-                components=components,
-                timeout=120,
-                check=lambda c: c.author == ctx.author)
-        except asyncio.TimeoutError:
-            return await ctx.message.edit(content="Timed out", components=None)
         await self.bot.database.set(guild, {"force_account_names": True}, self)
         await self.force_guild_account_names(guild)
-        await ans.edit_origin(
+        await interaction.response.send_message(
             content="Automatic account names enabled. To disable, use "
             "`/server forceaccountnames false`\nPlease note that the "
-            "bot cannot change nicknames for roles above the bot.",
-            components=None)
+            "bot cannot change nicknames for roles above the bot.")
 
     @server_group.command(name="preview_chat_links")
     @app_commands.checks.has_permissions(manage_guild=True)
@@ -67,14 +46,14 @@ class GuildManageMixin:
         disabled = doc.get("link_preview_disabled", False)
         if disabled and not enabled:
             return await interaction.response.send_message(
-                "Chat link preview is aleady disabled.", hidden=True)
+                "Chat link preview is aleady disabled.", ephemeral=True)
         if not disabled and enabled:
             return await interaction.response.send_message(
-                "Chat link preview is aleady enabled.", hidden=True)
+                "Chat link preview is aleady enabled.", ephemeral=True)
         if not disabled and not enabled:
             self.chatcode_preview_opted_out_guilds.add(guild.id)
             return await interaction.response.send_message(
-                "Chat link preview is now disabled.", hidden=True)
+                "Chat link preview is now disabled.", ephemeral=True)
         if disabled and enabled:
             await self.bot.database.set_guild(
                 guild, {"link_preview_disabled": not enabled}, self)
@@ -85,13 +64,12 @@ class GuildManageMixin:
             except KeyError:
                 pass
             return await interaction.response.send_message(
-                "Chat link preview is now enabled.", hidden=True)
+                "Chat link preview is now enabled.", ephemeral=True)
 
     @server_group.command(name="sync_now")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def sync_now(self, interaction: discord.Interaction):
         """Force a sync for any Guildsyncs and Worldsyncs you have"""
-        guild = interaction.guild
         await interaction.response.send_message("Syncs scheduled!")
         await self.guildsync_now(interaction)
         await self.worldsync_now(interaction)
@@ -106,7 +84,8 @@ class GuildManageMixin:
                               interaction: discord.Interaction,
                               enabled: bool,
                               role: discord.Role = None):
-        """A feature to automatically add a role to members that have added an API key to the bot."""
+        """A feature to automatically add a role to members that have added an
+        API key to the bot."""
         guild = interaction.guild
         await self.bot.database.set(guild, {
             "key_sync.enabled": enabled,
@@ -117,8 +96,8 @@ class GuildManageMixin:
                 return await interaction.response.send_message(
                     "Please specify a role.")
             await interaction.response.send_message(
-                "Key sync enabled. Members with valid API keys will now be given the selected role"
-            )
+                "Key sync enabled. Members with valid API keys "
+                "will now be given the selected role")
             return await self.key_sync_guild(guild)
         await interaction.response.send_message("Key sync disabled.")
 
@@ -178,9 +157,8 @@ class GuildManageMixin:
                 if role in member.roles:
                     await member.remove_roles(
                         role,
-                        reason=
-                        "/server api_key_role is enabled. Member lacks a valid API key."
-                    )
+                        reason="/server api_key_role is enabled. Member "
+                        "lacks a valid API key.")
         except discord.Forbidden:
             return
 

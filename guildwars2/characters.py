@@ -2,12 +2,14 @@ import asyncio
 import collections
 import copy
 import datetime
-from discord.app_commands import Choice
 import re
-from discord import app_commands
+
 import discord
+from discord import app_commands
+from discord.app_commands import Choice
 from discord.ext import commands
-from discord.ext.commands.cooldowns import BucketType
+
+from cogs.guildwars2 import guild
 
 from .exceptions import APIError, APINotFound
 from .skills import Build
@@ -20,6 +22,7 @@ class CharacterGearDropdown(discord.ui.Select):
 
     def __init__(self, tabs, tab_type, emojis):
         options = []
+        self.is_equipment = tab_type == "equipment"
         for i, tab in enumerate(tabs):
             options.append(
                 discord.SelectOption(label=f"{tab_type.title()} Tab {i+1}",
@@ -33,7 +36,7 @@ class CharacterGearDropdown(discord.ui.Select):
                          options=options)
 
     async def callback(self, interaction: discord.Interaction):
-        if self.type == "equipment":
+        if self.is_equipment:
             self.view.active_equipment = int(self.values[0])
         else:
             self.view.active_build = int(self.values[0])
@@ -44,7 +47,7 @@ class CharacterGearDropdown(discord.ui.Select):
 class CharacterGearView(discord.ui.View):
 
     def __init__(self, equipment_options, build_options, character, emojis,
-                 emoji_cache):
+                 emoji_cache, user):
         super().__init__()
         self.value = None
         self.emojis = emojis
@@ -53,14 +56,21 @@ class CharacterGearView(discord.ui.View):
         self.equipments = equipment_options
         self.active_build = character["active_build_tab"] - 1
         self.active_equipment = character["active_equipment_tab"] - 1
+        self.add_item(CharacterGearDropdown(build_options, "build", emojis))
         self.add_item(
             CharacterGearDropdown(equipment_options, "equipment", emojis))
-        self.add_item(CharacterGearDropdown(build_options, "build", emojis))
         self.emojis_cache = emoji_cache
+        self.user = user
+        self.response = None
 
-    async def build_template_dropdown(self, interaction: discord.Interaction,
-                                      select: discord.ui.Select):
-        await interaction.response.edit_message("Eggnant")
+    async def on_timeout(self) -> None:
+        for child in self.children:
+            child.disabled = True
+        await self.response.edit(view=self)
+
+    async def interaction_check(self,
+                                interaction: discord.Interaction) -> bool:
+        return interaction.user == self.user
 
     def generate_embed(self):
         build = self.builds[self.active_build]
@@ -115,6 +125,8 @@ class Character:
         self.profession = data["profession"].lower()
         self.level = data["level"]
         self.specializations = data.get("specializations")
+        self.active_build_tab = data.get("active_build_tab")
+        self.build_tabs = data.get("build_tabs", [])
         self.color = discord.Color(
             int(self.cog.gamedata["professions"][self.profession]["color"],
                 16))
@@ -126,9 +138,13 @@ class Character:
     async def get_spec_info(self, mode="pve"):
 
         async def get_elite_spec():
-            if not self.specializations:
+            if not self.specializations and not self.active_build_tab:
                 return self.profession.title()
-            spec = self.specializations[mode][2]
+            if not self.active_build_tab:
+                spec = self.specializations[mode][2]
+            else:
+                spec = self.build_tabs[self.active_build_tab -
+                                       1]["build"]["specializations"][2]
             if spec:
                 spec = await self.cog.db.specializations.find_one(
                     {"_id": spec["id"]})
@@ -174,22 +190,29 @@ class CharactersMixin:
             return []
 
         account_key = key["account_name"].replace(".", "_")
-        cache = doc.get("character_cache", {}).get(account_key, {})
-        if not cache or cache["last_update"] < datetime.datetime.utcnow(
-        ) - datetime.timedelta(days=3):
+
+        async def cache_characters():
             try:
                 character_list = await self.call_api("characters",
                                                      key=key["key"],
                                                      scopes=["characters"])
             except APIError:
                 return []
-            cache = {
+            c = {
                 "last_update": datetime.datetime.utcnow(),
                 "characters": character_list
             }
-            await self.bot.database.set(
-                interaction.user, {f"character_cache.{account_key}": cache},
-                self)
+            await self.bot.database.set(interaction.user,
+                                        {f"character_cache.{account_key}": c},
+                                        self)
+            return c
+
+        cache = doc.get("character_cache", {}).get(account_key, {})
+        if not cache:
+            cache = await cache_characters()
+        elif cache["last_update"] < datetime.datetime.utcnow(
+        ) - datetime.timedelta(days=3):
+            asyncio.create_task(cache_characters())
         character_list = cache["characters"]
         current = current.lower()
         return [
@@ -263,6 +286,7 @@ class CharactersMixin:
                          icon_url=profession.icon)
         await interaction.followup.send(embed=embed)
 
+    # TODO elite spec icons
     @character_group.command(name="info")
     @app_commands.autocomplete(character=character_autocomplete)
     async def character_info(self, interaction: discord.Interaction,
@@ -337,7 +361,7 @@ class CharactersMixin:
             if info == "age":
                 return ": " + self.format_age(char.age, short=True)
             if info == "created":
-                return ": " + char.created.strftime("%Y-%m-%d")
+                return f": <t:{int(char.created.timestamp())}:f>"
             is_80 = char.level == 80
             return "" + (" (Level {})".format(char.level) if not is_80 else "")
 
@@ -367,14 +391,20 @@ class CharactersMixin:
 
     @character_group.command(name="gear")
     @app_commands.autocomplete(character=character_autocomplete)
+    @app_commands.checks.has_permissions(embed_links=True,
+                                         external_emojis=True)
     async def character_gear(self, interaction: discord.Interaction,
                              character: str):
         """Displays the gear, attributes and build of given character"""
         await interaction.response.defer()
-        perms = interaction.channel.permissions_for(interaction.guild.me)
-        can_use_emojis = perms.external_emojis
+        if not self.check_emoji_permission(interaction):
+            return await interaction.followup.send(
+                "The default role in this channel needs to "
+                "have `use external emojis` permission in order to use this command."
+            )
+            # TODO move this to a check
+
         numbers = []
-        letters = []
 
         async def get_equipment_fields(tab, eq):
             fields = []
@@ -402,17 +432,8 @@ class CharactersMixin:
                 for item in eq:
                     if item["slot"] == piece:
                         item_doc = await self.fetch_item(item["id"])
-                        if can_use_emojis:
-                            line = self.get_emoji(
-                                interaction,
-                                f"{item_doc['rarity']}_{piece_name}")
-                        else:
-                            if piece.startswith("Weapon"):
-                                if piece.endswith("1"):
-                                    piece_name = "Main hand"
-                                else:
-                                    piece_name = "Off hand"
-                            line = f"**{piece_name}**: {item_doc['rarity']} "
+                        line = self.get_emoji(
+                            interaction, f"{item_doc['rarity']}_{piece_name}")
                         for upgrade_type in "infusions", "upgrades":
                             if upgrade_type in item:
                                 for upgrade in item[upgrade_type]:
@@ -455,11 +476,8 @@ class CharactersMixin:
                             line += "\n*{}*".format(
                                 "\n".join(upgrades_to_display))
                 if not line and not piece.startswith("Weapon"):
-                    if can_use_emojis:
-                        line = self.get_emoji(interaction,
-                                              f"basic_{piece_name}") + "NONE"
-                    else:
-                        line = f"**{piece_name}**: NONE"
+                    line = self.get_emoji(interaction,
+                                          f"basic_{piece_name}") + "NONE"
                 if piece in armors:
                     armor_lines.append(line)
                 elif piece in weapons:
@@ -504,36 +522,31 @@ class CharactersMixin:
             fields.append((zero_width_space, "\n".join(column_2), True))
             return fields
 
-        if can_use_emojis:
-            emojis_cache = {
-                "build": {
-                    "inactive": [],
-                    "active": []
-                },
-                "equipment": {
-                    "inactive": [],
-                    "active": []
-                }
+        emojis_cache = {
+            "build": {
+                "inactive": [],
+                "active": []
+            },
+            "equipment": {
+                "inactive": [],
+                "active": []
             }
-            for i in range(1, 11):
-                emojis_cache["build"]["inactive"].append(
-                    self.get_emoji(interaction, f"build_{i}", return_obj=True))
-                emojis_cache["build"]["active"].append(
-                    self.get_emoji(interaction,
-                                   f"active_build_{i}",
-                                   return_obj=True))
-                letter = chr(64 + i)  # ord("A") == 65
-                emojis_cache["equipment"]["inactive"].append(
-                    self.get_emoji(interaction,
-                                   f"equipment_{letter}",
-                                   return_obj=True))
-                emojis_cache["equipment"]["active"].append(
-                    self.get_emoji(interaction,
-                                   f"active_equipment_{letter}",
-                                   return_obj=True))
-            if not all(emojis_cache["equipment"]["active"]):
-                can_use_emojis = False
-
+        }
+        for i in range(1, 11):
+            emojis_cache["build"]["inactive"].append(
+                self.get_emoji(interaction, f"build_{i}", return_obj=True))
+            emojis_cache["build"]["active"].append(
+                self.get_emoji(interaction,
+                               f"active_build_{i}",
+                               return_obj=True))
+            letter = chr(64 + i)  # ord("A") == 65
+            emojis_cache["equipment"]["inactive"].append(
+                self.get_emoji(interaction, f"build_{letter}",
+                               return_obj=True))
+            emojis_cache["equipment"]["active"].append(
+                self.get_emoji(interaction,
+                               f"active_build_{letter}",
+                               return_obj=True))
         cog_doc = await self.bot.database.get_cog_config(self)
         if not cog_doc:
             return await interaction.followup.send("Eror reading configuration"
@@ -543,13 +556,10 @@ class CharactersMixin:
             return await interaction.followup.send(
                 "The owner must set the image"
                 " channel using $imagechannel command.")
-        edit = False
         try:
             results = await self.get_character(interaction, character)
         except APINotFound:
             return await interaction.followup.send("Invalid character name")
-        except APIError:
-            raise
         build_tabs = results["build_tabs"]
         equipment_tabs = results["equipment_tabs"]
         builds = []
@@ -586,7 +596,6 @@ class CharactersMixin:
                 "name": tab["name"]
             })
         numbers = emojis_cache["build"]["active"][:len(builds)]
-        equipment_dropdown = []
         images_msg = await image_channel.send(
             files=[b["file"] for b in builds if b["file"]])
         urls = [attachment.url for attachment in images_msg.attachments]
@@ -598,47 +607,14 @@ class CharactersMixin:
                 if tab["tab"] == tab_id:
                     tab["url"] = url
                     break
-        view = CharacterGearView(
-            equipments,
-            builds,
-            results,
-            numbers,
-            emojis_cache,
-        )
+        view = CharacterGearView(equipments, builds, results, numbers,
+                                 emojis_cache, interaction.user)
         embed = view.generate_embed()
-        await interaction.followup.send(embed=embed, view=view)
+        out = await interaction.followup.send(embed=embed, view=view)
+        view.response = out
 
-        def tell_off(answer):
-            self.bot.loop.create_task(
-                answer.send("Only the command owner may do that.",
-                            hidden=True))
-
-        # while True:
-        #     try:
-        #         answer = await wait_for_component(self.bot,
-        #                                           components=rows,
-        #                                           timeout=120)
-        #         if answer.author != ctx.author:
-        #             tell_off(answer)
-        #             continue
-        #         is_equipment = answer.custom_id == equipment_dropdown[
-        #             "components"][0]["custom_id"]
-        #         index = int(answer.selected_options[0])
-        #         if is_equipment:
-        #             current_equipment = index
-        #         else:
-        #             current_build = index
-        #         embed = generate_embed(builds, equipments, current_build,
-        #                                current_equipment)
-        #         await answer.defer(edit_origin=True)
-        #         self.bot.loop.create_task(answer.edit_origin(embed=embed))
-        #     except asyncio.TimeoutError:
-        #         return await message.edit(components=None)
-
-    # @cog_ext.cog_subcommand(base="character",
-    #                         name="birthdays",
-    #                         base_description="Character related commands")
-    async def character_birthdays(self, ctx):
+    @character_group.command(name="birthdays")
+    async def character_birthdays(self, interaction: discord.Interaction):
         """Lists days until the next birthday for each of your characters."""
 
         def suffix(year):
@@ -651,11 +627,8 @@ class CharactersMixin:
             return "th"
 
         await interaction.response.defer()
-        try:
-            doc = await self.fetch_key(ctx.author, ["characters"])
-            characters = await self.get_all_characters(ctx.author)
-        except APIError as e:
-            return await self.error_handler(ctx, e)
+        doc = await self.fetch_key(interaction.user, ["characters"])
+        characters = await self.get_all_characters(interaction.user)
         fields = {}
         for character in characters:
             age = datetime.datetime.utcnow() - character.created
@@ -667,12 +640,12 @@ class CharactersMixin:
             fields.setdefault(next_bd, [])
             spec = await character.get_spec_info()
             fields[next_bd].append(
-                ("{} {}".format(self.get_emoji(ctx, spec["name"]),
+                ("{} {}".format(self.get_emoji(interaction, spec["name"]),
                                 character.name), days_left))
         embed = discord.Embed(title="Days until...",
-                              colour=await self.get_embed_color(ctx))
+                              colour=await self.get_embed_color(interaction))
         embed.set_author(name=doc["account_name"],
-                         icon_url=ctx.author.avatar.url)
+                         icon_url=interaction.user.avatar.url)
         for k, v in sorted(fields.items(), reverse=True, key=lambda k: k[0]):
             lines = [
                 "{}: **{}**".format(*line)
@@ -680,7 +653,7 @@ class CharactersMixin:
             ]
             embed = embed_list_lines(embed, lines,
                                      "{}{} Birthday".format(k, suffix(k)))
-        await ctx.send(embed=embed)
+        await interaction.followup.send(embed=embed)
 
     def readable_attribute(self, attribute_name):
         attribute_sub = re.sub(r"(\w)([A-Z])", r"\1 \2", attribute_name)
@@ -1026,10 +999,11 @@ class CharactersMixin:
                     key["account_name"]
                 })
                 output.append(char + " is now public")
-        await ctx.send("Character status successfully changed. Anyone can "
-                       "check public characters gear and build - the rest is "
-                       "still private. To make character private "
-                       "again, type the same command.")
+        await interaction.followup.send(
+            "Character status successfully changed. Anyone can "
+            "check public characters gear and build - the rest is "
+            "still private. To make character private "
+            "again, type the same command.")
         if character == "All":
             await user.send("\n".join(output))
 

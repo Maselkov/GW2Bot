@@ -14,7 +14,6 @@ try:
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
 import datetime
-from .exceptions import APIError, APIKeyError
 
 
 def generate_population_graph(data):
@@ -71,9 +70,9 @@ class WvwMixin:
             return []
         current = current.lower()
         query = prepare_search(current)
-        query = {"name": query, "professions": {"$ne": None}}
+        query = {"name": query}
         items = await self.db.worlds.find(query).to_list(25)
-        return [Choice(name=it["name"], value=it["_id"]) for it in items]
+        return [Choice(name=it["name"], value=str(it["_id"])) for it in items]
 
     @wvw_group.command(name="info")
     @app_commands.describe(

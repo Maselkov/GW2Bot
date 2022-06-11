@@ -1,15 +1,15 @@
-from code import interact
 import math
 
 import discord
+from discord import app_commands
 
 from .exceptions import APIError, APINotFound
 from .utils.chat import cleanup_xml_tags
 from .utils.db import prepare_search
-from discord import app_commands
 
 
 class AchievementsMixin:
+
     async def achievement_autocomplete(self, interaction: discord.Interaction,
                                        current: str):
         if not current:
@@ -40,7 +40,7 @@ class AchievementsMixin:
             results = {}
         except APIError:
             raise
-        embed = await self.ach_embed(interact, results, choice)
+        embed = await self.ach_embed(interaction, results, choice)
         embed.set_author(name=doc["account_name"], icon_url=user.avatar.url)
         await interaction.followup.send(embed=embed)
 

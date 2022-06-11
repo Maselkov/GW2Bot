@@ -1,4 +1,3 @@
-import asyncio
 from code import interact
 import re
 
@@ -15,14 +14,14 @@ class KeyMixin:
 
     @key_group.command(name="add")
     @app_commands.describe(
-        key="Generate at https://account.arena.net under Applications tab")
-    async def key_add(self, interaction: discord.Interaction, key: str):
+        token="Generate at https://account.arena.net under Applications tab")
+    async def key_add(self, interaction: discord.Interaction, token: str):
         """Adds a key and associates it with your discord account"""
         await interaction.response.defer(ephemeral=True)
         doc = await self.bot.database.get(interaction.user, self)
         try:
             endpoints = ["tokeninfo", "account"]
-            token, acc = await self.call_multiple(endpoints, key=key)
+            token_info, acc = await self.call_multiple(endpoints, key=token)
         except APIInactiveError:
             return await interaction.followup.send(
                 "The API is currently down. "
@@ -30,10 +29,10 @@ class KeyMixin:
         except APIError:
             return await interaction.followup.send("The key is invalid.")
         key_doc = {
-            "key": key,
+            "key": token,
             "account_name": acc["name"],
-            "name": token["name"],
-            "permissions": token["permissions"]
+            "name": token_info["name"],
+            "permissions": token_info["permissions"]
         }
         # at this point we know the key is valid
         keys = doc.get("keys", [])
@@ -118,30 +117,6 @@ class KeyMixin:
             choices.append(Choice(name=token_name, value=key["key"]))
         return [choice for choice in choices if current in choice.name.lower()]
 
-    async def key_dropdown(self, ctx, keys, placeholder, max_values=None):
-        if not max_values:
-            max_values = len(keys)
-        options = []
-        for i, key in enumerate(keys):
-            options.append(
-                create_select_option(key["account_name"],
-                                     description=key["name"],
-                                     value=str(i)))
-        select = create_select(min_values=1,
-                               max_values=max_values,
-                               options=options,
-                               placeholder=placeholder)
-        components = [create_actionrow(select)]
-        msg = await ctx.send("** **", components=components, hidden=True)
-        try:
-            answer = await wait_for_component(self.bot,
-                                              components=components,
-                                              timeout=120)
-            return answer
-        except asyncio.TimeoutError:
-            await msg.edit(content="No response in time.", components=None)
-            return None
-
     @key_group.command(name="remove")
     @app_commands.describe(token="The API key to remove from your account")
     @app_commands.autocomplete(token=key_autocomplete)
@@ -180,13 +155,9 @@ class KeyMixin:
                                         reveal_tokens=True)
         await interaction.followup.send(embed=embed)
 
-
-# TODO
-
     @key_group.command(name="switch")
-    async def key_switch(self,
-                         interaction: discord.Interaction,
-                         index: int = 0):
+    @app_commands.autocomplete(token=key_autocomplete)
+    async def key_switch(self, interaction: discord.Interaction, token: str):
         """Swaps between multiple stored API keys."""
         doc = await self.bot.database.get(interaction.user, self)
         keys = doc.get("keys", [])
@@ -195,57 +166,24 @@ class KeyMixin:
             return await interaction.response.send_message(
                 "You need to add additional API keys first using /key "
                 "add first.",
-                hidden=True)
-        answer = None
-        if index:
-            index -= 1
+                ephemeral=True)
+        if key["key"] == token:
+            return await interaction.response.send_message(
+                "That key is currently active.", ephemeral=True)
+        for k in keys:
+            if k["key"] == token:
+                break
         else:
-            answer = await self.key_dropdown(
-                ctx,
-                keys,
-                "Select the key you want to switch to",
-                max_values=1)
-            if not answer:
-                return
-            index = int(answer.selected_options[0])
-        try:
-            key = keys[index]
-        except IndexError:
-            return await ctx.send(
-                "You don't have a key with this ID, remember you can "
-                "check your list of keys by using this command without "
-                "a number.",
-                hidden=True)
-        await self.bot.database.set(ctx.author, {"key": key}, self)
+            return await interaction.response.send_message(
+                "That key is not in your account.", ephemeral=True)
+        await self.bot.database.set(interaction.user, {"key": k}, self)
         msg = "Swapped to selected key."
         if key["name"]:
-            msg += " Name : `{}`".format(key["name"])
-        if answer:
-            await answer.edit_origin(content=msg, components=None)
-        else:
-            await ctx.send(msg, hidden=True)
-        try:
-            if ctx.guild:
-                await self.worldsync_on_member_join(ctx.author)
-            for guild in self.bot.guilds:
-                try:
-                    if len(guild.members) > 5000:
-                        continue
-                    if ctx.author not in guild.members:
-                        continue
-                    doc = await self.bot.database.get(guild, self)
-                    worldsync = doc.get("worldsync", {})
-                    worldsync_enabled = worldsync.get("enabled", False)
-                    if worldsync_enabled:
-                        member = guild.get_member(ctx.author.id)
-                        await self.worldsync_on_member_join(member)
-                except Exception:
-                    pass
-        except Exception:
-            pass
+            msg += " Name : `{}`".format(k["name"])
+        await interaction.response.send_message(msg, ephemeral=True)
 
     async def display_keys(self,
-                           ctx,
+                           interaction: discord.Interaction,
                            doc,
                            *,
                            display_active=False,
@@ -268,8 +206,9 @@ class KeyMixin:
 
         keys = doc.get("keys", [])
         embed = discord.Embed(title="Your keys",
-                              color=await self.get_embed_color(ctx))
-        embed.set_author(name=ctx.author.name, icon_url=ctx.author.avatar.url)
+                              color=await self.get_embed_color(interaction))
+        embed.set_author(name=interaction.user.name,
+                         icon_url=interaction.user.avatar.url)
         if display_active:
             active_key = doc.get("key", {})
             if active_key:
@@ -284,11 +223,6 @@ class KeyMixin:
             if token_name:
                 name += " - " + token_name
             embed.add_field(name=name, value=get_value(key), inline=False)
-        if show_tokens and not reveal_tokens:
-            embed.set_footer(text="Use {}key info to see full API keys".format(
-                ctx.prefix),
-                             icon_url=self.bot.user.avatar.url)
-        else:
-            embed.set_footer(text=self.bot.user.name,
-                             icon_url=self.bot.user.avatar.url)
+        embed.set_footer(text=self.bot.user.name,
+                         icon_url=self.bot.user.avatar.url)
         return embed

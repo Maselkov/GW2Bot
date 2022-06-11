@@ -1,13 +1,16 @@
 import asyncio
+from aiohttp import ContentTypeError
 from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
                       wait_chain, wait_fixed)
 
 from .exceptions import (APIBadRequest, APIConnectionError, APIForbidden,
                          APIInactiveError, APIInvalidKey, APINotFound,
                          APIRateLimited)
+import json
 
 
 class ApiMixin:
+
     async def call_multiple(self,
                             endpoints,
                             user=None,
@@ -21,6 +24,9 @@ class ApiMixin:
         for e in endpoints:
             tasks.append(self.call_api(e, key=key, **kwargs))
         return await asyncio.gather(*tasks)
+
+    async def cache_result(self, endpoint, key, user):
+        pass
 
     @retry(retry=retry_if_exception_type(APIBadRequest),
            reraise=True,
@@ -54,7 +60,7 @@ class ApiMixin:
                 try:
                     err = await r.json()
                     err_msg = err["text"]
-                except:
+                except (json.JSONDecodeError, KeyError, ContentTypeError):
                     err_msg = ""
                 if r.status == 400:
                     if err_msg == "invalid key":
@@ -74,4 +80,6 @@ class ApiMixin:
                         "Requests limit has been saturated. Try again later.")
                 else:
                     raise APIConnectionError("{} {}".format(r.status, err_msg))
-            return await r.json()
+            data = await r.json()
+            asyncio.create_task(self.cache_result(endpoint, key, user))
+            return data

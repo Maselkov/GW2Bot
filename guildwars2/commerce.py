@@ -19,6 +19,8 @@ class CommerceMixin:
         """Show current selling transactions"""
         await interaction.response.defer()
         embed = await self.get_tp_embed(interaction, "sells")
+        if not embed:
+            return
         await interaction.followup.send(embed=embed)
 
     @tp_group.command(name="buying")
@@ -26,17 +28,16 @@ class CommerceMixin:
         """Show current buying transactions"""
         await interaction.response.defer()
         embed = await self.get_tp_embed(interaction, "buys")
+        if not embed:
+            return
         await interaction.followup.send(embed=embed)
 
-    async def get_tp_embed(self, ctx, state):
+    async def get_tp_embed(self, interaction, state):
         endpoint = "commerce/transactions/current/" + state
-        try:
-            doc = await self.fetch_key(ctx.author, ["tradingpost"])
-            results = await self.call_api(endpoint, key=doc["key"])
-        except APIError as e:
-            return await self.error_handler(ctx, e)
+        doc = await self.fetch_key(interaction.user, ["tradingpost"])
+        results = await self.call_api(endpoint, key=doc["key"])
         data = discord.Embed(description='Current ' + state,
-                             colour=await self.get_embed_color(ctx))
+                             colour=await self.get_embed_color(interaction))
         data.set_author(name=f'Transaction overview of {doc["account_name"]}')
         data.set_thumbnail(url=("https://wiki.guildwars2.com/"
                                 "images/thumb/d/df/Black-Lion-Logo.png/"
@@ -56,10 +57,9 @@ class CommerceMixin:
         try:
             listings = await self.call_api(endpoint_listing)
         except APIBadRequest:
-            return await ctx.send("You don't have any ongoing "
-                                  "transactions")
-        except APIError as e:
-            return await self.error_handler(ctx, e)
+            await interaction.followup.send("You don't have any ongoing "
+                                            "transactions")
+            return None
         for result in results:
             index = dup_item[result["item_id"]]
             price = result["price"]
@@ -80,11 +80,13 @@ class CommerceMixin:
                 total = ""
             else:
                 total = " - Total: " + self.gold_to_coins(
-                    ctx, quantity * price)
+                    interaction, quantity * price)
             data.add_field(name=item_name,
                            value="{} x {}{}\nMax. offer: {} {}".format(
-                               quantity, self.gold_to_coins(ctx, price), total,
-                               self.gold_to_coins(ctx, max_price), undercuts),
+                               quantity,
+                               self.gold_to_coins(interaction, price), total,
+                               self.gold_to_coins(interaction,
+                                                  max_price), undercuts),
                            inline=False)
         return data
 
@@ -101,7 +103,7 @@ class CommerceMixin:
         }
         items = await self.db.items.find(query).to_list(25)
         items = sorted(items, key=lambda c: c["name"])
-        return [Choice(name=["name"], value=str(it["_id"])) for it in items]
+        return [Choice(name=it["name"], value=str(it["_id"])) for it in items]
 
     @tp_group.command(name="price")
     @app_commands.autocomplete(item=tp_autocomplete)
@@ -207,6 +209,8 @@ class CommerceMixin:
         return int(self.gamedata["items"]["rarity_colors"][rarity], 0)
 
     @gem_group.command(name="price")
+    @app_commands.describe(
+        quantity="The number of gems to evaluate (default is 400)")
     async def gem_price(self,
                         interaction: discord.Interaction,
                         quantity: int = 400):
@@ -242,16 +246,17 @@ class CommerceMixin:
 
     @gem_group.command(name="track")
     @app_commands.describe(gold="Receive a notification when price of 400 "
-                           "gems drops below this amount")
-    async def gem_track(self, interaction: discord.Interaction, gold: int = 0):
-        """Receive a notification when cost of 400 gems drops below given cost"""
+                           "gems drops below this amount. Set to 0 to disable")
+    async def gem_track(self, interaction: discord.Interaction, gold: int):
+        """Receive a notification when cost of 400 gems drops below given cost
+        """
         if not 0 <= gold <= 500:
-            return await interaction.response.send(
-                "Invalid value. Gold may be between 0 and 500", hidden=True)
+            return await interaction.response.send_message(
+                "Invalid value. Gold may be between 0 and 500", ephemeral=True)
         price = gold * 10000
-        await interaction.response.send(
+        await interaction.response.send_message(
             "You will be notified when price of 400 gems "
             f"drops below {gold} gold",
-            hidden=True)
+            ephemeral=True)
         await self.bot.database.set(interaction.user, {"gemtrack": price},
                                     self)

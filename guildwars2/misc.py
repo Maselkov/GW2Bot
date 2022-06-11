@@ -1,11 +1,10 @@
-import asyncio
 import codecs
 import struct
 
 import discord
 from bs4 import BeautifulSoup
 from cogs.guildwars2.utils.db import prepare_search
-from discord import Interaction, app_commands
+from discord import app_commands
 from discord.app_commands import Choice
 
 
@@ -45,7 +44,7 @@ class MiscMixin:
     # async def wiki(self, ctx, search_text, language="en"):
     #     """Search the Guild wars 2 wiki"""
     #     if len(search_text) > 300:
-    #         return await ctx.send("Search too long", hidden=True)
+    #         return await ctx.send("Search too long", ephemeral=True)
     #     await interaction.response.defer()
     #     wiki = {
     #         "en": "https://wiki.guildwars2.com",
@@ -114,7 +113,7 @@ class MiscMixin:
             "name": query,
         }
         items = await self.db.items.find(query).to_list(25)
-        return [Choice(name=it["name"], value=it["_id"]) for it in items]
+        return [Choice(name=it["name"], value=str(it["_id"])) for it in items]
 
     async def chatcode_skin_autocomplete(self,
                                          interaction: discord.Interaction,
@@ -126,7 +125,7 @@ class MiscMixin:
             "name": query,
         }
         items = await self.db.skins.find(query).to_list(25)
-        return [Choice(name=it["name"], value=it["_id"]) for it in items]
+        return [Choice(name=it["name"], value=str(it["_id"])) for it in items]
 
     async def chatcode_upgrade_autocomplete(self,
                                             interaction: discord.Interaction,
@@ -136,7 +135,7 @@ class MiscMixin:
         query = prepare_search(current)
         query = {"name": query, "type": "UpgradeComponent"}
         items = await self.db.items.find(query).to_list(25)
-        return [Choice(name=it["name"], value=it["_id"]) for it in items]
+        return [Choice(name=it["name"], value=str(it["_id"])) for it in items]
 
     @app_commands.command()
     @app_commands.describe(
@@ -154,17 +153,25 @@ class MiscMixin:
     async def chatcode(
         self,
         interaction: discord.Interaction,
-        item: int,
+        item: str,
         quantity: int,
-        skin: int = None,
-        upgrade_1: int = None,
-        upgrade_2: int = None,
+        skin: str = None,
+        upgrade_1: str = None,
+        upgrade_2: str = None,
     ):
         """Generate a chat code"""
         if not 1 <= quantity <= 255:
-            return await interaction.response.send(
+            return await interaction.response.send_message(
                 "Invalid quantity. Quantity can be a number between 1 and 255",
-                hidden=True)
+                ephemeral=True)
+        try:
+            item = int(item)
+            skin = int(skin) if skin else None
+            upgrade_1 = int(upgrade_1) if upgrade_1 else None
+            upgrade_2 = int(upgrade_2) if upgrade_2 else None
+        except ValueError:
+            return await interaction.response.send_message("Invalid value",
+                                                           ephemeral=True)
         upgrades = []
         if upgrade_1:
             upgrades.append(upgrade_1)
@@ -173,7 +180,7 @@ class MiscMixin:
         chat_code = self.generate_chat_code(item, quantity, skin, upgrades)
         output = "Here's your chatcode. No refunds. ```\n{}```".format(
             chat_code)
-        await interaction.response.send(output, hidden=True)
+        await interaction.response.send_message(output, ephemeral=True)
 
     def generate_chat_code(self, item_id, count, skin_id, upgrades):
 

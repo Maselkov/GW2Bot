@@ -1,12 +1,9 @@
-from code import interact
 import random
 import re
 
 import discord
 from discord import app_commands
 from discord.app_commands import Choice
-from discord.ext import commands
-from discord.ext.commands.cooldowns import BucketType
 
 from .exceptions import APIError
 from .utils.chat import embed_list_lines
@@ -63,7 +60,7 @@ class WalletMixin:
                 if k in ids[i]:
                     doc = await self.db.items.find_one({"_id": k})
                     name = doc["name"]
-                    name = re.sub('^\d+ ', '', name)
+                    name = re.sub(r'^\d+ ', '', name)
                     emoji = self.get_emoji(ctx, name)
                     lines[i].append("{} {} {}".format(emoji, sum(v.values()),
                                                       name))

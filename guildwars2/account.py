@@ -25,11 +25,8 @@ class AccountMixin:
         """
         await interaction.response.defer()
         user = interaction.user
-        try:
-            doc = await self.fetch_key(user, ["account"])
-            results = await self.call_api("account", key=doc["key"])
-        except APIError as e:
-            return await self.error_handler(interaction, e)
+        doc = await self.fetch_key(user, ["account"])
+        results = await self.call_api("account", key=doc["key"])
         accountname = doc["account_name"]
         created = results["created"].split("T", 1)[0]
         hascommander = "Yes" if results["commander"] else "No"
@@ -305,6 +302,16 @@ class AccountMixin:
     async def search(self, interaction: discord.Interaction, item: str):
         """Find items on your account"""
         await interaction.response.defer()
+        try:
+            ids = [int(it) for it in item.split(" ")]
+        except ValueError:
+            try:
+                choices = await self.item_autocomplete(interaction, item)
+                ids = [int(it) for it in choices[0].value.split(" ")]
+            except ValueError:
+                return await interaction.followup.send(
+                    "Could not find any items with that name.")
+        item_doc = await self.fetch_item(ids[0])
 
         async def generate_results_embed(results):
             seq = [k for k, v in results.items() if v]
@@ -313,7 +320,7 @@ class AccountMixin:
             longest = len(max(seq, key=len))
             if longest < 8:
                 longest = 8
-            if 'is_upgrade' in choice and choice['is_upgrade']:
+            if 'is_upgrade' in item_doc and item_doc['is_upgrade']:
                 output = [
                     "LOCATION{}INV / GEAR".format(" " * (longest - 5)),
                     "--------{}|-----".format("-" * (longest - 6))
@@ -334,7 +341,7 @@ class AccountMixin:
                 char_names.append(character.name)
             for k, v in storage_counts.items():
                 if v:
-                    if 'is_upgrade' in choice and choice['is_upgrade']:
+                    if 'is_upgrade' in item_doc and item_doc['is_upgrade']:
                         total += v[0]
                         total += v[1]
                         if k in char_names:
@@ -357,8 +364,8 @@ class AccountMixin:
             output.append("--------{}------".format("-" * (longest - 5)))
             output.append("TOTAL:{}{}".format(" " * (longest - 2), total))
             color = int(
-                self.gamedata["items"]["rarity_colors"][choice["rarity"]], 16)
-            item_doc = await self.fetch_item(choice["ids"][0])
+                self.gamedata["items"]["rarity_colors"][item_doc["rarity"]],
+                16)
             icon_url = item_doc["icon"]
             data = discord.Embed(description="Search results" + " " * align +
                                  u'\u200b',
@@ -375,7 +382,7 @@ class AccountMixin:
                     value += line + "\n"
                 if value:
                     values.append(value)
-                data.add_field(name=choice["name"],
+                data.add_field(name=item_doc["name"],
                                value="```ml\n{}```".format(values[0]),
                                inline=False)
                 for v in values[1:]:
@@ -384,10 +391,10 @@ class AccountMixin:
                         value="```ml\n{}```".format(v),
                         inline=False)
             else:
-                data.add_field(name=choice["name"],
+                data.add_field(name=item_doc["name"],
                                value="```ml\n{}\n```".format(value))
             data.set_author(name=doc["account_name"], icon_url=user.avatar.url)
-            if 'is_upgrade' in choice and choice['is_upgrade']:
+            if 'is_upgrade' in item_doc and item_doc['is_upgrade']:
                 data.set_footer(text="Amount in inventory / Amount in gear",
                                 icon_url=self.bot.user.avatar.url)
             else:
@@ -407,23 +414,20 @@ class AccountMixin:
                                key=doc["key"],
                                schema_string="2021-07-15T13:00:00.000Z"))
         storage = None
-        items = [int(it) for it in item.split(" ")]
-        if len(items) == 1:
-            if (not task.done()):
-                storage = await task
-            if exc := task.exception():
-                raise exc
-            choice = items[0]
-            search_results = await self.find_items_in_account(interaction,
-                                                              items,
-                                                              flatten=True,
-                                                              search=True,
-                                                              results=storage)
-            embed = await generate_results_embed(search_results)
-            if not embed:
-                return await interaction.followup.send(
-                    content=f"`{choice['name']}`: Not found on your account.")
-            return await interaction.followup.send(embed=embed)
+        if (not task.done()):
+            storage = await task
+        if exc := task.exception():
+            raise exc
+        search_results = await self.find_items_in_account(interaction.user,
+                                                          ids,
+                                                          flatten=True,
+                                                          search=True,
+                                                          results=storage)
+        embed = await generate_results_embed(search_results)
+        if not embed:
+            return await interaction.followup.send(
+                content=f"`{item_doc['name']}`: Not found on your account.")
+        return await interaction.followup.send(embed=embed)
 
     @app_commands.command()
     async def cats(self, interaction: discord.Interaction):
@@ -495,8 +499,10 @@ class AccountMixin:
         monday = last_modified - datetime.timedelta(
             days=last_modified.weekday())
         if not last_modified.weekday():
-            if last_modified < last_modified.replace(
-                    hour=7, minute=30, second=0, microsecond=0):
+            if last_modified < last_modified.replace(hour=7,
+                                                     minute=30,
+                                                     second=0,
+                                                     microsecond=0):
                 monday = last_modified - datetime.timedelta(weeks=1)
         reset_time = datetime.datetime(monday.year,
                                        monday.month,

@@ -1,4 +1,3 @@
-from dis import disco
 import re
 
 import discord
@@ -39,7 +38,13 @@ class EmojiMixin:
             elif fallback:
                 return fallback_fmt.format(emoji)
             return
-        if isinstance(ctx, (discord.Message, discord.TextChannel)):
+        if isinstance(ctx, discord.Webhook):
+            if ctx.guild:
+                can_use = ctx.channel.permissions_for(
+                    ctx.guild.default_role).external_emojis
+            else:
+                can_use = True
+        elif isinstance(ctx, (discord.Message, discord.TextChannel)):
             if ctx.guild:
                 me = ctx.guild.me
             else:
@@ -49,13 +54,11 @@ class EmojiMixin:
                 me = ctx.channel.guild.me
             else:
                 me = ctx.client.user
-        elif ctx:
-            me = ctx.me
         else:
             me = None
         if ctx:
             if isinstance(ctx, discord.Interaction):
-                can_use = ctx.channel.permissions_for(me).add_reactions
+                can_use = ctx.channel.permissions_for(me).external_emojis
             else:
                 if isinstance(ctx, discord.TextChannel):
                     channel = ctx
@@ -100,3 +103,9 @@ class EmojiMixin:
         await ctx.send("Registered {} emojis:\n```{}```".format(
             len(registered), ", ".join(registered)))
         await self.prepare_emojis()
+
+    def check_emoji_permission(self, interaction: discord.Interaction):
+        if not interaction.guild:
+            return True
+        return interaction.channel.permissions_for(
+            interaction.guild.default_role).external_emojis

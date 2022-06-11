@@ -1,22 +1,37 @@
 import asyncio
-from pydoc import describe
 import discord
 
 from discord.ext import commands, tasks
 from discord import app_commands
-from discord.app_commands import Choice
+
+from cogs.guildwars2.utils.db import prepare_search
 from .exceptions import APIBadRequest, APIError, APIInvalidKey
 import time
+from discord.app_commands import Choice
 
 
 class WorldsyncMixin:
 
+    async def worldsync_world_autocomplete(self,
+                                           interaction: discord.Interaction,
+                                           current: str):
+        if not current:
+            return []
+        query = prepare_search(current)
+        query = {"name": query}
+        items = await self.db.worlds.find(query).to_list(25)
+        return [Choice(name=it["name"], value=str(it["_id"])) for it in items]
+
     @app_commands.command()
+    @app_commands.guild_only()
+    @app_commands.checks.has_permissions(manage_guild=True, manage_roles=True)
+    @app_commands.checks.bot_has_permissions(manage_roles=True)
     @app_commands.describe(
         enabled="Enable or disable Worldsync",
         world="The world name to use for Worldsync",
         world_role="The role to give to members of the chosen world",
         ally_role="The role to give to allies of the chosen world")
+    @app_commands.autocomplete(world=worldsync_world_autocomplete)
     async def worldsync(self,
                         interaction: discord.Interaction,
                         enabled: bool,
@@ -24,26 +39,28 @@ class WorldsyncMixin:
                         world_role: discord.Role = None,
                         ally_role: discord.Role = None):
         """Role management based on in game account world"""
-        if not ctx.guild:
-            return await ctx.send("This command can only be used in servers.",
-                                  hidden=True)
-        if not ctx.author.guild_permissions.manage_roles:
-            return await ctx.send("You need the `manage roles` permission "
-                                  "to use this command.")
-        doc = await self.bot.database.get(ctx.guild, self)
+        await interaction.response.defer()
+        doc = await self.bot.database.get(interaction.guild, self)
         doc = doc.get("worldsync", {})
         current = doc.get("enabled", False)
         if not current and not enabled:
-            return await ctx.send("Worldsync is aleady disabled.", hidden=True)
+            return await interaction.followup.send(
+                "Worldsync is aleady disabled.", ephemeral=True)
         if current and not enabled:
-            await self.bot.database.set(ctx.guild,
+            await self.bot.database.set(interaction.guild,
                                         {"worldsync.enabled": enabled}, self)
-            return await ctx.send("Worldsync is now disabled.")
-        wid = await self.get_world_id(world)
-        if not wid:
-            return await ctx.send("Invalid world name")
+            return await interaction.followup.send("Worldsync is now disabled."
+                                                   )
+        if not world:
+            return await interaction.followup.send(
+                "You must specify a world name.", ephemeral=True)
+        try:
+            wid = int(world)
+        except ValueError:
+            return await interaction.followup.send("Invalid world name",
+                                                   ephemeral=True)
         if not world_role and not ally_role:
-            return await ctx.send(
+            return await interaction.followup.send(
                 "You need to use the role arguments for the bot to do "
                 "anytihng.")
         settings = {
@@ -52,11 +69,12 @@ class WorldsyncMixin:
             "worldsync.ally_role": ally_role.id if ally_role else None,
             "worldsync.enabled": enabled,
         }
-        await self.bot.database.set(ctx.guild, settings, self)
+        await self.bot.database.set(interaction.guild, settings, self)
         if enabled:
-            await ctx.send("Worldsync is now enabled. Use the same "
-                           "command to disable.")
-            return await self.sync_worlds(settings, ctx.guild)
+            await interaction.followup.send(
+                "Worldsync is now enabled. Use the same "
+                "command to disable.")
+            return await self.sync_worlds(settings, interaction.guild)
 
     async def worldsync_now(self, ctx):
         """Run the worldsync now"""
@@ -126,7 +144,7 @@ class WorldsyncMixin:
         world_id = doc.get("world_id")
         try:
             linked_worlds = await self.get_linked_worlds(world_id)
-        except APIError as e:
+        except APIError:
             return
         world_role = guild.get_role(doc.get("world_role"))
         ally_role = guild.get_role(doc.get("ally_role"))
@@ -158,7 +176,7 @@ class WorldsyncMixin:
         world_id = worldsync.get("world_id")
         try:
             linked_worlds = await self.get_linked_worlds(world_id)
-        except APIError as e:
+        except APIError:
             return
         await self.worldsync_member(member, world_role, ally_role, world_id,
                                     linked_worlds)
@@ -174,7 +192,7 @@ class WorldsyncMixin:
                 await self.sync_worlds(doc, doc["_obj"])
             except asyncio.CancelledError:
                 return
-            except Exception as e:
+            except Exception:
                 pass
         end = time.time()
         self.log.info(f"Worldsync took {end - start} seconds")

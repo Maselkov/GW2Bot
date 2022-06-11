@@ -1,5 +1,4 @@
 import calendar
-from code import interact
 import datetime
 import re
 
@@ -118,7 +117,7 @@ class DailyMixin:
                 category = "psna in 8 hours"
             value = re.sub(r"(?:Daily|Tier 4|PvP|WvW) ", "", value)
             if category.startswith("psna"):
-                category = self.get_emoji(ctx, "daily psna") + category
+                category = self.get_emoji(interaction, "daily psna") + category
             if category == "fractals":
                 embed.add_field(name="> Daily Fractals",
                                 value="\n".join(fractals[0]))

@@ -1,13 +1,10 @@
+import asyncio
 import datetime
-from unicodedata import name
-from click import Choice
+from re import A
 
 import discord
-from discord.app_commands import Choice
 from discord import app_commands
-from discord.ext import commands
-from discord.ext.commands.cooldowns import BucketType
-from discord.ext.commands.errors import BadArgument
+from discord.app_commands import Choice
 
 from ..exceptions import APIError, APIForbidden, APINotFound
 from ..utils.chat import embed_list_lines, zero_width_space
@@ -20,26 +17,17 @@ class GeneralGuild:
 
     async def guild_name_autocomplete(self, interaction: discord.Interaction,
                                       current: str):
-        choices = []
-        current = current.lower()
-        if not current and interaction.guild:
-            doc = await self.bot.database.get(interaction.guild, self)
-            guild_id = doc.get("guild_ingame")
-            if guild_id:
-                choices.append(
-                    Choice(name="Server's default guild", value=guild_id))
         doc = await self.bot.database.get(interaction.user, self)
         key = doc.get("key", {})
         if not key:
-            return choices
+            return []
         account_key = key["account_name"].replace(".", "_")
-        cache = doc.get("guild_cache", {}).get(account_key, {})
-        if not cache or cache["last_update"] < datetime.datetime.utcnow(
-        ) - datetime.timedelta(days=7):
+
+        async def cache_guild():
             try:
                 results = await self.call_api("account",
                                               scopes=["account"],
-                                              key=key)
+                                              key=key["key"])
             except APIError:
                 return choices
             guild_ids = results.get("guilds", [])
@@ -50,11 +38,35 @@ class GeneralGuild:
                 return choices
             guild_list = []
             for guild in guilds:
-                guild_list.append({"name": guild[name], "id": guild["id"]})
-            cache = {
+                guild_list.append({"name": guild["name"], "id": guild["id"]})
+            c = {
                 "last_update": datetime.datetime.utcnow(),
                 "guild_list": guild_list
             }
+            await self.bot.database.set(interaction.user,
+                                        {f"guild_cache.{account_key}": c},
+                                        self)
+
+        choices = []
+        current = current.lower()
+        if interaction.guild:
+            doc = await self.bot.database.get(interaction.guild, self)
+            guild_id = doc.get("guild_ingame")
+            if guild_id:
+                choices.append(
+                    Choice(name="Server's default guild", value=guild_id))
+        doc = await self.bot.database.get(interaction.user, self)
+        if not key:
+            return choices
+        cache = doc.get("guild_cache", {}).get(account_key, {})
+        if not cache:
+            if not choices:
+                cache = await cache_guild()
+            else:
+                asyncio.create_task(cache_guild())
+        elif cache["last_update"] < datetime.datetime.utcnow(
+        ) - datetime.timedelta(days=7):
+            asyncio.create_task(cache_guild())
         if cache:
             choices += [
                 Choice(name=guild["name"], value=guild["id"])
@@ -75,12 +87,12 @@ class GeneralGuild:
                                           ["guilds"])
         except (IndexError, APINotFound):
             return await interaction.followup.send_message(
-                "Invalid guild name", hidden=True)
+                "Invalid guild name", ephemeral=True)
         except APIForbidden:
             return await interaction.followup.send_message(
                 "You don't have enough permissions in game to "
                 "use this command",
-                hidden=True)
+                ephemeral=True)
         data = discord.Embed(description='General Info about {0}'.format(
             results["name"]),
                              colour=await self.get_embed_color(interaction))
@@ -124,12 +136,12 @@ class GeneralGuild:
                 endpoints, user, scopes)
         except (IndexError, APINotFound):
             return await interaction.followup.send("Invalid guild name",
-                                                   hidden=True)
+                                                   ephemeral=True)
         except APIForbidden:
             return await interaction.followup.send(
                 "You don't have enough permissions in game to "
                 "use this command",
-                hidden=True)
+                ephemeral=True)
         embed = discord.Embed(description=zero_width_space,
                               colour=await self.get_embed_color(interaction))
         embed.set_author(name=base["name"])
@@ -179,13 +191,10 @@ class GeneralGuild:
     @guild_group.command(name="treasury")
     @app_commands.describe(guild="Guild name.")
     @app_commands.autocomplete(guild=guild_name_autocomplete)
-    async def guild_treasury(self,
-                             interaction: discord.Interaction,
-                             guild: str = None):
+    async def guild_treasury(self, interaction: discord.Interaction,
+                             guild: str):
         """Get list of current and needed items for upgrades"""
         await interaction.response.defer()
-        guild_id = guild["id"]
-        guild_name = guild["name"]
         endpoints = [f"guild/{guild}", f"guild/{guild}/treasury"]
         try:
             base, treasury = await self.call_multiple(endpoints,
@@ -193,12 +202,12 @@ class GeneralGuild:
                                                       ["guilds"])
         except (IndexError, APINotFound):
             return await interaction.followup.send("Invalid guild name",
-                                                   hidden=True)
+                                                   ephemeral=True)
         except APIForbidden:
             return await interaction.followup.send(
                 "You don't have enough permissions in game to "
                 "use this command",
-                hidden=True)
+                ephemeral=True)
         embed = discord.Embed(description=zero_width_space,
                               colour=await self.get_embed_color(interaction))
         embed.set_author(name=base["name"])
@@ -231,7 +240,7 @@ class GeneralGuild:
         await interaction.followup.send(embed=embed)
 
     @guild_group.command(name="log")
-    @app_commands.describe(log_type="The type of log to inspect",
+    @app_commands.describe(log_type="Select the type of log to inspect",
                            guild="Guild name.")
     @app_commands.choices(log_type=[
         Choice(name=it.title(), value=it)
@@ -240,23 +249,24 @@ class GeneralGuild:
     @app_commands.autocomplete(guild=guild_name_autocomplete)
     async def guild_log(self, interaction: discord.Interaction, log_type: str,
                         guild: str):
-        """Get log of stash/treasury/members"""
+        """"Get log of last 20 entries of stash/treasury/members"""
         member_list = [
             "invited", "joined", "invite_declined", "rank_change", "kick"
         ]
+        # TODO use account cache to speed this up
         await interaction.response.defer()
         endpoints = [f"guild/{guild}", f"guild/{guild}/log/"]
         try:
-            base, log = await self.call_api(endpoints, interaction.user,
-                                            ["guilds"])
+            base, log = await self.call_multiple(endpoints, interaction.user,
+                                                 ["guilds"])
         except (IndexError, APINotFound):
             return await interaction.followup.send("Invalid guild name",
-                                                   hidden=True)
+                                                   ephemeral=True)
         except APIForbidden:
             return await interaction.followup.send(
                 "You don't have enough permissions in game to "
                 "use this command",
-                hidden=True)
+                ephemeral=True)
 
         data = discord.Embed(description=zero_width_space,
                              colour=await self.get_embed_color(interaction))
@@ -303,10 +313,10 @@ class GeneralGuild:
                     user = entry["user"]
                     if entry["type"] == "invited":
                         invited_by = entry["invited_by"]
-                        entry_string = "{} has invited {} to the guild.".format(
-                            invited_by, user)
+                        entry_string = (f"{invited_by} has "
+                                        "invited {user} to the guild.")
                     elif entry["type"] == "joined":
-                        entry_string = "{} has joined the guild.".format(user)
+                        entry_string = f"{user} has joined the guild."
                     elif entry["type"] == "kick":
                         kicked_by = entry["kicked_by"]
                         if kicked_by == user:
@@ -320,11 +330,13 @@ class GeneralGuild:
                         new_rank = entry["new_rank"]
                         if "changed_by" in entry:
                             changed_by = entry["changed_by"]
-                            entry_string = "{} has changed the role of {} from {} to {}.".format(
-                                changed_by, user, old_rank, new_rank)
-                        else:
-                            entry_string = "{} changed his role from {} to {}.".format(
-                                user, old_rank, new_rank)
+                            entry_string = (
+                                f"{changed_by} has changed "
+                                f"the role of {user} from {old_rank} "
+                                f"to {new_rank}.")
+                            entry_string = (
+                                "{user} changed his "
+                                "role from {old_rank} to {new_rank}.")
                     line = "**{}**\n*{}*".format(timedate, entry_string)
                     if length_lines + len(line) < 5500:
                         length_lines += len(line)
@@ -339,13 +351,15 @@ class GeneralGuild:
     @guild_group.command(name="default")
     @app_commands.describe(guild="Guild name")
     @app_commands.autocomplete(guild=guild_name_autocomplete)
-    async def guild_default(self, ctx, guild: str):
+    async def guild_default(self, interaction: discord.Interaction,
+                            guild: str):
         """ Set your default guild for guild commands on this server."""
+        await interaction.response.defer()
         results = await self.call_api(f"guild/{guild}")
-        await self.bot.database.set_guild(ctx.guild, {
+        await self.bot.database.set_guild(interaction.guild, {
             "guild_ingame": guild,
         }, self)
-        await ctx.send(
+        await interaction.followup.send(
             f"Your default guild is now set to {results['name']} for this "
             "server. All commands from the `guild` command group "
             "invoked without a specified guild will default to "
