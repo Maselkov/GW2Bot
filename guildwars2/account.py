@@ -298,6 +298,8 @@ class AccountMixin:
         ]
 
     @app_commands.command()
+    @app_commands.describe(item="Specify the name of an item to search for. "
+                           "Select an item from the list.")
     @app_commands.autocomplete(item=item_autocomplete)
     async def search(self, interaction: discord.Interaction, item: str):
         """Find items on your account"""
@@ -308,7 +310,7 @@ class AccountMixin:
             try:
                 choices = await self.item_autocomplete(interaction, item)
                 ids = [int(it) for it in choices[0].value.split(" ")]
-            except ValueError:
+            except (ValueError, IndexError):
                 return await interaction.followup.send(
                     "Could not find any items with that name.")
         item_doc = await self.fetch_item(ids[0])
@@ -456,7 +458,7 @@ class AccountMixin:
 
     @app_commands.command()
     async def nodes(self, interaction: discord.Interaction):
-        """Displays the nodes you haven't unlocked."""
+        """Displays the home instance nodes you have not yet unlocked."""
         await interaction.response.defer()
         user = interaction.user
         endpoint = "account/home/nodes"

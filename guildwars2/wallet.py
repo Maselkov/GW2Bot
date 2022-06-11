@@ -70,13 +70,12 @@ class WalletMixin:
                                     current: str):
         if not current:
             return []
-        current = current.lower()
         if current == "gold":
             current = "coin"
         query = prepare_search(current)
-        query = {"name": query, "professions": {"$ne": None}}
+        query = {"name": query}
         items = await self.db.currencies.find(query).to_list(25)
-        return [Choice(name=it["name"], value=it["_id"]) for it in items]
+        return [Choice(name=it["name"], value=str(it["_id"])) for it in items]
 
     @app_commands.command()
     @app_commands.describe(currency="The specific currency to search for. "
@@ -90,7 +89,7 @@ class WalletMixin:
         doc = await self.fetch_key(interaction.user, ["wallet"])
         if currency:
             results = await self.call_api("account/wallet", key=doc["key"])
-            choice = await self.db.currencies.find_one({"_id": currency})
+            choice = await self.db.currencies.find_one({"_id": int(currency)})
             embed = discord.Embed(title=choice["name"].title(),
                                   description=choice["description"],
                                   colour=await

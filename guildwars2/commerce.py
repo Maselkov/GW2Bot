@@ -107,6 +107,8 @@ class CommerceMixin:
 
     @tp_group.command(name="price")
     @app_commands.autocomplete(item=tp_autocomplete)
+    @app_commands.describe(
+        item="Specify the name of an item to check the price of")
     async def tp_price(self, interaction: discord.Interaction, item: str):
         """Check price of an item"""
         await interaction.response.defer()

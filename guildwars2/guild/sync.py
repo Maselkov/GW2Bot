@@ -110,7 +110,7 @@ class GuildSyncPromptUserConfirmView(discord.ui.View):
         await interaction.followup.send(
             content="Guildsync successfully enabled! Thank you.",
             ephemeral=True)
-        await self.db.guildsync_prompts.delete_one(query)
+        await self.cog.db.guildsync_prompts.delete_one(query)
 
     @discord.ui.button(style=discord.ButtonStyle.green,
                        emoji="✅",
@@ -372,16 +372,13 @@ class GuildSync:
                                      current: str):
 
         syncs = await self.db.guildsyncs.find({
-            "guild_id":
-            interaction.guild.id,
-            "guild_name":
-            prepare_search(current)
+            "guild_id": interaction.guild.id,
+            "name": prepare_search(current)
         }).to_list(None)
         syncs = [self.SyncGuild(self, doc, interaction.guild) for doc in syncs]
         options = []
         for sync in syncs:
-            options.append(
-                discord.SelectOption(label=sync.guild_name, value=sync.gid))
+            options.append(Choice(name=sync.guild_name, value=sync.id))
         return options
 
     @guildsync_group.command(name="edit")
@@ -395,15 +392,15 @@ class GuildSync:
     @app_commands.autocomplete(sync=guildsync_autocomplete)
     @app_commands.choices(operation=[
         Choice(name="Toggle syncing ranks.  If disabled, this will delete "
-               "the role created by the bot.",
+               "the roles created by the bot.",
                value="ranks"),
         Choice(value="guild_role",
                name="Toggle guild role. If disabled, this will delete "
-               "the role created by the bot."),
+               "the roles created by the bot."),
         Choice(name="Change API key. Make sure to "
                "fill out the api_key optional argument",
                value="change_key"),
-        Choice(name="Delete a guildsync", value="change_key")
+        Choice(name="Delete a guildsync", value="delete")
     ])
     async def guildsync_edit(self,
                              interaction: discord.Interaction,
@@ -417,6 +414,7 @@ class GuildSync:
                 return "**ON**"
             return "**OFF**"
 
+        await interaction.response.defer(ephemeral=True)
         if operation == "api_key" and not api_key:
             return await interaction.response.send_message(
                 "You must fill the API key argument to use this operation.",
@@ -428,8 +426,8 @@ class GuildSync:
             sync
         })
         if not sync:
-            return await interaction.response.send_message(
-                "No valid sync chosen", ephemeral=True)
+            return await interaction.followup.send("No valid sync chosen")
+        sync = self.SyncGuild(self, sync, interaction.guild)
         embed = discord.Embed(title="Guildsync", color=self.embed_color)
 
         if operation == "ranks":
@@ -437,7 +435,6 @@ class GuildSync:
         elif operation == "guild_role":
             sync.tag_enabled = not sync.tag_enabled
         elif operation == "change_key":
-            await interaction.response.defer()
             verified = await self.verify_leader_permissions(api_key, sync.id)
             if not verified:
                 return await interaction.followup.send(
@@ -445,7 +442,7 @@ class GuildSync:
             sync.key = api_key
         elif operation == "delete":
             await sync.delete()
-            return await interaction.response.send_message(
+            return await interaction.followup.send(
                 content="Sync successfully deleted")
         await sync.save(edited=True)
         lines = [
@@ -459,10 +456,7 @@ class GuildSync:
         embed = discord.Embed(title=f"Post-update {sync.guild_name} settings",
                               color=self.embed_color,
                               description=description)
-        if not interaction.response.is_done():
-            await interaction.response.send_message(embed=embed)
-        else:
-            await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=embed)
         self.schedule_guildsync(interaction.guild, 1)
 
     @guildsync_group.command(name="add")
@@ -575,7 +569,7 @@ class GuildSync:
                     "The user is missing leader permissions.")
             try:
                 embed = discord.Embed(title="Guildsync request",
-                                      embed=self.embed_color)
+                                      color=self.embed_color)
                 embed.description = (
                     "User {0.name}#{0.discriminator} (`{0.id}`), an "
                     "Administrator in {0.guild.name} server (`{0.guild.id}`) "

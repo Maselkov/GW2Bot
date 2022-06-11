@@ -141,7 +141,9 @@ class WvwMixin:
         await interaction.followup.send(embed=data)
 
     @wvw_group.command(name="population_track")
-    @app_commands.describe(world="World to track.")
+    @app_commands.describe(
+        world="Specify the name of a World to track the population of, and "
+        "recieve a notification when the specified World is no longer full")
     @app_commands.autocomplete(world=world_autocomplete)
     async def wvw_population_track(self, interaction: discord.Interaction,
                                    world: str):

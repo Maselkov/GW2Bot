@@ -127,11 +127,14 @@ class KeyMixin:
         keys = doc.get("keys", [])
         key = doc.get("key", {})
         to_keep = []
-        if key["key"] == token:
+        if key.get("key") == token:
             key = {}
         for k in keys:
             if k["key"] != token:
                 to_keep.append(k)
+        if key == key and to_keep == keys:
+            return await interaction.followup.send(
+                "No keys were removed. Invalid token")
         await self.bot.database.set(interaction.user, {
             "key": key,
             "keys": to_keep

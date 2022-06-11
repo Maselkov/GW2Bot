@@ -44,8 +44,8 @@ class PvpMixin:
         await interaction.followup.send(embed=embed)
 
     @pvp_group.command(name="professions")
-    @app_commands.describe(profession="Profession for profession "
-                           "specific statistics. Leave blank for total stats.")
+    @app_commands.describe(
+        profession="Select a profession to view specific statistics")
     @app_commands.choices(profession=[
         Choice(name=p.title(), value=p) for p in [
             "warrior",

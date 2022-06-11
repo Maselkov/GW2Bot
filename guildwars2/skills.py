@@ -355,7 +355,7 @@ class SkillsMixin:
             "name": query,  "professions": {"$ne": None}
         }
         items = await self.db.skills.find(query).to_list(25)
-        return [Choice(name=it["name"], value=it["_id"]) for it in items]
+        return [Choice(name=it["name"], value=str(it["_id"])) for it in items]
 
     async def trait_autocomplete(self,
                                          interaction: discord.Interaction,
@@ -367,35 +367,44 @@ class SkillsMixin:
             "name": query
         }
         items = await self.db.traits.find(query).to_list(25)
-        return [Choice(name=it["name"], value=it["_id"]) for it in items]
+        return [Choice(name=it["name"], value=str(it["_id"])) for it in items]
 
     @app_commands.command(name="skill")
     @app_commands.describe(skill="The skill name to search for. "
     "Example: Meteor Shower.")
     @app_commands.autocomplete(skill=skill_autocomplete)
-    async def skillinfo(self, interaction : discord.Interaction, skill : str):
+    async def skillinfo(self, interaction : discord.Interaction, skill: str):
         """Information about a given skill"""
-        query = {"name": prepare_search(skill),}
+        try:
+            skill_id = int(skill)
+        except ValueError:
+            try:
+                choices = await self.skill_autocomplete(interaction, skill)
+                skill_id = int(choices[0].value)
+            except (ValueError, IndexError):
+                return await interaction.followup.send(
+                    "Could not find any skills with that name.")
         await interaction.response.defer()
-        choice = await self.db.skills.find_one({"_id" : int(skill)})
+        choice = await self.db.skills.find_one({"_id": skill_id})
         data = await self.skill_embed(choice, interaction)
         await interaction.followup.send(embed=data)
 
-    # @cog_ext.cog_slash(name="trait",
-    #         options=[{
-    #         "name": "trait",
-    #         "description":
-    #         "",
-    #         "type": SlashCommandOptionType.STRING,
-    #         "required": True,
-    #     }])
     @app_commands.command(name="trait")
     @app_commands.describe(trait="The trait name to search for. Example: Fresh Air")
     @app_commands.autocomplete(trait=trait_autocomplete)
-    async def traitinfo(self, interaction:discord.Interaction, trait : str):
+    async def traitinfo(self, interaction: discord.Interaction, trait : str):
         """Information about a given trait"""
         await interaction.response.defer()
-        choice = await self.bot.db.traits.find_one({"_id" : int(trait)})
+        try:
+            trait_id = int(trait)
+        except ValueError:
+            try:
+                choices = await self.trait_autocomplete(interaction, trait)
+                trait_id = int(choices[0].value)
+            except (ValueError, IndexError):
+                return await interaction.followup.send(
+                    "Could not find any traits with that name.")
+        choice = await self.db.traits.find_one({"_id" : trait_id})
         data = await self.skill_embed(choice, interaction)
         await interaction.followup.send(embed=data)
 
@@ -424,15 +433,6 @@ class SkillsMixin:
                         best_match = emoji
             if best_match:
                 return self.get_emoji(ctx, best_match)
-            if isinstance(ctx, discord.Message):
-                if ctx.guild:
-                    me = ctx.guild.me
-                else:
-                    me = self.bot.user
-            elif ctx:
-                me = ctx.me
-            if ctx.channel.permissions_for(me).external_emojis:
-                return "❔"
             return ""
 
         def get_resource_name(prof):

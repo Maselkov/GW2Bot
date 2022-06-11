@@ -13,6 +13,9 @@ class GuildManageMixin:
     @server_group.command(name="force_account_names")
     @app_commands.checks.has_permissions(manage_nicknames=True)
     @app_commands.checks.bot_has_permissions(manage_nicknames=True)
+    @app_commands.describe(
+        enabled="Enable or disable automatically changing user "
+        "nicknames to match in-game account name")
     async def server_force_account_names(self,
                                          interaction: discord.Interaction,
                                          enabled: bool):

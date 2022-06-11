@@ -14,24 +14,53 @@ from .exceptions import APIError
 
 class DailyCategoriesDropdown(discord.ui.Select):
 
-    def __init__(self, interaction):
+    def __init__(self, interaction, cog, behavior, pin_message, channel):
         options = []
+        self.cog = cog
+        self.behavior = behavior
+        self.pin_message = pin_message
+        self.channel = channel
         self.selected_values = []
         for category in DAILY_CATEGORIES:
-            emoji = self.get_emoji(interaction,
-                                   f"daily_{category}",
-                                   return_obj=True)
+            emoji = cog.get_emoji(interaction,
+                                  f"daily_{category}",
+                                  return_obj=True)
             options.append(
-                discord.SelectOption(category["name"],
-                                     category["value"],
+                discord.SelectOption(label=category["name"],
+                                     value=category["value"],
                                      emoji=emoji or None))
         super().__init__(
             placeholder="Select which categories you want the bot to post",
             min_values=1,
-            max_values=len(options))
+            max_values=len(options),
+            options=options)
 
     async def callback(self, interaction: discord.Interaction):
         self.view.selected_options = self.values
+        await interaction.response.defer(ephemeral=True)
+        categories = self.values
+        embed = await self.cog.daily_embed(categories, interaction)
+        autodelete = False
+        autoedit = False
+        if self.behavior == "autodelete":
+            autodelete = True
+        if self.behavior == "autoedit":
+            autoedit = True
+        settings = {
+            "daily.on": True,
+            "daily.channel": self.channel.id,
+            "daily.autopin": self.pin_message,
+            "daily.autodelete": autodelete,
+            "daily.autoedit": autoedit,
+            "daily.categories": categories
+        }
+        await self.cog.bot.database.set(interaction.guild, settings, self)
+        await interaction.followup.edit(
+            content="I will now send "
+            f"dailies to {self.channel.mention}. Here's an example "
+            "notification:",
+            embed=embed,
+            view=None)
         self.view.stop()
 
 
@@ -51,9 +80,10 @@ class NotiifiersMixin:
         behavior="Select additional behavior for "
         "deleting/editing the message. Leave blank for standard behavior.")
     @app_commands.choices(behavior=[
-        Choice(name="Delete the previous day's message. "
-               "Causes an unread notification.",
-               value="autodelete"),
+        Choice(
+            name="Delete the previous day's message and post a new message. "
+            "Causes an unread notification",
+            value="autodelete"),
         Choice(name="Edit the previous day's message. No unread notification.",
                value="autoedit")
     ])
@@ -92,48 +122,29 @@ class NotiifiersMixin:
                 "I do not have permissions to embed links in "
                 f"{channel.mention}",
                 ephemeral=True)
-        view = discord.ui.View(tiemout=60)
-        view.add_item(DailyCategoriesDropdown(interaction))
+        view = discord.ui.View(timeout=60)
+        view.add_item(
+            DailyCategoriesDropdown(interaction, self, behavior, pin_message,
+                                    channel))
         await interaction.response.send_message("** **",
                                                 view=view,
                                                 ephemeral=True)
-        if await view.wait():
+        if view.wait():
             return await interaction.response.edit_message(
                 content="No response in time.", view=None)
-        await interaction.response.defer(ephemeral=True)
-        categories = view.children[0].selected_options
-        embed = await self.daily_embed(categories, interaction)
-        autodelete = False
-        autoedit = False
-        if behavior == "autodelete":
-            autodelete = True
-        if behavior == "autoedit":
-            autoedit = True
-        settings = {
-            "daily.on": True,
-            "daily.channel": channel.id,
-            "daily.autopin": pin_message,
-            "daily.autodelete": autodelete,
-            "daily.autoedit": autoedit,
-            "daily.categories": categories
-        }
-        await self.bot.database.set(interaction.guild, settings, self)
-        await interaction.followup.edit(
-            content="I will now send "
-            f"dailies to {channel.mention}. Here's an example "
-            "notification:",
-            embed=embed,
-            components=None)
 
     @notifier_group.command(name="news")
     @app_commands.checks.has_permissions(manage_guild=True)
-    @app_commands.describe(enabled="Enable or disable game news notifier. If "
-                           "enabling, channel argument must be set",
-                           channel="The channel to post to.")
+    @app_commands.describe(
+        enabled="Enable or disable game news notifier. If "
+        "enabling, channel argument must be set",
+        channel="The channel to post to.",
+        mention="The role to ping when posting the notification.")
     async def newsfeed(self,
                        interaction: discord.Interaction,
                        enabled: bool,
-                       channel: discord.TextChannel = None):
+                       channel: discord.TextChannel = None,
+                       mention: discord.Role = None):
         """Automatically sends news from guildwars2.com to a specified channel
         """
         if enabled and not channel:
@@ -162,7 +173,12 @@ class NotiifiersMixin:
                 "I do not have permissions to embed links in "
                 f"{channel.mention}",
                 ephemeral=True)
-        settings = {"news.on": True, "news.channel": channel.id}
+        role_id = mention.id if mention else None
+        settings = {
+            "news.on": True,
+            "news.channel": channel.id,
+            "news.role": role_id
+        }
         await self.bot.database.set(interaction.guild, settings, self)
         await interaction.response.send_message(
             f"I will now send news to {channel.mention}.")
@@ -174,7 +190,7 @@ class NotiifiersMixin:
         enabled="Enable or disable game update notifier. If "
         "enabling, channel argument must be set",
         channel="The channel to post to.",
-        mention="The role to ping when posting the notification..")
+        mention="The role to ping when posting the notification.")
     async def updatenotifier(self,
                              interaction: discord.Interaction,
                              enabled: bool,
@@ -223,18 +239,28 @@ class NotiifiersMixin:
     @notifier_group.command(name="bosses")
     @app_commands.checks.has_permissions(manage_guild=True)
     @app_commands.guild_only()
-    @app_commands.describe(enabled="Enable or disable boss notifier. "
-                           "If enabling, channel argument must be set",
-                           channel="The channel to post to.",
-                           edit="Edit the previous message instead of "
-                           "deleting it. If not, posts a new message.")
+    @app_commands.describe(
+        enabled="Enable or disable boss notifier. "
+        "If enabling, channel argument must be set",
+        channel="The channel to post to.",
+        behavior="Select behavior for posting/editing the message. Defaults to "
+        "posting a new message")
+    @app_commands.choices(behavior=[
+        Choice(name="Delete the previous day's message. "
+               "Causes an unread notification.",
+               value="delete"),
+        Choice(name="Edit the previous day's message. No unread "
+               "notification, but bad for active channels",
+               value="edit")
+    ])
     async def bossnotifier(self,
                            interaction: discord.Interaction,
                            enabled: bool,
                            channel: discord.TextChannel = None,
-                           edit: bool = False):
+                           behavior: str = "delete"):
         """Send the next two bosses every 15 minutes to a channel"""
         await interaction.response.defer(ephemeral=True)
+        edit = behavior == "edit"
         if enabled and not channel:
             return await interaction.followup.send(
                 "You must specify a channel.")
@@ -273,7 +299,7 @@ class NotiifiersMixin:
     ])
     async def mystic_forger_notifier(self, interaction: discord.Interaction,
                                      reminder_frequency: str):
-        """Get a personal reminder whenever Daily Mystic Forget becomes active. Get those Mystic Coins!"""
+        """Get a personal reminder whenever Daily Mystic Forger becomes active.!"""
         await interaction.response.defer(ephemeral=True)
         doc = await self.bot.database.get(interaction.user, self)
         doc = doc.get("mystic_forger", {})
@@ -610,11 +636,17 @@ class NotiifiersMixin:
                 if not channel:
                     continue
                 filter_on = doc.get("filter", True)
+                role_id = doc.get("role")
+                content = None
+                if role_id:
+                    role = channel.guild.get_role(role_id)
+                    if role:
+                        content = role.mention
                 for embed in embeds:
                     if filter_on:
                         if embed.title in filtered:
                             continue
-                    await channel.send(embed=embed)
+                    await channel.send(content, embed=embed)
             except Exception as e:
                 self.log.exception(e)
 
