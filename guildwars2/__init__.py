@@ -9,15 +9,18 @@ from PIL import ImageFont
 from .account import AccountMixin
 from .achievements import AchievementsMixin
 from .api import ApiMixin
-from .bt import BtMixin
 from .characters import CharactersMixin
 from .commerce import CommerceMixin
 from .daily import DailyMixin
 from .database import DatabaseMixin
+from discord.app_commands import AppCommandError
+from discord import app_commands
+from discord import Interaction
 from .emojis import EmojiMixin
-from .events import EventsMixin
+from .events import EventsMixin, EventTimerReminderUnsubscribeView
 from .evtc import EvtcMixin
 from .exceptions import APIError, APIInactiveError, APIInvalidKey, APIKeyError
+from .guild.sync import GuildSyncPromptUserConfirmView
 from .guild import GuildMixin
 from .guildmanage import GuildManageMixin
 from .key import KeyMixin
@@ -31,7 +34,7 @@ from .wvw import WvwMixin
 
 
 class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
-                 ApiMixin, BtMixin, CharactersMixin, CommerceMixin, DailyMixin,
+                 ApiMixin, CharactersMixin, CommerceMixin, DailyMixin,
                  DatabaseMixin, EmojiMixin, EventsMixin, EvtcMixin, GuildMixin,
                  GuildManageMixin, KeyMixin, MiscMixin, NotiifiersMixin,
                  PvpMixin, SkillsMixin, WalletMixin, WorldsyncMixin, WvwMixin):
@@ -78,28 +81,71 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
         for task in self.tasks:
             task.start()
 
-    def cog_unload(self):
+        # TODO move this to main bot. Add code to register sub-error handlers
+        @bot.tree.error
+        async def on_app_command_error(interaction: Interaction,
+                                       error: AppCommandError):
+            responded = interaction.response.is_done()
+            msg = ""
+            user = interaction.user
+            if isinstance(error, app_commands.NoPrivateMessage):
+                msg = "This command cannot be used in DMs"
+            elif isinstance(error, app_commands.CommandOnCooldown):
+                msg = ("You cannot use this command again for the next "
+                       "{:.2f} seconds"
+                       "".format(error.retry_after))
+            elif isinstance(error, app_commands.CommandInvokeError):
+                exc = error.original
+                if isinstance(exc, APIKeyError):
+                    msg = str(exc)
+                elif isinstance(exc, APIInactiveError):
+                    msg = (f"{user.mention}, the API is currently down. "
+                           "Try again later.".format)
+                elif isinstance(exc, APIInvalidKey):
+                    msg = (
+                        f"{user.mention}, your API key is invalid! Remove your "
+                        "key and add a new one")
+                elif isinstance(exc, APIError):
+                    msg = (f"{user.mention}, API has responded with the "
+                           "following error: "
+                           f"`{exc}`".format(user, exc))
+                else:
+                    self.log.exception("Exception in command, ", exc_info=exc)
+                    msg = ("Something went wrong. If this problem persists, "
+                           "please report it or ask about it in the "
+                           "support server- https://discord.gg/VyQTrwP")
+            elif isinstance(error, app_commands.MissingPermissions):
+                missing = [
+                    p.replace("guild", "server").replace("_", " ").title()
+                    for p in error.missing_permissions
+                ]
+                msg = ("You're missing the following permissions to use this "
+                       "command: `{}`".format(", ".join(missing)))
+            elif isinstance(error, app_commands.BotMissingPermissions):
+                missing = [
+                    p.replace("guild", "server").replace("_", " ").title()
+                    for p in error.missing_permissions
+                ]
+                msg = (
+                    "The bot is missing the following permissions to be able to "
+                    "run this command:\n`{}`\nPlease add them then try again".
+                    format(", ".join(missing)))
+            elif isinstance(error, app_commands.CommandNotFound):
+                pass
+            elif isinstance(error, app_commands.CheckFailure):
+                pass
+            if not responded:
+                await interaction.response.send_message(msg, ephemeral=True)
+            else:
+                await interaction.followup.send(msg, ephemeral=True)
+
+    async def cog_load(self):
+        self.bot.add_view(EventTimerReminderUnsubscribeView(self))
+        self.bot.add_view(GuildSyncPromptUserConfirmView(self))
+
+    async def cog_unload(self):
         for task in self.tasks:
             task.cancel()
-
-    async def error_handler(self, ctx, exc):
-        user = ctx.author
-        if isinstance(exc, APIKeyError):
-            await ctx.send(str(exc))
-            return
-        if isinstance(exc, APIInactiveError):
-            await ctx.send("{.mention}, the API is currently down. "
-                           "Try again later.".format(user))
-            return
-        if isinstance(exc, APIInvalidKey):
-            await ctx.send("{.mention}, your API key is invalid! Remove your "
-                           "key and add a new one".format(user))
-            return
-        if isinstance(exc, APIError):
-            await ctx.send(
-                "{.mention}, API has responded with the following error: "
-                "`{}`".format(user, exc))
-            return
 
     def can_embed_links(self, ctx):
         if not isinstance(ctx.channel, discord.abc.GuildChannel):
@@ -120,22 +166,21 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
     def tell_off(self,
                  component_context,
                  message="Only the command owner may do that."):
-        self.bot.loop.create_task(component_context.send(message, hidden=True))
+        self.bot.loop.create_task(
+            component_context.send(message, ephemeral=True))
 
 
-def setup(bot):
+async def setup(bot):
     cog = GuildWars2(bot)
-    loop = bot.loop
-    loop.create_task(
-        bot.database.setup_cog(
-            cog, {
-                "cache": {
-                    "day": datetime.datetime.utcnow().weekday(),
-                    "news": [],
-                    "build": 0,
-                    "dailies": {},
-                    "dailies_tomorrow": {}
-                },
-                "emojis": {}
-            }))
-    bot.add_cog(cog)
+    await bot.database.setup_cog(
+        cog, {
+            "cache": {
+                "day": datetime.datetime.utcnow().weekday(),
+                "news": [],
+                "build": 0,
+                "dailies": {},
+                "dailies_tomorrow": {}
+            },
+            "emojis": {}
+        })
+    await bot.add_cog(cog)

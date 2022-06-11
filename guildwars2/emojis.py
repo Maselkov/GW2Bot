@@ -2,10 +2,10 @@ import re
 
 import discord
 from discord.ext import commands
-from discord_slash.context import InteractionContext
 
 
 class EmojiMixin:
+
     async def prepare_emojis(self):
         doc = await self.bot.database.get_cog_config(self)
         self.emojis = doc.get("emojis", {})
@@ -18,6 +18,7 @@ class EmojiMixin:
                   fallback_fmt="{}",
                   return_obj=False,
                   force_emoji=False):
+
         def get_emoji():
             search_str = emoji.lower().replace(" ", "_")
             # Remove illegal emoji characters
@@ -37,18 +38,27 @@ class EmojiMixin:
             elif fallback:
                 return fallback_fmt.format(emoji)
             return
-        if isinstance(ctx, (discord.Message, discord.TextChannel)):
+        if isinstance(ctx, discord.Webhook):
+            if ctx.guild:
+                can_use = ctx.channel.permissions_for(
+                    ctx.guild.default_role).external_emojis
+            else:
+                can_use = True
+        elif isinstance(ctx, (discord.Message, discord.TextChannel)):
             if ctx.guild:
                 me = ctx.guild.me
             else:
                 me = self.bot.user
-        elif ctx:
-            me = ctx.me
+        elif isinstance(ctx, discord.Interaction):
+            if isinstance(ctx.channel, (discord.TextChannel, discord.Thread)):
+                me = ctx.channel.guild.me
+            else:
+                me = ctx.client.user
         else:
             me = None
         if ctx:
-            if isinstance(ctx, InteractionContext):
-                can_use = ctx.channel.permissions_for(me).add_reactions
+            if isinstance(ctx, discord.Interaction):
+                can_use = ctx.channel.permissions_for(me).external_emojis
             else:
                 if isinstance(ctx, discord.TextChannel):
                     channel = ctx
@@ -93,3 +103,9 @@ class EmojiMixin:
         await ctx.send("Registered {} emojis:\n```{}```".format(
             len(registered), ", ".join(registered)))
         await self.prepare_emojis()
+
+    def check_emoji_permission(self, interaction: discord.Interaction):
+        if not interaction.guild:
+            return True
+        return interaction.channel.permissions_for(
+            interaction.guild.default_role).external_emojis

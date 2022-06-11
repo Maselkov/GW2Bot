@@ -6,15 +6,8 @@ from typing import Union
 import aiohttp
 import discord
 from discord.ext import commands, tasks
-from discord_slash import MenuContext, cog_ext
-from discord_slash.model import (ButtonStyle, ContextMenuType,
-                                 SlashCommandOptionType)
-from discord_slash.utils.manage_components import (create_actionrow,
-                                                   create_button,
-                                                   create_select,
-                                                   create_select_option,
-                                                   wait_for_component)
-
+from discord import app_commands
+from discord.app_commands import Choice
 from .exceptions import APIError
 from .utils.chat import (embed_list_lines, en_space, magic_space,
                          zero_width_space)
@@ -28,7 +21,104 @@ TOKEN_URL = BASE_URL + "getUserToken"
 ALLOWED_FORMATS = (".evtc", ".zevtc", ".zip")
 
 
+class EvtcGuildSelectionViewSelect(discord.ui.Select):
+
+    def __init__(self, cog, guilds):
+        self.cog = cog
+        options = []
+        for guild in guilds:
+            name = f"{guild['name']} [{guild['tag']}]"
+            options.append(discord.SelectOption(label=name, value=guild["id"]))
+        super().__init__(options=options,
+                         placeholder="Select guilds",
+                         min_values=1,
+                         max_values=len(options))
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.edit_message(
+            content="This channel is now a destination for EVTC logs. "
+            "Logs uploaded using third-party utilities with your GW2Bot "
+            "EVTC API key will be posted here. You can have multiple "
+            "destinations at the same time. DMs also work.\nYou can always "
+            "remove it using `/evtc_automation remove_destinations`",
+            view=None)
+        self.view.selected_guilds = self.values
+        self.view.stop()
+
+
+class EvtcGuildSelectionView(discord.ui.View):
+
+    def __init__(self, cog, guilds):
+        super().__init__(timeout=60)
+        self.cog = cog
+        self.add_item(EvtcGuildSelectionViewSelect(cog, guilds))
+        self.selected_guilds = []
+        self.skip = False
+
+    @discord.ui.button(label='Next',
+                       style=discord.ButtonStyle.blurple,
+                       emoji="➡️")
+    async def confirm(self, interaction: discord.Interaction,
+                      button: discord.ui.Button):
+        await interaction.response.edit_message(
+            content="This channel is now a destination for EVTC logs. "
+            "Logs uploaded using third-party utilities with your GW2Bot "
+            "EVTC API key will be posted here. You can have multiple "
+            "destinations at the same time. DMs also work.\nYou can always "
+            "remove it using `/evtc autopost remove_destinations`",
+            view=None)
+        self.skip = True
+        self.stop()
+
+
+class EvtcAutouploadDestinationsSelect(discord.ui.Select):
+
+    def __init__(self, cog, channels, destinations):
+        self.cog = cog
+        self.destinations = destinations
+        options = []
+        for i, channel in enumerate(channels):
+            if isinstance(channel, discord.DMChannel):
+                name = "DM"
+            else:
+                if not channel:
+                    name = "Inaccessible Channel"
+                name = f"{channel.guild.name} - {channel.name}"
+            options.append(discord.SelectOption(label=name, value=str(i)))
+        super().__init__(options=options,
+                         placeholder="Select destinations to remove",
+                         min_values=1,
+                         max_values=len(options))
+
+    async def callback(self, interaction: discord.Interaction):
+        choices = [self.destinations[int(i)] for i in self.values]
+        for choice in choices:
+            await self.cog.db.evtc.destinations.delete_one(
+                {"_id": choice["_id"]})
+        await interaction.response.edit_message(
+            content="Removed selected destinations.", view=None)
+        self.view.stop()
+
+
+# class EvtcAutouploadRemoveDestinationsView(discord.ui.View):
+#     def __init__(self, cog, channels, destinations):
+#         self.destinations = destinations
+#         self.add_item())
+#         super().__init__(timeout=60)
+
+
 class EvtcMixin:
+
+    evtc_automation_group = app_commands.Group(
+        name="evtc_automation",
+        description="Character relating to automating EVTC processing")
+
+    autopost_group = app_commands.Group(
+        name="autopost",
+        description="Automatically post processed EVTC logs uploaded by "
+        "third party utilities",
+        parent=evtc_automation_group)
+
     async def get_dpsreport_usertoken(self, user):
         doc = await self.bot.database.get(user, self)
         token = doc.get("dpsreport_token")
@@ -82,9 +172,9 @@ class EvtcMixin:
                                                       encounter_id}) as r:
             return await r.json()
 
-    async def upload_embed(self, ctx, data, permalink):
+    async def upload_embed(self, destination, data, permalink):
+        force_emoji = True if not destination else False
         lines = []
-        force_emoji = False if ctx else True
         targets = data["phases"][0]["targets"]
         group_dps = 0
         wvw = data["triggerID"] == 1
@@ -120,23 +210,23 @@ class EvtcMixin:
         players.sort(key=lambda p: p["dps"], reverse=True)
         for player in players:
             down_count = player["defenses"][0]["downCount"]
-            prof = self.get_emoji(ctx,
+            prof = self.get_emoji(destination,
                                   player["profession"],
-                                  force_emoji=force_emoji)
+                                  force_emoji=True)
             line = f"{prof} **{player['name']}** *({player['account']})*"
             if down_count:
                 line += (
-                    f" | {self.get_emoji(ctx, 'downed', force_emoji=force_emoji)}Downed "
+                    f" | {self.get_emoji(destination, 'downed', force_emoji=True)}Downed "
                     f"count: **{down_count}**")
             lines.append(line)
         dpses = []
         charater_name_max_length = 19
         for player in players:
-            line = self.get_emoji(ctx,
+            line = self.get_emoji(destination,
                                   player["profession"],
-                                  force_emoji=force_emoji,
                                   fallback=True,
-                                  fallback_fmt="")
+                                  fallback_fmt="",
+                                  force_emoji=True)
             align = (charater_name_max_length - len(player["name"])) * " "
             line += "`" + player["name"] + align + get_dps(player)
             dpses.append(line)
@@ -181,7 +271,7 @@ class EvtcMixin:
         separator = 2 * en_space
         line = zero_width_space + (en_space * (charater_name_max_length + 6))
         icon_line = line
-        blank = self.get_emoji(ctx, "blank", force_emoji=force_emoji)
+        blank = self.get_emoji(destination, "blank", force_emoji=True)
         first = True
         for buff in sought_buffs:
             if first and not blank:
@@ -191,11 +281,11 @@ class EvtcMixin:
                     icon_line += blank + blank
                 else:
                     icon_line += separator + (en_space * 4)
-            icon_line += self.get_emoji(ctx,
+            icon_line += self.get_emoji(destination,
                                         buff,
                                         fallback=True,
                                         fallback_fmt="{:1.1}",
-                                        force_emoji=force_emoji)
+                                        force_emoji=True)
             first = False
         groups = []
         for player in players:
@@ -212,11 +302,11 @@ class EvtcMixin:
                     current_group = player["group"]
                     buff_lines.append(f"> **GROUP {current_group}**")
             line = "`"
-            line = self.get_emoji(ctx,
+            line = self.get_emoji(destination,
                                   player["profession"],
-                                  force_emoji=force_emoji,
                                   fallback=True,
-                                  fallback_fmt="")
+                                  fallback_fmt="",
+                                  force_emoji=True)
             align = (3 + charater_name_max_length - len(player["name"])) * " "
             line += "`" + player["name"] + align
             for buff in buffs:
@@ -263,66 +353,44 @@ class EvtcMixin:
         if not duplicate:
             await self.db.encounters.insert_one(doc)
         embed.timestamp = date
-        embed.set_footer(text="Recorded at", icon_url=self.bot.user.avatar_url)
+        embed.set_footer(text="Recorded at", icon_url=self.bot.user.avatar.url)
         if boss:
             embed.set_author(name=data["fightName"], icon_url=boss["icon"])
         return embed
 
-    @cog_ext.cog_context_menu(target=ContextMenuType.MESSAGE,
-                              name="ProcessEVTC")
-    async def evtc(self, ctx: MenuContext):
+    @app_commands.command(name="evtc")
+    @app_commands.checks.bot_has_permissions(embed_links=True)
+    @app_commands.describe(
+        file="EVTC file to process. Accepted formats: .evtc, .zip, .zevtc")
+    async def evtc(self, interaction: discord.Interaction,
+                   file: discord.Attachment):
         """Process an EVTC combat log in an attachment"""
-        message = ctx.target_message
-        if not message.attachments:
-            return await ctx.send(
-                "The message must have an attached evtc file!", hidden=True)
-        for attachment in message.attachments:
-            if attachment.filename.endswith(ALLOWED_FORMATS):
-                break
-        else:
-            return await ctx.send(
+        if not file.filename.endswith(ALLOWED_FORMATS):
+            return await interaction.response.send_message(
                 "The attachment seems not to be of a correct filetype.\n"
                 f"Allowed file extensions: `{', '.join(ALLOWED_FORMATS)}`",
-                hidden=True)
-        if ctx.guild:
-            if not ctx.channel.permissions_for(ctx.me).embed_links:
-                return await ctx.send(
-                    "I need embed links permission to process logs.",
-                    hidden=True)
-        await ctx.defer()
-        await self.process_evtc(message, ctx)
+                ephemeral=True)
+        await interaction.response.defer()
+        await self.process_evtc([file], interaction.user, interaction.followup)
 
-    @cog_ext.cog_subcommand(
-        base="evtc",
-        name="channel",
-        base_description="EVTC related commands",
-        options=[{
-            "name": "channel",
-            "description":
-            "The channel to enable automatic EVTC processing on.",
-            "type": SlashCommandOptionType.CHANNEL,
-            "required": True,
-            "channel_types": [0]
-        }, {
-            "name": "autodelete",
-            "description":
-            "Automatically delete message after processing the EVTC log",
-            "type": SlashCommandOptionType.BOOLEAN,
-            "required": True
-        }])
-    async def evtc_channel(self, ctx, channel: discord.TextChannel,
-                           autodelete):
-        """Sets this channel to be automatically used to process EVTC logs"""
-        if not ctx.guild:
-            return await ctx.send("This command can only be used in a server.",
-                                  hidden=True)
-        if not ctx.author.guild_permissions.manage_guild:
-            return await ctx.send(
-                "You need the manage server permission to use this command.",
-                hidden=True)
-        doc = await self.bot.database.get(ctx.channel, self)
+    @evtc_automation_group.command(name="channel")
+    @app_commands.guild_only()
+    @app_commands.checks.has_permissions(manage_guild=True,
+                                         manage_channels=True)
+    @app_commands.checks.bot_has_permissions(embed_links=True,
+                                             use_external_emojis=True)
+    @app_commands.describe(
+        enabled="Disable or enable this feature on the specificed channel",
+        channel="The target channel",
+        autodelete="Delete original message after processing the EVTC log")
+    async def evtc_channel(self, interaction: discord.Interaction,
+                           enabled: bool, channel: discord.TextChannel,
+                           autodelete: bool):
+        """Sets a channel to be automatically used to process EVTC logs
+        posted within"""
+        doc = await self.bot.database.get(channel, self)
         enabled = not doc.get("evtc.enabled", False)
-        await self.bot.database.set(ctx.channel, {
+        await self.bot.database.set(channel, {
             "evtc.enabled": enabled,
             "evtc.autodelete": autodelete
         }, self)
@@ -332,12 +400,12 @@ class EvtcMixin:
                    "@mentioning the bot in the same message.. Accepted "
                    f"formats: `{', '.join(ALLOWED_FORMATS)}`\nTo disable, use "
                    "this command again.")
-            if not channel.permissions_for(ctx.me).embed_links:
+            if not channel.permissions_for(interaction.guild.me).embed_links:
                 msg += ("I won't be able to process logs without Embed "
                         "Links permission.")
         else:
             msg = ("Automatic EVTC processing diasbled")
-        await ctx.send(msg)
+        await interaction.response.send_message(msg)
 
     def generate_evtc_api_key(self) -> None:
         return secrets.token_urlsafe(64)
@@ -347,59 +415,45 @@ class EvtcMixin:
         doc = await self.db.evtc.api_keys.find_one({"user": user.id}) or {}
         return doc.get("token", None)
 
-    @cog_ext.cog_subcommand(base="evtc",
-                            name="api_key",
-                            base_description="EVTC related commands",
-                            options=[{
-                                "name":
-                                "operation",
-                                "description":
-                                "The operaiton to perform.",
-                                "type":
-                                SlashCommandOptionType.STRING,
-                                "required":
-                                True,
-                                "choices": [{
-                                    "value": "view",
-                                    "name": "View your API key."
-                                }, {
-                                    "value":
-                                    "generate",
-                                    "name":
-                                    "Generate or regenerate your API key."
-                                }, {
-                                    "value": "delete",
-                                    "name": "Delete your API key."
-                                }]
-                            }])
-    async def evtc_api_key(self, ctx, operation):
+    @evtc_automation_group.command(name="api_key")
+    @app_commands.describe(operation="The operation to perform")
+    @app_commands.choices(operation=[
+        Choice(name="View your API key", value="view"),
+        Choice(name="Generate or regenerate your API key", value="generate"),
+        Choice(name="Delete your API key", value="delete")
+    ])
+    async def evtc_api_key(self, interaction: discord.Interaction,
+                           operation: str):
         """Generate an API key for third-party apps that automatically upload EVTC logs"""
-        await ctx.defer(hidden=True)
-        existing_key = await self.get_user_evtc_api_key(ctx.author)
+        await interaction.response.defer(ephemeral=True)
+        existing_key = await self.get_user_evtc_api_key(interaction.user)
         if operation == "delete":
             if not existing_key:
-                return await ctx.send(
+                return await interaction.followup.send(
                     "You don't have an EVTC API key generated.")
-            await self.db.evtc.api_keys.delete_one({"_id": ctx.author.id})
-            return await ctx.send("Your EVTC API key has been deleted.")
+            await self.db.evtc.api_keys.delete_one(
+                {"_id": interaction.user.id})
+            return await interaction.followup.send(
+                "Your EVTC API key has been deleted.")
         if operation == "view":
             if not existing_key:
-                return await ctx.send(
+                return await interaction.followup.send(
                     "You don't have an EVTC API key generated. Use "
                     "`/evtc api_key generate` to generate one.")
-            return await ctx.send(f"Your EVTC API key is ```{existing_key}```")
+            return await interaction.followup.send(
+                f"Your EVTC API key is ```{existing_key}```")
         if operation == "generate":
             key = self.generate_evtc_api_key()
             await self.db.evtc.api_keys.insert_one({
-                "user": ctx.author.id,
+                "user": interaction.user.id,
                 "token": key
             })
             new = "new " if existing_key else ""
-            return await ctx.send(
+            return await interaction.followup.send(
                 f"Your {new}new EVTC API key is:\n```{key}```You may use "
                 "it with utilities that automatically upload logs to link "
                 "them with your account, and potentially post them to "
-                "certain channels. See `/evtc autopost` for more\n\nYou may "
+                "certain channels. See `/evtc_automation` for more\n\nYou may "
                 "revoke the key at any time with `/evtc api_key delete`, or "
                 "regenerate it with `/evtc api_key generate`. Don't share "
                 "this key with anyone.\nYou can also use this "
@@ -412,177 +466,100 @@ class EvtcMixin:
             "user": user.id
         })
 
-    @cog_ext.cog_subcommand(
-        base="evtc",
-        subcommand_group="autopost",
-        sub_group_desc="Automatically post processed EVTC logs uploaded by "
-        "third party utilities",
-        name="add_destination",
-        base_description="EVTC related commands",
-    )
-    async def evtc_autoupload_add(self, ctx):
-        """Add this channel as a destination to autopost EVTC logs too"""
-        await ctx.defer(hidden=True)
-        channel = self.bot.get_channel(ctx.channel_id)
-        key = await self.get_user_evtc_api_key(ctx.author)
+    @autopost_group.command(name="add_destination")
+    @app_commands.checks.has_permissions(embed_links=True,
+                                         use_external_emojis=True)
+    @app_commands.checks.bot_has_permissions(embed_links=True,
+                                             use_external_emojis=True)
+    async def evtc_autoupload_add(self, interaction: discord.Interaction):
+        """Add this channel as a personal destination to autopost EVTC logs to
+        """
+        await interaction.response.defer(ephemeral=True)
+        channel = interaction.channel
+        key = await self.get_user_evtc_api_key(interaction.user)
         if not key:
-            return await ctx.send(
+            return await interaction.followup.send(
                 "You don't have an EVTC API key generated. Use "
                 "`/evtc api_key generate` to generate one. Confused about "
                 "what this is? The aforementioned command includes a tutorial")
-        doc = await self.db.evtc.destinations.find_one({
-            "user_id": ctx.author.id,
-            "channel_id": channel.id
-        }) or {}
-        if ctx.guild:
-            channel_doc = await self.bot.database.get(ctx.channel, self)
+        doc = await self.db.evtc.destinations.find_one(
+            {
+                "user_id": interaction.user.id,
+                "channel_id": channel.id
+            }) or {}
+        if interaction.guild:
+            channel_doc = await self.bot.database.get(channel, self)
             if channel_doc.get("evtc.disabled", False):
-                return await ctx.send(
+                return await interaction.followup.send(
                     "This channel is disabled for EVTC processing.")
-            members = [channel.guild.me, ctx.author]
-            for member in members:
-                if not channel.permissions_for(member).embed_links:
-                    return await ctx.send(
-                        "Make sure that both the bot and you have "
-                        "Embed Links permission in this channel.")
-                if not channel.permissions_for(member).send_messages:
-                    return await ctx.send(
-                        "Make sure that both the bot and you have "
-                        "Send Messages permission in this channel.")
-                if not channel.permissions_for(member).use_external_emojis:
-                    return await ctx.send(
-                        "Make sure that both the bot and you have "
-                        "Use External Emojis permission in this channel.")
         if doc:
-            return await ctx.send(
+            return await interaction.followup.send(
                 "This channel is already a destination. If you're "
                 "looking to remove it, see "
-                "`/evtc autopost remove_destinations`")
-        try:
-            results = await self.call_api("account", ctx.author, ["account"])
-            # TODO test guilds
-        except APIError as e:
-            return await self.error_handler(ctx, e)
+                "`/evtc_automation remove_destinations`")
+        results = await self.call_api("account", interaction.user, ["account"])
         guild_ids = results.get("guilds")
         if guild_ids:
             endpoints = [f"guild/{gid}" for gid in guild_ids]
-            try:
-                guilds = await self.call_multiple(endpoints)
-            except APIError as e:
-                return await self.error_handler(ctx, e)
-        options = []
-        for guild in guilds:
-            name = f"{guild['name']} [{guild['tag']}]"
-            options.append(create_select_option(name, value=guild["id"]))
-        select = create_select(min_values=1,
-                               max_values=len(options),
-                               options=options,
-                               placeholder="Select guilds.")
-        button = create_button(style=ButtonStyle.blue,
-                               emoji="➡️",
-                               label="Next",
-                               custom_id="next")
-        components = [create_actionrow(button), create_actionrow(select)]
-        msg = await ctx.send(
+            guilds = await self.call_multiple(endpoints)
+        view = EvtcGuildSelectionView(self, guilds)
+        await interaction.followup.send(
             "If you wish to use this channel to post only "
             "the logs made while representing a specific guild, select "
             "them from the list below. Otherwise, click `Next`.",
-            components=components,
-            hidden=True)
-        try:
-            answer = await wait_for_component(self.bot,
-                                              components=components,
-                                              timeout=120)
-            await answer.defer()
-            selected_guilds = answer.selected_options or []
-        except asyncio.TimeoutError:
-            return await msg.edit(content="Timed out.", components=None)
+            view=view,
+            ephemeral=True)
+        if await view.wait():
+            return
         await self.db.evtc.destinations.insert_one({
             "user_id":
-            ctx.author.id,
+            interaction.user.id,
             "channel_id":
             channel.id,
             "guild_ids":
-            selected_guilds,
+            view.selected_guilds,
             "guild_tags": [
                 guild["tag"] for guild in guilds
-                if guild["id"] in selected_guilds
+                if guild["id"] in view.selected_guilds
             ]
         })
-        await answer.edit_origin(
-            content="This channel is now a destination for EVTC logs. "
-            "Logs uploaded using third-party utilities with your GW2Bot "
-            "EVTC API key will be posted here. You can have multiple "
-            "destinations at the same time. DMs also work.\nYou can always "
-            "remove it using `/evtc autopost remove_destinations`",
-            components=None)
 
-    @cog_ext.cog_subcommand(
-        base="evtc",
-        subcommand_group="autopost",
-        sub_group_desc="Automatically post processed EVTC logs uploaded by "
-        "third party utilities",
-        name="remove_destinations",
-        base_description="EVTC related commands",
-    )
-    async def evtc_autoupload_remove(self, ctx):
-        """Remove EVTC autoupload destinations from a list"""
-        await ctx.defer(hidden=True)
+    @autopost_group.command(name="remove_destinations")
+    async def evtc_autoupload_remove(self, interaction: discord.Interaction):
+        """Remove chosen EVTC autoupload destinations"""
+        await interaction.response.defer(ephemeral=True)
         destinations = await self.db.evtc.destinations.find({
             "user_id":
-            ctx.author.id
+            interaction.user.id
         }).to_list(None)
         channels = [
             self.bot.get_channel(dest["channel_id"]) for dest in destinations
         ]
         if not channels:
-            return await ctx.send(
+            return await interaction.followup.send(
                 "You don't have any autopost destinations yet.")
-        options = []
-        for i, channel in enumerate(channels):
-            # if dm channel
-            if isinstance(channel, discord.DMChannel):
-                name = "DM"
-            else:
-                if not channel:
-                    name = "Inaccessible Channel"
-                name = f"{channel.guild.name} - {channel.name}"
-            options.append(create_select_option(name, value=str(i)))
-        select = create_select(
-            min_values=1,
-            max_values=len(options),
-            options=options,
-            placeholder="Select the destinations that you want removed")
-        components = [create_actionrow(select)]
-        msg = await ctx.send("** **", components=components)
-        try:
-            answer = await wait_for_component(self.bot,
-                                              components=components,
-                                              timeout=120)
-            choices = [destinations[int(i)] for i in answer.selected_options]
-        except asyncio.TimeoutError:
-            return await msg.edit(content="Timed out.", components=None)
-        for choice in choices:
-            await self.db.evtc.destinations.delete_one({"_id": choice["_id"]})
-        await answer.edit_origin(content="Removed selected destinations.",
-                                 components=None)
+        view = discord.ui.View()
+        view.add_item(
+            EvtcAutouploadDestinationsSelect(self, channels, destinations))
+        await interaction.followup.send("** **", view=view)
 
-    async def process_evtc(self, message, ctx):
+    async def process_evtc(self, files: list[discord.Attachment], user,
+                           destination):
         embeds = []
-        destination = ctx or message.channel
-        for attachment in message.attachments:
+        for attachment in files:
             if attachment.filename.endswith(ALLOWED_FORMATS):
                 try:
-                    resp = await self.upload_log(attachment, message.author)
+                    resp = await self.upload_log(attachment, user)
                     data = await self.get_encounter_data(resp["id"])
                     embeds.append(await
-                                  self.upload_embed(message, data,
+                                  self.upload_embed(destination, data,
                                                     resp["permalink"]))
                 except Exception as e:
                     self.log.exception("Exception processing EVTC log ",
                                        exc_info=e)
                     return await destination.send(
-                        content="Error processing your log! :x:", hidden=True)
+                        content="Error processing your log! :x:",
+                        ephemeral=True)
         for embed in embeds:
             await destination.send(embed=embed)
 
@@ -672,7 +649,7 @@ class EvtcMixin:
         await self.bot.wait_until_ready()
 
     @commands.Cog.listener()
-    async def on_message(self, message):
+    async def on_message(self, message: discord.Message):
         if not message.attachments:
             return
         for attachment in message.attachments:
@@ -687,7 +664,8 @@ class EvtcMixin:
             if not settings.get("enabled"):
                 return
             autodelete = settings.get("autodelete", False)
-        await self.process_evtc(message, None)
+        await self.process_evtc(message.attachments, message.author,
+                                message.channel)
         if autodelete:
             try:
                 if message.channel.permissions_for(

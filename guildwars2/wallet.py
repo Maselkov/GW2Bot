@@ -2,10 +2,8 @@ import random
 import re
 
 import discord
-from discord.ext import commands
-from discord.ext.commands.cooldowns import BucketType
-from discord_slash import cog_ext
-from discord_slash.model import SlashCommandOptionType
+from discord import app_commands
+from discord.app_commands import Choice
 
 from .exceptions import APIError
 from .utils.chat import embed_list_lines
@@ -13,6 +11,7 @@ from .utils.db import prepare_search
 
 
 class WalletMixin:
+
     async def get_wallet(self, ctx, ids):
         flattened_ids = [y for x in ids for y in x]
         try:
@@ -61,67 +60,59 @@ class WalletMixin:
                 if k in ids[i]:
                     doc = await self.db.items.find_one({"_id": k})
                     name = doc["name"]
-                    name = re.sub('^\d+ ', '', name)
+                    name = re.sub(r'^\d+ ', '', name)
                     emoji = self.get_emoji(ctx, name)
                     lines[i].append("{} {} {}".format(emoji, sum(v.values()),
                                                       name))
         return lines
 
-    @cog_ext.cog_slash(options=[{
-        "name": "currency",
-        "description":
-        "The specific currency to search for. Leave blank for general overview.",
-        "type": SlashCommandOptionType.STRING,
-        "required": False,
-    }])
-    async def wallet(self, ctx, *, currency=None):
+    async def currency_autocomplete(self, interaction: discord.Interaction,
+                                    current: str):
+        if not current:
+            return []
+        if current == "gold":
+            current = "coin"
+        query = prepare_search(current)
+        query = {"name": query}
+        items = await self.db.currencies.find(query).to_list(25)
+        return [Choice(name=it["name"], value=str(it["_id"])) for it in items]
+
+    @app_commands.command()
+    @app_commands.describe(currency="The specific currency to search for. "
+                           "Leave blank for general overview.")
+    @app_commands.autocomplete(currency=currency_autocomplete)
+    async def wallet(self,
+                     interaction: discord.Interaction,
+                     currency: str = None):
         """Shows your wallet"""
-        await ctx.defer()
-        try:
-            doc = await self.fetch_key(ctx.author, ["wallet"])
-        except APIError as e:
-            return await self.error_handler(ctx, e)
+        await interaction.response.defer()
+        doc = await self.fetch_key(interaction.user, ["wallet"])
         if currency:
-            try:
-                results = await self.call_api("account/wallet", key=doc["key"])
-            except APIError as e:
-                return await self.error_handler(ctx, e)
-            currency = currency.lower()
-            if currency == "gold":
-                currency = "coin"
-            query = {"name": prepare_search(currency)}
-            count = await self.db.currencies.count_documents(query)
-            cursor = self.db.currencies.find(query)
-            answer = None
-            choice = await self.selection_menu(ctx, cursor, count)
-            if type(choice) is tuple:
-                choice, answer = choice
-            if choice:
-                embed = discord.Embed(title=choice["name"].title(),
-                                      description=choice["description"],
-                                      colour=await self.get_embed_color(ctx))
-                currency_id = choice["_id"]
-                for item in results:
-                    if item["id"] == currency_id == 1:
-                        count = self.gold_to_coins(ctx, item["value"])
-                        break
-                    elif item["id"] == currency_id:
-                        count = "{:,}".format(item["value"])
-                        break
-                    else:
-                        count = 0
+            results = await self.call_api("account/wallet", key=doc["key"])
+            choice = await self.db.currencies.find_one({"_id": int(currency)})
+            embed = discord.Embed(title=choice["name"].title(),
+                                  description=choice["description"],
+                                  colour=await
+                                  self.get_embed_color(interaction))
+            currency_id = choice["_id"]
+            for item in results:
+                if item["id"] == currency_id == 1:
+                    count = self.gold_to_coins(interaction, item["value"])
+                    break
+                elif item["id"] == currency_id:
+                    count = "{:,}".format(item["value"])
+                    break
+                else:
+                    count = 0
                 embed.add_field(name="Amount in wallet",
                                 value=count,
                                 inline=False)
                 embed.set_thumbnail(url=choice["icon"])
                 embed.set_author(name=doc["account_name"],
-                                 icon_url=ctx.author.avatar_url)
+                                 icon_url=interaction.user.avatar.url)
                 embed.set_footer(text=self.bot.user.name,
-                                 icon_url=self.bot.user.avatar_url)
-                if answer:
-                    return await answer.edit_origin(embed=embed,
-                                                    components=None)
-                return await ctx.send(embed=embed)
+                                 icon_url=self.bot.user.avatar.url)
+                return await interaction.followup.send(embed=embed)
         ids_cur = [1, 4, 2, 3, 18, 23, 16, 50, 47]
         ids_keys = [43, 40, 41, 37, 42, 38, 44, 49, 51]
         ids_maps = [32, 45, 25, 27, 19, 22, 20, 29, 34, 35]
@@ -138,17 +129,14 @@ class WalletMixin:
         ids_eod_cur = [61, 62, 64, 67, 68]
         ids_strikes_cur = [53, 55, 57, 54]
         ids_wallet = [
-            ids_cur, ids_keys, ids_maps, ids_token, ids_raid, ids_ibs_cur, 
+            ids_cur, ids_keys, ids_maps, ids_token, ids_raid, ids_ibs_cur,
             ids_strikes_cur, ids_eod_cur, ids_wvw_cur, ids_pvp_cur
         ]
         ids_items = [ids_l3, ids_l4, ids_ibs, ids_maps_items, ids_pvp]
-        try:
-            currencies_wallet = await self.get_wallet(ctx, ids_wallet)
-            currencies_items = await self.get_item_currency(ctx, ids_items)
-        except APIError as e:
-            return await self.error_handler(ctx, e)
+        currencies_wallet = await self.get_wallet(interaction, ids_wallet)
+        currencies_items = await self.get_item_currency(interaction, ids_items)
         embed = discord.Embed(description="Wallet",
-                              colour=await self.get_embed_color(ctx))
+                              colour=await self.get_embed_color(interaction))
         embed = embed_list_lines(embed,
                                  currencies_wallet[0],
                                  "> **CURRENCIES**",
@@ -193,7 +181,7 @@ class WalletMixin:
                                  "> **STRIKE MISSIONS**",
                                  inline=True)
         embed = embed_list_lines(embed,
-                                 currencies_wallet[8] + currencies_items[4] + 
+                                 currencies_wallet[8] + currencies_items[4] +
                                  currencies_wallet[9],
                                  "> **COMPETITION**",
                                  inline=True)
@@ -202,7 +190,7 @@ class WalletMixin:
                                  "> **RAIDS**",
                                  inline=True)
         embed.set_author(name=doc["account_name"],
-                         icon_url=ctx.author.avatar_url)
+                         icon_url=interaction.user.avatar.url)
         embed.set_footer(text=self.bot.user.name,
-                         icon_url=self.bot.user.avatar_url)
-        await ctx.send(embed=embed)
+                         icon_url=self.bot.user.avatar.url)
+        await interaction.followup.send(embed=embed)

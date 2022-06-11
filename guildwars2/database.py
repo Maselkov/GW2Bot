@@ -5,16 +5,13 @@ import re
 import time
 
 import discord
+from discord.app_commands import Choice
 from discord.ext import commands
-from discord_slash.context import ComponentContext
-from discord_slash.utils.manage_components import (create_actionrow,
-                                                   create_select,
-                                                   create_select_option,
-                                                   wait_for_component)
 from pymongo import ReplaceOne
 from pymongo.errors import BulkWriteError
 
 from .exceptions import APIError, APIKeyError
+from .utils.db import prepare_search
 
 
 class DatabaseMixin:
@@ -154,7 +151,7 @@ class DatabaseMixin:
         statset = await self.db.itemstats.find_one({"_id": item})
         try:
             name = statset["name"]
-        except:
+        except KeyError:
             name = ""
         return name
 
@@ -165,9 +162,9 @@ class DatabaseMixin:
         doc = await self.bot.database.get_user(user, self)
         if not doc or "key" not in doc or not doc["key"]:
             raise APIKeyError(
-                "No API key associated with {.mention}. "
-                "Add your key using `$key add` command. If you don't know "
-                "how, the command includes a tutorial.".format(user))
+                "No API key associated with your account. "
+                "Add your key using `/key add` command. If you don't know "
+                "how, the command includes a tutorial.")
         if scopes:
             missing = []
             for scope in scopes:
@@ -200,7 +197,7 @@ class DatabaseMixin:
                 for daily in dailies:
                     if not daily["level"]["max"] == 80:
                         continue
-                    required_access = daily.get("required_access", [])
+                    required_access = daily.get("required_access", {})
                     if required_access.get("condition", "") == "NoAccess":
                         continue
                     daily_doc = await self.db.achievements.find_one(
@@ -249,7 +246,7 @@ class DatabaseMixin:
                     ReplaceOne({"_id": item["_id"]}, item, upsert=True))
             try:
                 await self.db.pois.bulk_write(requests)
-            except BulkWriteError as e:
+            except BulkWriteError:
                 self.log.exception("BWE while caching continents")
 
         continents = await self.call_api("continents?ids=all")
@@ -348,20 +345,8 @@ class DatabaseMixin:
         self.log.info("Database done! Time elapsed: {} seconds".format(end -
                                                                        start))
 
-    async def itemname_to_id(self,
-                             ctx,
-                             item,
-                             *,
-                             flags=[],
-                             filters={},
-                             database="items",
-                             group_duplicates=False,
-                             prompt_user=False,
-                             component_context=None,
-                             limit=125,
-                             hidden=False,
-                             placeholder="Select the item you want..."
-                             ):  # TODO cleanup this monstrosity
+    async def item_autocomplete(self, interaction: discord.Interaction,
+                                current: str):
 
         def consolidate_duplicates(items):
             unique_items = collections.OrderedDict()
@@ -375,167 +360,22 @@ class DatabaseMixin:
                 unique_list.append({
                     "name": k[0],
                     "rarity": k[1],
-                    "ids": v,
+                    "ids": " ".join(v),
                     "type": k[2]
                 })
             return unique_list
 
-        item_sanitized = re.escape(item)
-        search = re.compile(item_sanitized + ".*", re.IGNORECASE)
-        query = {"name": search, "flags": {"$nin": flags}, **filters}
-        number = await self.db[database].count_documents(query)
-        if not number:
-            await ctx.send(
-                "Your search gave me no results, sorry. Check for "
-                "typos.\nAlways use singular forms, e.g. Legendary Insight")
-            return None
-        cursor = self.db[database].find(query)
-
-        if number > limit:  # TODO multiple selections for 125 items.
-            await ctx.send("Your search gave me {} item results. "
-                           "Please be more specific".format(number))
-            return None
-        items = []
-        async for item in cursor:
-            items.append(item)
-        items.sort(key=lambda i: i["name"])
-        if group_duplicates:
-            distinct_items = consolidate_duplicates(items)
-        else:
-            for item in items:
-                item["ids"] = [item["_id"]]
-            distinct_items = items
-
-        if len(distinct_items) == 1:
-            if not prompt_user:
-                return distinct_items
-            return distinct_items, None
-        if not prompt_user:
-            return distinct_items
-        rows = []
-        options = []
-        for i, item in enumerate(
-                sorted(distinct_items, key=lambda c: c["name"]), 1):
-            if not i % limit:
-                rows.append(options)
-                options = []
-            emoji = self.get_emoji(ctx, item["type"], return_obj=True)
-            options.append(
-                create_select_option(item["name"],
-                                     i - 1,
-                                     description=item["rarity"],
-                                     emoji=emoji or None))
-        rows.append(options)
-        action_rows = []
-        for row in rows:
-            ph = placeholder
-            if len(rows) > 1:
-                first_letter = row[0]["label"][0]
-                last_letter = row[-1]["label"][0]
-                if first_letter != last_letter:
-                    ph += f" [{first_letter}-{last_letter}]"
-                else:
-                    ph += f" [{first_letter}]"
-            action_rows.append(
-                create_actionrow(
-                    create_select(row,
-                                  min_values=1,
-                                  max_values=1,
-                                  placeholder=ph)))
-
-        if len(rows) > 1:
-            content = "Due to Discord limitations, your selection had been split into several."
-        else:
-            content = "** **"
-        if component_context:
-            await component_context.edit_origin(content=content,
-                                                components=action_rows)
-        else:
-            msg = await ctx.send(content,
-                                 components=action_rows,
-                                 hidden=hidden)
-
-        def tell_off(answer):
-            self.bot.loop.create_task(
-                answer.send("Only the command owner may do that.",
-                            hidden=True))
-
-        try:
-            while True:
-                answer = await wait_for_component(self.bot,
-                                                  components=action_rows,
-                                                  timeout=120)
-                if answer.author != ctx.author:
-                    tell_off(answer)
-                    continue
-                index = int(answer.selected_options[0])
-                return distinct_items[index], answer
-        except asyncio.TimeoutError:
-            if component_context:
-                await component_context.edit_origin(content="Timed out.",
-                                                    components=None)
-            else:
-                await msg.edit(content="Timed out.", components=None)
-            return None, None
-        # for item in items:
-        #     if item["_id"] in choice["ids"]:
-        #         if item["type"] == "UpgradeComponent":
-        #             choice["is_upgrade"] = True
-
-        # return choice
-
-    async def selection_menu(self,
-                             ctx,
-                             cursor,
-                             number,
-                             *,
-                             filter_callable=None):
-        # TODO implement fields
-
-        def check(m):
-            return m.channel == ctx.channel and m.author == ctx.author
-
-        if not number:
-            await ctx.send(
-                "Your search gave me no results, sorry. Check for "
-                "typos.\nAlways use singular forms, e.g. Legendary Insight")
-            return None
-        if number > 25:
-            await ctx.send("Your search gave me {} item results. "
-                           "Please be more specific".format(number))
-            return None
-        items = []
-        async for item in cursor:
-            items.append(item)
-        key = "name"
-        if filter_callable:
-            items = filter_callable(items)
-        items.sort(key=lambda i: i[key])
-        options = []
-        if len(items) != 1:
-            for i, item in enumerate(items):
-                options.append(create_select_option(item[key], value=i))
-            select = create_select(min_values=1,
-                                   max_values=1,
-                                   options=options,
-                                   placeholder="Select the item you want")
-            components = [create_actionrow(select)]
-            msg = await ctx.send("** **", components=components)
-            try:
-                answer: ComponentContext = await self.bot.wait_for(
-                    "component",
-                    timeout=120,
-                    check=lambda context: context.author == ctx.author and
-                    context.origin_message.id == msg.id)
-                choice = items[int(answer.selected_options[0])]
-                await answer.defer(edit_origin=True)
-                return (choice, answer)
-            except asyncio.TimeoutError:
-                await msg.edit(content="No response in time", components=None)
-                return None
-        else:
-            choice = items[0]
-        return choice
+        query = prepare_search(current)
+        query = {
+            "name": query,
+        }
+        items = await self.db.items.find(query).to_list(25)
+        items = sorted(consolidate_duplicates(current),
+                       key=lambda c: c["name"])
+        return [
+            Choice(name=f"{it['name']} - {it['rarity']}", value=it["ids"])
+            for it in items
+        ]
 
     async def get_historical_world_pop_data(self):
         # This might break in the future, but oh well

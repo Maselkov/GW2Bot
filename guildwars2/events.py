@@ -1,90 +1,117 @@
 import asyncio
 import datetime
+from dis import disco
 
 import discord
+from discord import app_commands
+from discord.app_commands import Choice
 from discord.ext import commands, tasks
-from discord_slash import cog_ext
-from discord_slash.context import ComponentContext
-from discord_slash.model import ButtonStyle, SlashCommandOptionType
-from discord_slash.utils.manage_components import (create_actionrow,
-                                                   create_button)
 
 UTC_TZ = datetime.timezone.utc
+
+ET_CATEGORIES = [{
+    "value": "hot",
+    "name": "HoT - Heart of Thorns"
+}, {
+    "value": "pof",
+    "name": "PoF - Path of Fire"
+}, {
+    "value": "ibs",
+    "name": "IBS - The Icebrood Saga"
+}, {
+    "value": "eod",
+    "name": "EoD- End of Dragons"
+}, {
+    "value": "day",
+    "name": "Day/night cycle"
+}, {
+    "value": "bosses",
+    "name": "World bosses"
+}]
+
+
+class EventTimerReminderUnsubscribeView(discord.ui.View):
+
+    def __init__(self, cog):
+        self.cog = cog
+        super().__init__(timeout=None)
+
+    @discord.ui.button(style=discord.ButtonStyle.red,
+                       emoji="❌",
+                       label="Unsubscribe",
+                       custom_id="et:unsubscribe")
+    async def unsubscribe(self, interaction: discord.Interaction,
+                          button: discord.ui.Button):
+        update_result = await self.cog.bot.database.set(
+            interaction.user,
+            {"event_reminders": {
+                "last_message": interaction.message.id,
+            }},
+            self.cog,
+            operator="pull",
+        )
+        if update_result.modified_count:
+            try:
+                await interaction.message.delete()
+            except discord.HTTPException:
+                pass
+        await interaction.response.send_message('Unsubscribed!',
+                                                ephemeral=True)
 
 
 class EventsMixin:
 
-    @cog_ext.cog_slash(
-        options=[{
-            "name":
-            "category",
-            "description":
-            "Event timer category",
-            "type":
-            SlashCommandOptionType.STRING,
-            "required":
-            True,
-            "choices": [
-                {
-                    "value": "hot",
-                    "name": "HoT - Heart of Thorns"
-                },
-                {
-                    "value": "pof",
-                    "name": "PoF - Path of Fire"
-                },
-                {
-                    "value": "ibs",
-                    "name": "IBS - The Icebrood Saga"
-                },
-                {
-                    "value": "eod",
-                    "name": "EoD- End of Dragons"
-                },
-                {
-                    "value": "day",
-                    "name": "Day/night cycle"
-                },
-                {
-                    "value": "bosses",
-                    "name": "World bosses"
-                },
-            ],
-        }], )
-    async def et(self, ctx, category):
+    @app_commands.command()
+    @app_commands.describe(category="Event timer category")
+    @app_commands.choices(category=[Choice(**c) for c in ET_CATEGORIES])
+    async def et(self, interaction: discord.Interaction, category: str):
         """Event timer"""
         if category == "bosses":
             embed = self.schedule_embed()
         else:
-            embed = await self.timer_embed(ctx, category)
-        await ctx.send(embed=embed)
+            embed = await self.timer_embed(interaction, category)
+        await interaction.response.send_message(embed=embed)
 
-    @cog_ext.cog_slash(options=[
-        {
-            "name": "event_name",
-            "description":
-            "Event name. Examples: Shadow Behemoth. Gerent Preparation",
-            "type": SlashCommandOptionType.STRING,
-            "required": True,
-        },
-        {
-            "name": "minutes_before_event",
-            "description":
-            "The number of minutes before the event that you'll be notified at",
-            "type": SlashCommandOptionType.INTEGER,
-            "required": True,
-        },
-    ])
+    async def event_name_autocomplete(self, interaction: discord.Interaction,
+                                      current):
+        if not current:
+            return []
+        current = current.lower()
+        names = set()
+        timers = self.gamedata["event_timers"]
+        for category in timers:
+            if category == "bosses":
+                subtypes = "normal", "hardcore"
+                for subtype in subtypes:
+                    for boss in timers[category][subtype]:
+                        names.add(boss["name"])
+            else:
+                for subcategory in timers[category]:
+                    for event in subcategory["phases"]:
+                        if event["name"]:
+                            names.add(event["name"])
+        return sorted([
+            Choice(name=n, value=n) for n in names if current in n.lower()
+        ][:25],
+                      key=lambda c: c.name)
+
+    @app_commands.command()
+    @app_commands.describe(
+        event_name="Event name. Examples: Shadow Behemoth. Gerent Preparation",
+        minutes_before_event="The number of minutes before "
+        "the event that you'll be notified at")
+    @app_commands.autocomplete(event_name=event_name_autocomplete)
     async def event_reminder(self,
-                             ctx,
+                             interaction: discord.Interaction,
                              event_name: str,
                              minutes_before_event: int = 5):
         """Make the bot automatically notify you before an event starts"""
         if minutes_before_event < 0:
-            return await ctx.send("That's not how time works!", hidden=True)
+            return await interaction.response.send_message(
+                "That's not how time works!", ephemeral=True)
         if minutes_before_event > 60:
-            return await ctx.send("Time can't be greater than one hour",
-                                  hidden=True)
+            return await interaction.response.send_message(
+                "Time can't be greater than one hour", ephemeral=True)
         event_name = event_name.lower()
         reminder = {}
         for boss in self.boss_schedule:
@@ -104,13 +131,15 @@ class EventsMixin:
                             reminder["group"] = group
                             reminder["map_name"] = location["name"]
         if not reminder:
-            return await ctx.send("No event found matching that name",
-                                  hidden=True)
+            return await interaction.response.send_message(
+                "No event found matching that name", ephemeral=True)
         reminder["time"] = minutes_before_event * 60
-        await self.bot.database.set(ctx.author, {"event_reminders": reminder},
+        await self.bot.database.set(interaction.user,
+                                    {"event_reminders": reminder},
                                     self,
                                     operator="push")
-        await ctx.send("Reminder set succesfully", hidden=True)
+        await interaction.response.send_message("Reminder set succesfully",
+                                                ephemeral=True)
 
     async def et_reminder_settings_menu(self, ctx):
         # Unimplemented. Should get around to it sometime.
@@ -273,7 +302,7 @@ class EventsMixin:
             )
         data.set_footer(
             text="The timestamps are dynamically adjusted to your timezone",
-            icon_url=self.bot.user.avatar_url,
+            icon_url=self.bot.user.avatar.url,
         )
         return data
 
@@ -333,7 +362,7 @@ class EventsMixin:
                      "\nNext phase: **{}** {}".format(next_phase, timestamp))
             embed.add_field(name=location["name"], value=value, inline=False)
         embed.set_footer(text=self.bot.user.name,
-                         icon_url=self.bot.user.avatar_url)
+                         icon_url=self.bot.user.avatar.url)
         return embed
 
     async def get_timezone(self, guild):
@@ -393,13 +422,15 @@ class EventsMixin:
                         duration_so_far += phase["duration"]
                 return (duration_so_far - position) * 60
 
+    # TODO
     async def process_reminder(self, user, reminder, i):
         time = self.get_time_until_event(reminder)
+
         if time < reminder["time"] + 30:
             last_reminded = reminder.get("last_reminded")
             if (last_reminded and
-                (datetime.datetime.utcnow() - last_reminded).total_seconds() <
-                    reminder["time"] + 120):
+                (datetime.datetime.utcnow() - last_reminded).total_seconds()
+                    < reminder["time"] + 120):
                 return
             try:
                 last_message = reminder.get("last_message")
@@ -408,27 +439,22 @@ class EventsMixin:
                     await last_message.delete()
             except discord.HTTPException:
                 pass
-            minutes, seconds = divmod(time, 60)
-            if minutes:
-                time_string = f"{minutes} minutes and {seconds} seconds"
-            else:
-                time_string = f"{seconds} seconds"
-            description = f"{reminder['name']} will begin in {time_string}"
+            when = datetime.datetime.now(
+                datetime.timezone.utc) + datetime.timedelta(seconds=time)
+            timestamp = f"<t:{int(when.timestamp())}:R>"
+            description = f"{reminder['name']} will begin {timestamp}"
             embed = discord.Embed(title="Event reminder",
                                   description=description,
                                   color=self.embed_color)
-            button = create_button(style=ButtonStyle.red,
-                                   emoji="❌",
-                                   label="Unsubscribe")
-            components = [create_actionrow(button)]
-
+            # try:
             try:
-                msg = await user.send(embed=embed, components=components)
+
+                msg = await user.send(
+                    embed=embed, view=EventTimerReminderUnsubscribeView(self))
             except discord.HTTPException:
                 return
             reminder["last_reminded"] = msg.created_at
             reminder["last_message"] = msg.id
-            reminder["button_id"] = button["custom_id"]
             await self.bot.database.set(user,
                                         {f"event_reminders.{i}": reminder},
                                         self)
@@ -450,27 +476,9 @@ class EventsMixin:
                         self.process_reminder(user, reminder, i))
             except asyncio.CancelledError:
                 return
-            except Exception as e:
+            except Exception:
                 pass
 
     @event_reminder_task.before_loop
     async def before_event_reminder_task(self):
         await self.bot.wait_until_ready()
-
-    @commands.Cog.listener()
-    async def on_component(self, ctx: ComponentContext):
-        if ctx.guild:
-            return
-        update_result = await self.bot.database.set(
-            ctx.author,
-            {"event_reminders": {
-                "last_message": ctx.origin_message_id,
-            }},
-            self,
-            operator="pull",
-        )
-        if update_result.modified_count:
-            try:
-                await ctx.origin_message.delete()
-            except discord.HTTPException:
-                pass

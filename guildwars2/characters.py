@@ -5,20 +5,113 @@ import datetime
 import re
 
 import discord
+from discord import app_commands
+from discord.app_commands import Choice
 from discord.ext import commands
-from discord.ext.commands.cooldowns import BucketType
-from discord_slash import SlashContext, cog_ext
-from discord_slash.model import SlashCommandOptionType
-from discord_slash.utils.manage_components import (create_actionrow,
-                                                   create_select,
-                                                   create_select_option,
-                                                   wait_for_component)
+
+from cogs.guildwars2 import guild
 
 from .exceptions import APIError, APINotFound
 from .skills import Build
 from .utils.chat import embed_list_lines, zero_width_space
 
 LETTERS = ["🇦", "🇧", "🇨", "🇩", "🇪", "🇫", "🇬", "🇭", "🇮", "🇯"]
+
+
+class CharacterGearDropdown(discord.ui.Select):
+
+    def __init__(self, tabs, tab_type, emojis):
+        options = []
+        self.is_equipment = tab_type == "equipment"
+        for i, tab in enumerate(tabs):
+            options.append(
+                discord.SelectOption(label=f"{tab_type.title()} Tab {i+1}",
+                                     value=i,
+                                     emoji=emojis[i],
+                                     description=tab["name"]))
+
+        super().__init__(placeholder=f"Select {tab_type} template",
+                         min_values=1,
+                         max_values=1,
+                         options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        if self.is_equipment:
+            self.view.active_equipment = int(self.values[0])
+        else:
+            self.view.active_build = int(self.values[0])
+        embed = self.view.generate_embed()
+        await interaction.response.edit_message(embed=embed)
+
+
+class CharacterGearView(discord.ui.View):
+
+    def __init__(self, equipment_options, build_options, character, emojis,
+                 emoji_cache, user):
+        super().__init__()
+        self.value = None
+        self.emojis = emojis
+        self.character = character
+        self.builds = build_options
+        self.equipments = equipment_options
+        self.active_build = character["active_build_tab"] - 1
+        self.active_equipment = character["active_equipment_tab"] - 1
+        self.add_item(CharacterGearDropdown(build_options, "build", emojis))
+        self.add_item(
+            CharacterGearDropdown(equipment_options, "equipment", emojis))
+        self.emojis_cache = emoji_cache
+        self.user = user
+        self.response = None
+
+    async def on_timeout(self) -> None:
+        for child in self.children:
+            child.disabled = True
+        await self.response.edit(view=self)
+
+    async def interaction_check(self,
+                                interaction: discord.Interaction) -> bool:
+        return interaction.user == self.user
+
+    def generate_embed(self):
+        build = self.builds[self.active_build]
+        equipment = self.equipments[self.active_equipment]
+        embed = discord.Embed()
+        for field in equipment["fields"]:
+            embed.add_field(name=field[0], value=field[1], inline=field[2])
+        profession = build["build"].profession
+        description = ["Build template:"]
+        line = ""
+        for i in range(len(self.builds)):
+            if i == self.active_build:
+                key = "active"
+            else:
+                key = "inactive"
+            line += str(self.emojis_cache["build"][key][i])
+        if build["name"]:
+            line += f" *{build['name']}*"
+        description.append("> " + line)
+        description.append("Equipment template:")
+        line = ""
+        for i in range(len(self.equipments)):
+            if i == self.active_equipment:
+                key = "active"
+            else:
+                key = "inactive"
+            line += str(self.emojis_cache["equipment"][key][i])
+        if equipment["name"]:
+            line += f" *{equipment['name']}*"
+        description.append("> " + line)
+        description = "\n".join(description)
+        embed.description = description
+        embed.color = profession.color
+        embed.set_footer(text="A level {} {} ".format(self.character["level"],
+                                                      profession.name.lower()))
+        embed.set_author(name=self.character["name"], icon_url=profession.icon)
+        embed.add_field(name="Build code",
+                        value=build["build"].code,
+                        inline=False)
+        embed.set_image(url=build["url"])
+        return embed
 
 
 class Character:
@@ -32,6 +125,8 @@ class Character:
         self.profession = data["profession"].lower()
         self.level = data["level"]
         self.specializations = data.get("specializations")
+        self.active_build_tab = data.get("active_build_tab")
+        self.build_tabs = data.get("build_tabs", [])
         self.color = discord.Color(
             int(self.cog.gamedata["professions"][self.profession]["color"],
                 16))
@@ -43,9 +138,13 @@ class Character:
     async def get_spec_info(self, mode="pve"):
 
         async def get_elite_spec():
-            if not self.specializations:
+            if not self.specializations and not self.active_build_tab:
                 return self.profession.title()
-            spec = self.specializations[mode][2]
+            if not self.active_build_tab:
+                spec = self.specializations[mode][2]
+            else:
+                spec = self.build_tabs[self.active_build_tab -
+                                       1]["build"]["specializations"][2]
             if spec:
                 spec = await self.cog.db.specializations.find_one(
                     {"_id": spec["id"]})
@@ -68,6 +167,11 @@ class Character:
 
 class CharactersMixin:
 
+    character_group = app_commands.Group(
+        name="character", description="Character related commands")
+    sab_group = app_commands.Group(name="sab",
+                                   description="Character related commands")
+
     @staticmethod
     def format_age(age, *, short=False):
         hours, seconds = divmod(age, 3600)
@@ -78,101 +182,56 @@ class CharactersMixin:
             return "{}{} {}{}".format(hours, h_str, minutes, m_str)
         return "{}{}".format(minutes, m_str)
 
-    async def character_dropdown(self, ctx, characters, *, limit=25):
-        if len(characters) > limit * 5:
-            raise ValueError("Too many characters to display")
-        rows = []
-        options = []
-        for i, character in enumerate(sorted(characters, key=lambda c: c.name),
-                                      1):
-            if not i % limit:
-                rows.append(options)
-                options = []
-            spec = await character.get_spec_info()
-            emoji = self.get_emoji(ctx, spec["name"], return_obj=True)
-            options.append(
-                create_select_option(character.name,
-                                     character.name,
-                                     emoji=emoji or None))
-        rows.append(options)
-        action_rows = []
-        for row in rows:
-            placeholder = "Select a character..."
-            if len(rows) > 1:
-                first_letter = row[0]["value"][0]
-                last_letter = row[-1]["value"][0]
-                if first_letter != last_letter:
-                    placeholder += f" [{first_letter}-{last_letter}]"
-                else:
-                    placeholder += f" [{first_letter}]"
-            action_rows.append(
-                create_actionrow(
-                    create_select(row,
-                                  min_values=1,
-                                  max_values=1,
-                                  placeholder=placeholder)))
+    async def character_autocomplete(self, interaction: discord.Interaction,
+                                     current: str):
+        doc = await self.bot.database.get(interaction.user, self)
+        key = doc.get("key", {})
+        if not key:
+            return []
 
-        if len(rows) > 1:
-            content = f"Due to Discord limitations, your selection had been split into several."
-        else:
-            content = "** **"
-        msg = await ctx.send(content, components=action_rows, hidden=False)
+        account_key = key["account_name"].replace(".", "_")
 
-        def tell_off(answer):
-            self.bot.loop.create_task(
-                answer.send("Only the command owner may do that.",
-                            hidden=True))
-
-        try:
-            while True:
-                answer = await wait_for_component(self.bot,
-                                                  components=action_rows,
-                                                  timeout=120)
-                if answer.author != ctx.author:
-                    tell_off(answer)
-                    continue
-                name = answer.selected_options[0]
-                await answer.defer(edit_origin=True)
-                return discord.utils.find(lambda c: c.name == name,
-                                          characters).data
-        except asyncio.TimeoutError:
-            await msg.edit(content="No response in time.", components=None)
-            return None
-
-    @cog_ext.cog_subcommand(
-        base="character",
-        name="fashion",
-        base_description="Character related commands",
-        options=[{
-            "name": "character",
-            "description":
-            "Character name to inspect. Skip to get a list instead.",
-            "type": SlashCommandOptionType.STRING,
-            "required": False,
-        }])
-    async def character_fashion(self, ctx, character=None):
-        """Displays the fashion wars of given character"""
-        # Display dropdown of characters
-        await ctx.defer()
-        edit = False
-        if not character:
+        async def cache_characters():
             try:
-                characters = await self.get_all_characters(ctx.author)
-            except APINotFound:
-                return await ctx.send("Invalid character name")
-            except APIError as e:
-                return await self.error_handler(ctx, e)
-            results = await self.character_dropdown(ctx, characters)
-            if not results:
-                return
-            edit = True
-            character = results["name"]
+                character_list = await self.call_api("characters",
+                                                     key=key["key"],
+                                                     scopes=["characters"])
+            except APIError:
+                return []
+            c = {
+                "last_update": datetime.datetime.utcnow(),
+                "characters": character_list
+            }
+            await self.bot.database.set(interaction.user,
+                                        {f"character_cache.{account_key}": c},
+                                        self)
+            return c
+
+        cache = doc.get("character_cache", {}).get(account_key, {})
+        if not cache:
+            cache = await cache_characters()
+        elif cache["last_update"] < datetime.datetime.utcnow(
+        ) - datetime.timedelta(days=3):
+            asyncio.create_task(cache_characters())
+        character_list = cache["characters"]
+        current = current.lower()
+        return [
+            Choice(name=c, value=c) for c in character_list
+            if current in c.lower()
+        ][:25]
+
+    @character_group.command(name="fashion")
+    @app_commands.autocomplete(character=character_autocomplete)
+    async def character_fashion(self, interaction: discord.Interaction,
+                                character: str):
+        """Displays the fashion wars of given character"""
+        await interaction.response.defer()
         try:
-            results = await self.get_character(ctx, character)
+            results = await self.get_character(interaction, character)
         except APINotFound:
-            return await ctx.send("Invalid character name")
-        except APIError as e:
-            return await self.error_handler(ctx, e)
+            return await interaction.followup.send("Invalid character name")
+        except APIError:
+            raise
         eq = [
             x for x in results["equipment"]
             if x["location"].startswith("Equipped")
@@ -225,46 +284,21 @@ class CharactersMixin:
         embed.set_footer(text="A level {} {} ".format(level,
                                                       profession.name.lower()),
                          icon_url=profession.icon)
-        if edit:
-            return await ctx.message.edit(embed=embed,
-                                          content=None,
-                                          components=None)
-        await ctx.send(embed=embed)
+        await interaction.followup.send(embed=embed)
 
-    @cog_ext.cog_subcommand(
-        base="character",
-        name="info",
-        base_description="Character related commands",
-        options=[{
-            "name": "character",
-            "description":
-            "Character name to inspect. Skip to get a list instead.",
-            "type": SlashCommandOptionType.STRING,
-            "required": False,
-        }])
-    async def character_info(self, ctx, character=None):
+    # TODO elite spec icons
+    @character_group.command(name="info")
+    @app_commands.autocomplete(character=character_autocomplete)
+    async def character_info(self, interaction: discord.Interaction,
+                             character: str):
         """Info about the given character"""
-        await ctx.defer()
-        edit = False
-        if not character:
-            try:
-                characters = await self.get_all_characters(ctx.author)
-            except APINotFound:
-                return await ctx.send("Invalid character name")
-            except APIError as e:
-                return await self.error_handler(ctx, e)
-            results = await self.character_dropdown(ctx, characters)
-            if not results:
-                return
-            edit = True
-        else:
-            character = character.title()
-            try:
-                results = await self.get_character(ctx, character)
-            except APINotFound:
-                return await ctx.send("Invalid character name")
-            except APIError as e:
-                return await self.error_handler(ctx, e)
+        await interaction.response.defer()
+        try:
+            results = await self.get_character(interaction, character)
+        except APINotFound:
+            return await interaction.followup.send("Invalid character name")
+        except APIError:
+            raise
         age = self.format_age(results["age"])
         created = results["created"].split("T", 1)[0]
         deaths = results["deaths"]
@@ -283,10 +317,7 @@ class CharactersMixin:
         embed.add_field(name="Played for", value=age)
         if guild is not None:
             endpoint = "guild/{0}".format(results["guild"])
-            try:
-                guild = await self.call_api(endpoint)
-            except APIError as e:
-                return await self.error_handler(ctx, e)
+            guild = await self.call_api(endpoint)
             gname = guild["name"]
             gtag = guild["tag"]
             embed.add_field(name="Guild", value="[{}] {}".format(gtag, gname))
@@ -300,43 +331,21 @@ class CharactersMixin:
         embed.set_author(name=character)
         embed.set_footer(text="A {} {} {}".format(gender.lower(), race,
                                                   profession.name.lower()))
-        if edit:
-            return await ctx.message.edit(embed=embed,
-                                          content=None,
-                                          components=None)
-        await ctx.send(embed=embed)
+        await interaction.followup.send(embed=embed)
 
-    @cog_ext.cog_subcommand(
-        base="character",
-        name="list",
-        base_description="Character related commands",
-        options=[
-            {
-                "name":
-                "info",
-                "description":
-                "Select additional information to display.",
-                "type":
-                SlashCommandOptionType.STRING,
-                "choices": [
-                    {
-                        "value": "age",
-                        "name": "Time played"
-                    },
-                    {
-                        "value": "created",
-                        "name": "Age"
-                    },
-                ],
-                "required":
-                False,
-            },
-        ])
-    async def character_list(self, ctx, info="name"):
+    @character_group.command(name="list")
+    @app_commands.describe(
+        info="Select additional information to display, and to sort by")
+    @app_commands.choices(info=[
+        Choice(name="Time played", value="age"),
+        Choice(name="Age", value="created"),
+        Choice(name="Profession", value="profession")
+    ])
+    async def character_list(self,
+                             interaction: discord.Interaction,
+                             info: str = "name"):
         """Lists all your characters."""
-
-        if info not in ("profession", "name", "created", "age"):
-            return await ctx.send_help(ctx.command)
+        await interaction.response.defer()
 
         def get_sort_key():
             if info == "profession":
@@ -352,26 +361,22 @@ class CharactersMixin:
             if info == "age":
                 return ": " + self.format_age(char.age, short=True)
             if info == "created":
-                return ": " + char.created.strftime("%Y-%m-%d")
+                return f": <t:{int(char.created.timestamp())}:f>"
             is_80 = char.level == 80
             return "" + (" (Level {})".format(char.level) if not is_80 else "")
 
-        user = ctx.author
+        user = interaction.user
         scopes = ["characters", "builds"]
-        await ctx.defer()
-        try:
-            doc = await self.fetch_key(user, scopes)
-            characters = await self.get_all_characters(user)
-        except APIError as e:
-            return await self.error_handler(ctx, e)
+        doc = await self.fetch_key(user, scopes)
+        characters = await self.get_all_characters(user)
         embed = discord.Embed(title="Your characters",
-                              colour=await self.get_embed_color(ctx))
-        embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
+                              colour=await self.get_embed_color(interaction))
+        embed.set_author(name=doc["account_name"], icon_url=user.avatar.url)
         output = []
         for character in sorted(characters, key=get_sort_key()):
             spec = await character.get_spec_info()
             output.append("{}**{}**{}".format(
-                self.get_emoji(ctx,
+                self.get_emoji(interaction,
                                spec["name"],
                                fallback=True,
                                fallback_fmt="**({})** "), character.name,
@@ -382,26 +387,24 @@ class CharactersMixin:
         }.get(info, info)
         embed = embed_list_lines(embed, output, "List")
         embed.description = "Sorted by " + info
-        await ctx.send(embed=embed)
+        await interaction.followup.send(embed=embed)
 
-    @cog_ext.cog_subcommand(
-        base="character",
-        name="gear",
-        base_description="Character related commands",
-        options=[{
-            "name": "character",
-            "description":
-            "Character name to inspect. Skip to get a list instead.",
-            "type": SlashCommandOptionType.STRING,
-            "required": False,
-        }])
-    async def character_gear(self, ctx: SlashContext, character=None):
+    @character_group.command(name="gear")
+    @app_commands.autocomplete(character=character_autocomplete)
+    @app_commands.checks.has_permissions(embed_links=True,
+                                         external_emojis=True)
+    async def character_gear(self, interaction: discord.Interaction,
+                             character: str):
         """Displays the gear, attributes and build of given character"""
-        await ctx.defer()
-        perms = ctx.channel.permissions_for(ctx.me)
-        can_use_emojis = perms.external_emojis
+        await interaction.response.defer()
+        if not self.check_emoji_permission(interaction):
+            return await interaction.followup.send(
+                "The default role in this channel needs to "
+                "have `use external emojis` permission in order to use this command."
+            )
+            # TODO move this to a check
+
         numbers = []
-        letters = []
 
         async def get_equipment_fields(tab, eq):
             fields = []
@@ -429,16 +432,8 @@ class CharactersMixin:
                 for item in eq:
                     if item["slot"] == piece:
                         item_doc = await self.fetch_item(item["id"])
-                        if can_use_emojis:
-                            line = self.get_emoji(
-                                ctx, f"{item_doc['rarity']}_{piece_name}")
-                        else:
-                            if piece.startswith("Weapon"):
-                                if piece.endswith("1"):
-                                    piece_name = "Main hand"
-                                else:
-                                    piece_name = "Off hand"
-                            line = f"**{piece_name}**: {item_doc['rarity']} "
+                        line = self.get_emoji(
+                            interaction, f"{item_doc['rarity']}_{piece_name}")
                         for upgrade_type in "infusions", "upgrades":
                             if upgrade_type in item:
                                 for upgrade in item[upgrade_type]:
@@ -481,11 +476,8 @@ class CharactersMixin:
                             line += "\n*{}*".format(
                                 "\n".join(upgrades_to_display))
                 if not line and not piece.startswith("Weapon"):
-                    if can_use_emojis:
-                        line = self.get_emoji(ctx,
-                                              f"basic_{piece_name}") + "NONE"
-                    else:
-                        line = f"**{piece_name}**: NONE"
+                    line = self.get_emoji(interaction,
+                                          f"basic_{piece_name}") + "NONE"
                 if piece in armors:
                     armor_lines.append(line)
                 elif piece in weapons:
@@ -509,7 +501,7 @@ class CharactersMixin:
             upgrade_lines = []
             for bonus, count in bonuses.items():
                 bonus = self.readable_attribute(bonus)
-                emoji = self.get_emoji(ctx, f"attribute_{bonus}")
+                emoji = self.get_emoji(interaction, f"attribute_{bonus}")
                 upgrade_lines.append(f"{emoji}**{bonus}**: {count}")
             if not upgrade_lines:
                 upgrade_lines = ["None found"]
@@ -520,7 +512,7 @@ class CharactersMixin:
             column_2 = [zero_width_space,
                         zero_width_space]  # cause power is in a different row
             for index, (name, value) in enumerate(attributes.items()):
-                line = self.get_emoji(ctx, f"attribute_{name}")
+                line = self.get_emoji(interaction, f"attribute_{name}")
                 line += f"**{name}**: {value}"
                 if index < 9:
                     column_1.append(line)
@@ -530,113 +522,44 @@ class CharactersMixin:
             fields.append((zero_width_space, "\n".join(column_2), True))
             return fields
 
-        if can_use_emojis:
-            emojis_cache = {
-                "build": {
-                    "inactive": [],
-                    "active": []
-                },
-                "equipment": {
-                    "inactive": [],
-                    "active": []
-                }
+        emojis_cache = {
+            "build": {
+                "inactive": [],
+                "active": []
+            },
+            "equipment": {
+                "inactive": [],
+                "active": []
             }
-            for i in range(1, 11):
-                emojis_cache["build"]["inactive"].append(
-                    self.get_emoji(ctx, f"build_{i}", return_obj=True))
-                emojis_cache["build"]["active"].append(
-                    self.get_emoji(ctx, f"active_build_{i}", return_obj=True))
-                letter = chr(64 + i)  # ord("A") == 65
-                emojis_cache["equipment"]["inactive"].append(
-                    self.get_emoji(ctx, f"equipment_{letter}",
-                                   return_obj=True))
-                emojis_cache["equipment"]["active"].append(
-                    self.get_emoji(ctx,
-                                   f"active_equipment_{letter}",
-                                   return_obj=True))
-            if not all(emojis_cache["equipment"]["active"]):
-                can_use_emojis = False
-
-        def generate_embed(builds, equipments, current_build,
-                           current_equipment):
-            build = builds[current_build]
-            equipment = equipments[current_equipment]
-            embed = discord.Embed()
-            for field in equipment["fields"]:
-                embed.add_field(name=field[0], value=field[1], inline=field[2])
-            profession = build["build"].profession
-            if can_use_emojis:
-                description = ["Build template:"]
-                line = ""
-                for i, emoji in enumerate(numbers):
-                    if i == current_build:
-                        key = "active"
-                    else:
-                        key = "inactive"
-                    line += str(emojis_cache["build"][key][i])
-                if build["name"]:
-                    line += f" *{build['name']}*"
-                description.append("> " + line)
-                description.append("Equipment template:")
-                line = ""
-                for i, emoji in enumerate(letters):
-                    if i == current_equipment:
-                        key = "active"
-                    else:
-                        key = "inactive"
-                    line += str(emojis_cache["equipment"][key][i])
-                if equipment["name"]:
-                    line += f" *{equipment['name']}*"
-                description.append("> " + line)
-                description = "\n".join(description)
-            else:
-                description = ("`Selected build template "
-                               f"{' '*4}`**{numbers[current_build]}**")
-                if build["name"]:
-                    description += f": `{build['name']}`"
-                description += ("\n`Selected equipment template "
-                                f"`**{letters[current_equipment]}**")
-                if equipment['name']:
-                    description += f": `{equipment['name']}`"
-            embed.description = description
-            embed.color = profession.color
-            embed.set_footer(text="A level {} {} ".format(
-                results["level"], profession.name.lower()))
-            embed.set_author(name=results["name"], icon_url=profession.icon)
-            embed.add_field(name="Build code",
-                            value=build["build"].code,
-                            inline=False)
-            embed.set_image(url=build["url"])
-            return embed
-
+        }
+        for i in range(1, 11):
+            emojis_cache["build"]["inactive"].append(
+                self.get_emoji(interaction, f"build_{i}", return_obj=True))
+            emojis_cache["build"]["active"].append(
+                self.get_emoji(interaction,
+                               f"active_build_{i}",
+                               return_obj=True))
+            letter = chr(64 + i)  # ord("A") == 65
+            emojis_cache["equipment"]["inactive"].append(
+                self.get_emoji(interaction, f"build_{letter}",
+                               return_obj=True))
+            emojis_cache["equipment"]["active"].append(
+                self.get_emoji(interaction,
+                               f"active_build_{letter}",
+                               return_obj=True))
         cog_doc = await self.bot.database.get_cog_config(self)
         if not cog_doc:
-            return await ctx.send("Eror reading configuration")
+            return await interaction.followup.send("Eror reading configuration"
+                                                   )
         image_channel = self.bot.get_channel(cog_doc.get("image_channel"))
         if not image_channel:
-            return await ctx.send("The owner must set the image"
-                                  " channel using $imagechannel command.")
-        edit = False
-        if not character:
-            try:
-                characters = await self.get_all_characters(ctx.author)
-            except APINotFound:
-                return await ctx.send("Invalid character name")
-            except APIError as e:
-                return await self.error_handler(ctx, e)
-            results = await self.character_dropdown(ctx, characters)
-            if not results:
-                return
-            edit = True
-        else:
-            character = character.title()
-            try:
-                results = await self.get_character(ctx, character)
-            except APINotFound:
-                return await ctx.send("Invalid character name")
-            except APIError as e:
-                return await self.error_handler(ctx, e)
-
+            return await interaction.followup.send(
+                "The owner must set the image"
+                " channel using $imagechannel command.")
+        try:
+            results = await self.get_character(interaction, character)
+        except APINotFound:
+            return await interaction.followup.send("Invalid character name")
         build_tabs = results["build_tabs"]
         equipment_tabs = results["equipment_tabs"]
         builds = []
@@ -672,44 +595,11 @@ class CharactersMixin:
                 "fields": await get_equipment_fields(tab, eq),
                 "name": tab["name"]
             })
-        if can_use_emojis:
-            numbers = emojis_cache["build"]["active"][:len(builds)]
-            letters = emojis_cache["equipment"]["active"][:len(equipments)]
-            build_dropdown = []
-            equipment_dropdown = []
-            for i, build in enumerate(builds):
-                build_dropdown.append(
-                    create_select_option(f"Build {i+1}",
-                                         i,
-                                         emoji=numbers[i],
-                                         description=build["name"]))
-            for i, equipment in enumerate(equipments):
-                equipment_dropdown.append(
-                    create_select_option(f"Equipment Tab {i+1}",
-                                         i,
-                                         emoji=numbers[i],
-                                         description=equipment["name"]))
-            build_dropdown = create_actionrow(
-                create_select(build_dropdown,
-                              placeholder="Select build template",
-                              max_values=1,
-                              min_values=1))
-            equipment_dropdown = create_actionrow(
-                create_select(equipment_dropdown,
-                              placeholder="Select equipment template",
-                              max_values=1,
-                              min_values=1))
-            rows = [build_dropdown, equipment_dropdown]
-        else:
-            letters = LETTERS[:len(equipments)]
-            for i in range(1, len(builds) + 1):
-                emoji = f"{i}\N{combining enclosing keycap}"
-                numbers.append(emoji)
-        current_build = results["active_build_tab"] - 1
-        current_equipment = results["active_equipment_tab"] - 1
+        numbers = emojis_cache["build"]["active"][:len(builds)]
         images_msg = await image_channel.send(
             files=[b["file"] for b in builds if b["file"]])
         urls = [attachment.url for attachment in images_msg.attachments]
+
         for url in urls:
             file_name = re.search(r"build_\d*\.png", url).group(0)
             tab_id = int("".join(c for c in file_name if c.isdigit()))
@@ -717,50 +607,14 @@ class CharactersMixin:
                 if tab["tab"] == tab_id:
                     tab["url"] = url
                     break
-        # for build, url in zip(builds, urls):
-        #     build["file"] = url
-        embed = generate_embed(builds, equipments, current_build,
-                               current_equipment)
-        content = None
-        if edit:
-            await ctx.message.edit(embed=embed,
-                                   content=content,
-                                   components=rows)
-            message = ctx.message
-        else:
-            message = await ctx.send(content, embed=embed, components=rows)
+        view = CharacterGearView(equipments, builds, results, numbers,
+                                 emojis_cache, interaction.user)
+        embed = view.generate_embed()
+        out = await interaction.followup.send(embed=embed, view=view)
+        view.response = out
 
-        def tell_off(answer):
-            self.bot.loop.create_task(
-                answer.send("Only the command owner may do that.",
-                            hidden=True))
-
-        while True:
-            try:
-                answer = await wait_for_component(self.bot,
-                                                  components=rows,
-                                                  timeout=120)
-                if answer.author != ctx.author:
-                    tell_off(answer)
-                    continue
-                is_equipment = answer.custom_id == equipment_dropdown[
-                    "components"][0]["custom_id"]
-                index = int(answer.selected_options[0])
-                if is_equipment:
-                    current_equipment = index
-                else:
-                    current_build = index
-                embed = generate_embed(builds, equipments, current_build,
-                                       current_equipment)
-                await answer.defer(edit_origin=True)
-                self.bot.loop.create_task(answer.edit_origin(embed=embed))
-            except asyncio.TimeoutError:
-                return await message.edit(components=None)
-
-    @cog_ext.cog_subcommand(base="character",
-                            name="birthdays",
-                            base_description="Character related commands")
-    async def character_birthdays(self, ctx):
+    @character_group.command(name="birthdays")
+    async def character_birthdays(self, interaction: discord.Interaction):
         """Lists days until the next birthday for each of your characters."""
 
         def suffix(year):
@@ -772,12 +626,9 @@ class CharactersMixin:
                 return 'rd'
             return "th"
 
-        await ctx.defer()
-        try:
-            doc = await self.fetch_key(ctx.author, ["characters"])
-            characters = await self.get_all_characters(ctx.author)
-        except APIError as e:
-            return await self.error_handler(ctx, e)
+        await interaction.response.defer()
+        doc = await self.fetch_key(interaction.user, ["characters"])
+        characters = await self.get_all_characters(interaction.user)
         fields = {}
         for character in characters:
             age = datetime.datetime.utcnow() - character.created
@@ -789,12 +640,12 @@ class CharactersMixin:
             fields.setdefault(next_bd, [])
             spec = await character.get_spec_info()
             fields[next_bd].append(
-                ("{} {}".format(self.get_emoji(ctx, spec["name"]),
+                ("{} {}".format(self.get_emoji(interaction, spec["name"]),
                                 character.name), days_left))
         embed = discord.Embed(title="Days until...",
-                              colour=await self.get_embed_color(ctx))
+                              colour=await self.get_embed_color(interaction))
         embed.set_author(name=doc["account_name"],
-                         icon_url=ctx.author.avatar_url)
+                         icon_url=interaction.user.avatar.url)
         for k, v in sorted(fields.items(), reverse=True, key=lambda k: k[0]):
             lines = [
                 "{}: **{}**".format(*line)
@@ -802,7 +653,7 @@ class CharactersMixin:
             ]
             embed = embed_list_lines(embed, lines,
                                      "{}{} Birthday".format(k, suffix(k)))
-        await ctx.send(embed=embed)
+        await interaction.followup.send(embed=embed)
 
     def readable_attribute(self, attribute_name):
         attribute_sub = re.sub(r"(\w)([A-Z])", r"\1 \2", attribute_name)
@@ -1114,19 +965,9 @@ class CharactersMixin:
             output[attribute_sub.title()] = attr_dict[attribute]
         return output
 
-    # # @character.command(name="pvpbuild", hidden=True)
-    # @commands.cooldown(1, 10, BucketType.user)
-    # async def character_pvpbuild(self, ctx, *, character: str):
-    #     """Displays the build of given character
-    #     You must be the owner of the character.
-
-    #     Required permissions: characters
-    #     """
-    #     await ctx.invoke(self.character_pvpgear, character=character)
-
-    # @character.command(name="togglepublic")
-    @commands.cooldown(1, 1, BucketType.user)
-    async def character_togglepublic(self, ctx, *, character_or_all: str):
+    @character_group.command(name="togglepublic")
+    async def character_togglepublic(self, interaction: discord.Interaction, *,
+                                     character_or_all: str):
         """Toggle your character's (or all of them) status to public
 
         Public characters can have their gear and build checked by anyone.
@@ -1135,15 +976,12 @@ class CharactersMixin:
         Required permissions: characters
         """
         character = character_or_all.title()
-        user = ctx.author
-        await ctx.trigger_typing()
-        try:
-            key = await self.fetch_key(user, ["characters"])
-            results = await self.call_api("characters", key=key["key"])
-        except APIError as e:
-            return await self.error_handler(ctx, e)
+        user = interaction.user
+        await interaction.response.defer()
+        key = await self.fetch_key(user, ["characters"])
+        results = await self.call_api("characters", key=key["key"])
         if character not in results and character != "All":
-            return await ctx.send("Invalid character name")
+            return await interaction.followup.send("Invalid character name")
         characters = [character] if character != "All" else results
         output = []
         for char in characters:
@@ -1161,29 +999,25 @@ class CharactersMixin:
                     key["account_name"]
                 })
                 output.append(char + " is now public")
-        await ctx.send("Character status successfully changed. Anyone can "
-                       "check public characters gear and build - the rest is "
-                       "still private. To make character private "
-                       "again, type the same command.")
+        await interaction.followup.send(
+            "Character status successfully changed. Anyone can "
+            "check public characters gear and build - the rest is "
+            "still private. To make character private "
+            "again, type the same command.")
         if character == "All":
             await user.send("\n".join(output))
 
-    @cog_ext.cog_subcommand(base="character",
-                            name="crafting",
-                            base_description="Character related commands")
-    async def character_crafting(self, ctx: SlashContext):
+    @character_group.command(name="crafting")
+    async def character_crafting(self, interaction: discord.Interaction):
         """Displays your characters and their crafting level"""
         endpoint = "characters?page=0&page_size=200"
-        await ctx.defer()
-        try:
-            doc = await self.fetch_key(ctx.author, ["characters"])
-            characters = await self.call_api(endpoint, key=doc["key"])
-        except APIError as e:
-            return await self.error_handler(ctx, e)
+        await interaction.response.defer()
+        doc = await self.fetch_key(interaction.user, ["characters"])
+        characters = await self.call_api(endpoint, key=doc["key"])
         data = discord.Embed(description='Crafting overview',
-                             colour=await self.get_embed_color(ctx))
+                             colour=await self.get_embed_color(interaction))
         data.set_author(name=doc["account_name"],
-                        icon_url=ctx.author.avatar_url)
+                        icon_url=interaction.user.avatar.url)
         counter = 0
         for character in characters:
             if counter == 25:
@@ -1193,49 +1027,46 @@ class CharactersMixin:
                 data.add_field(name=character["name"],
                                value="\n".join(craft_list))
                 counter += 1
-        try:
-            await ctx.send(embed=data)
-        except discord.HTTPException:
-            await ctx.send("Need permission to embed links")
+        await interaction.followup.send(embed=data)
 
-    @cog_ext.cog_subcommand(
-        base="sab",
-        name="unlocks",
-        base_description="Super Adventure Box related commands")
-    async def sab_unlocks(self, ctx, *, character):
+    @sab_group.command(name="unlocks")
+    @app_commands.autocomplete(character=character_autocomplete)
+    async def sab_unlocks(self, interaction: discord.Interaction,
+                          character: str):
         """Displays missing SAB unlocks for specified character"""
+        await interaction.response.defer()
 
         def readable(_id):
             return _id.replace("_", " ").title()
 
-        await ctx.defer()
         scopes = ["characters", "progression"]
         character = character.title().replace(" ", "%20")
         endpoint = "characters/{}/sab".format(character)
         try:
-            results = await self.call_api(endpoint, ctx.author, scopes)
+            results = await self.call_api(endpoint, interaction.user, scopes)
         except APINotFound:
-            return await ctx.send("Invalid character name")
-        except APIError as e:
-            return await self.error_handler(ctx, e)
+            return await interaction.followup.send("Invalid character name")
+        except APIError:
+            raise
         unlocked = [u["name"] for u in results["unlocks"]]
         missing = [
             readable(u) for u in self.gamedata["sab"]["unlocks"]
             if u not in unlocked
         ]
         if missing:
-            return await ctx.send(
+            return await interaction.followup.send(
                 "This character is missing the following SAB "
                 "upgrades:\n```fix\n{}\n```".format("\n".join(missing)))
-        await ctx.send("You have unlocked all the upgrades on "
-                       "this character! Congratulations!")
+        await interaction.followup.send(
+            "You have unlocked all the upgrades on "
+            "this character! Congratulations!")
 
-    @cog_ext.cog_subcommand(
-        base="sab",
-        name="zones",
-        base_description="Super Adventure Box related commands")
-    async def sab_zones(self, ctx, *, character):
+    @sab_group.command(name="zones")
+    @app_commands.autocomplete(character=character_autocomplete)
+    async def sab_zones(self, interaction: discord.Interaction,
+                        character: str):
         """Displays missing SAB zones for specified character"""
+        await interaction.response.defer()
 
         def missing_zones(zones):
             modes = ["infantile", "normal", "tribulation"]
@@ -1256,23 +1087,22 @@ class CharactersMixin:
                                 world, zone, mode.title()))
             return missing
 
-        await ctx.defer()
         scopes = ["characters", "progression"]
         character = character.title().replace(" ", "%20")
         endpoint = "characters/{}/sab".format(character)
         try:
-            results = await self.call_api(endpoint, ctx.author, scopes)
+            results = await self.call_api(endpoint, interaction.user, scopes)
         except APINotFound:
-            return await ctx.send("Invalid character name")
-        except APIError as e:
-            return await self.error_handler(ctx, e)
+            return await interaction.followup.send("Invalid character name")
+        except APIError:
+            raise
         missing = missing_zones(results["zones"])
         if missing:
-            return await ctx.send(
+            return await interaction.followup.send(
                 "This character is missing the following SAB "
                 "zones:\n```fix\n{}\n```".format("\n".join(missing)))
-        await ctx.send("You have unlocked all zones on "
-                       "this character! Congratulations!")
+        await interaction.followup.send("You have unlocked all zones on "
+                                        "this character! Congratulations!")
 
     @commands.command(name="imagechannel")
     @commands.guild_only()
@@ -1291,13 +1121,13 @@ class CharactersMixin:
                                       schema_string="2021-07-15T13:00:00.000Z")
         return [Character(self, c) for c in results]
 
-    async def get_character(self, ctx, character):
+    async def get_character(self, interaction: discord.Interaction, character):
         character = character.title()
         endpoint = "characters/" + character.replace(" ", "%20")
         try:
             results = await self.call_api(
                 endpoint,
-                ctx.author, ["characters", "builds"],
+                interaction.user, ["characters", "builds"],
                 schema_string="2021-07-15T13:00:00.000Z")
             if results:
                 return results
@@ -1306,9 +1136,8 @@ class CharactersMixin:
             doc = await self.db.characters.find_one({"name": character})
             if doc:
                 user = await self.bot.fetch_user(doc["owner"])
-                results = await self.call_api(endpoint,
-                                              user,
-                                              schema_version=schema)
+                results = await self.call_api(
+                    endpoint, user, schema_string="2021-07-15T13:00:00.000Z")
                 if not results:
                     raise APINotFound
                 return results

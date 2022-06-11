@@ -1,22 +1,18 @@
 import discord
-from discord_slash import cog_ext
-from discord_slash.model import SlashCommandOptionType
-
-from .exceptions import APIError
+from discord import app_commands
+from discord.app_commands import Choice
 
 
 class PvpMixin:
-    @cog_ext.cog_subcommand(base="pvp",
-                            name="stats",
-                            base_description="PvP related commands")
-    async def pvp_stats(self, ctx):
+    pvp_group = app_commands.Group(name="pvp",
+                                   description="PvP related commands")
+
+    @pvp_group.command(name="stats")
+    async def pvp_stats(self, interaction: discord.Interaction):
         """Information about your general pvp stats"""
-        await ctx.defer()
-        try:
-            doc = await self.fetch_key(ctx.author, ["pvp"])
-            results = await self.call_api("pvp/stats", key=doc["key"])
-        except APIError as e:
-            return await self.error_handler(ctx, e)
+        await interaction.response.defer()
+        doc = await self.fetch_key(interaction.user, ["pvp"])
+        results = await self.call_api("pvp/stats", key=doc["key"])
         rank = results["pvp_rank"] + results["pvp_rank_rollovers"]
         totalgamesplayed = sum(results["aggregate"].values())
         totalwins = results["aggregate"]["wins"] + results["aggregate"]["byes"]
@@ -32,85 +28,44 @@ class PvpMixin:
         else:
             rankedwinratio = 0
         rank_id = results["pvp_rank"] // 10 + 1
-        try:
-            ranks = await self.call_api("pvp/ranks/{0}".format(rank_id))
-        except APIError as e:
-            await self.error_handler(ctx, e)
-            return
-        data = discord.Embed(colour=await self.get_embed_color(ctx))
-        data.add_field(name="Rank", value=rank, inline=False)
-        data.add_field(name="Total games played", value=totalgamesplayed)
-        data.add_field(name="Total wins", value=totalwins)
-        data.add_field(name="Total winratio",
-                       value="{}%".format(totalwinratio))
-        data.add_field(name="Ranked games played", value=rankedgamesplayed)
-        data.add_field(name="Ranked wins", value=rankedwins)
-        data.add_field(name="Ranked winratio",
-                       value="{}%".format(rankedwinratio))
-        data.set_author(name=doc["account_name"])
-        data.set_thumbnail(url=ranks["icon"])
-        await ctx.send(embed=data)
+        ranks = await self.call_api("pvp/ranks/{0}".format(rank_id))
+        embed = discord.Embed(colour=await self.get_embed_color(interaction))
+        embed.add_field(name="Rank", value=rank, inline=False)
+        embed.add_field(name="Total games played", value=totalgamesplayed)
+        embed.add_field(name="Total wins", value=totalwins)
+        embed.add_field(name="Total winratio",
+                        value="{}%".format(totalwinratio))
+        embed.add_field(name="Ranked games played", value=rankedgamesplayed)
+        embed.add_field(name="Ranked wins", value=rankedwins)
+        embed.add_field(name="Ranked winratio",
+                        value="{}%".format(rankedwinratio))
+        embed.set_author(name=doc["account_name"])
+        embed.set_thumbnail(url=ranks["icon"])
+        await interaction.followup.send(embed=embed)
 
-    @cog_ext.cog_subcommand(
-        base="pvp",
-        name="professions",
-        base_description="PVP related commands",
-        options=[{
-            "name":
-            "profession",
-            "description":
-            "Profession for profession specific statistics",
-            "type":
-            SlashCommandOptionType.STRING,
-            "choices": [
-                {
-                    "value": "warrior",
-                    "name": "Warrior"
-                },
-                {
-                    "value": "guardian",
-                    "name": "Guardian"
-                },
-                {
-                    "value": "revenant",
-                    "name": "Revenant"
-                },
-                {
-                    "value": "thief",
-                    "name": "Thief"
-                },
-                {
-                    "value": "ranger",
-                    "name": "Ranger"
-                },
-                {
-                    "value": "engineer",
-                    "name": "Engineer"
-                },
-                {
-                    "value": "elementalist",
-                    "name": "Elementalist"
-                },
-                {
-                    "value": "necromancer",
-                    "name": "Necromancer"
-                },
-                {
-                    "value": "mesmer",
-                    "name": "Mesmer"
-                },
-            ],
-            "required":
-            False,
-        }])
-    async def pvp_professions(self, ctx, profession=None):
+    @pvp_group.command(name="professions")
+    @app_commands.describe(
+        profession="Select a profession to view specific statistics")
+    @app_commands.choices(profession=[
+        Choice(name=p.title(), value=p) for p in [
+            "warrior",
+            "guardian",
+            "revenant",
+            "thief",
+            "ranger",
+            "engineer",
+            "elementalist",
+            "necromancer",
+            "mesmer",
+        ]
+    ])
+    async def pvp_professions(self,
+                              interaction: discord.Interaction,
+                              profession: str = None):
         """Information about your pvp profession stats."""
-        await ctx.defer()
-        try:
-            doc = await self.fetch_key(ctx.author, ["pvp"])
-            results = await self.call_api("pvp/stats", key=doc["key"])
-        except APIError as e:
-            return await self.error_handler(ctx, e)
+        await interaction.response.defer()
+        doc = await self.fetch_key(interaction.user, ["pvp"])
+        results = await self.call_api("pvp/stats", key=doc["key"])
         professions = self.gamedata["professions"].keys()
         professionsformat = {}
         if not profession:
@@ -142,7 +97,7 @@ class PvpMixin:
             lowestwinrategames = professionsformat[lowestestwinrate][
                 "winratio"]
             data = discord.Embed(description="Professions",
-                                 color=await self.get_embed_color(ctx))
+                                 color=await self.get_embed_color(interaction))
             data.set_thumbnail(url=icon)
             data.add_field(name="Most played profession",
                            value="{0}, with {1}".format(
@@ -159,7 +114,7 @@ class PvpMixin:
                                lowestestwinrate.capitalize(),
                                lowestwinrategames))
             data.set_author(name=doc["account_name"])
-            return await ctx.send(embed=data)
+            return await interaction.followup.send(embed=data)
         wins = (results["professions"][profession]["wins"] +
                 results["professions"][profession]["byes"])
         total = sum(results["professions"][profession].values())
@@ -174,4 +129,4 @@ class PvpMixin:
         data.add_field(name="Wins", value="{0}".format(wins))
         data.add_field(name="Winratio", value="{0}%".format(winratio))
         data.set_author(name=doc["account_name"])
-        await ctx.send(embed=data)
+        await interaction.followup.send(embed=data)

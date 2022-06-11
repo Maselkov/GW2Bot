@@ -3,8 +3,8 @@ import datetime
 import re
 
 import discord
-from discord_slash import cog_ext
-from discord_slash.model import SlashCommandOptionType
+from discord import app_commands
+from discord.app_commands import Choice
 
 from .utils.chat import en_space, tab
 
@@ -37,51 +37,26 @@ DAILY_CATEGORIES = [
 
 
 class DailyMixin:
-    @cog_ext.cog_slash(options=[
-        {
-            "name": "category",
-            "description": "Daily type",
-            "type": SlashCommandOptionType.STRING,
-            "choices": [{
-                "value": "all",
-                "name": "All dailies"
-            }] + DAILY_CATEGORIES,
-            "required": True,
-        },
-        {
-            "name": "tomorrow",
-            "description":
-            "Select this options to view tomorrow's dailies instead.",
-            "type": SlashCommandOptionType.STRING,
-            "choices": [{
-                "value": "tomorrow",
-                "name": "tomorrow"
-            }],
-            "required": False,
-        },
-    ])
-    async def daily(self, ctx, *, category, tomorrow=""):
+
+    @app_commands.command()
+    @app_commands.describe(category="Daily type",
+                           tomorrow="Show tomorrow's dailies instead")
+    @app_commands.choices(category=[Choice(**cat) for cat in DAILY_CATEGORIES])
+    async def daily(self,
+                    interaction: discord.Interaction,
+                    category: str,
+                    tomorrow: bool = False):
         """Show today's daily achievements"""
+        await interaction.response.defer()
         tomorrow = bool(tomorrow)
         if category == "all":
             category = ["psna", "pve", "pvp", "wvw", "fractals", "strikes"]
         else:
             category = [category]
-        embed = await self.daily_embed(category, ctx=ctx, tomorrow=tomorrow)
-        await ctx.send(embed=embed)
-
-    async def daily_all(self, ctx, tomorrow=""):
-        """Show today's all dailies"""
-        tomorrow = bool(tomorrow)
-        embed = await self.daily_embed(
-            ["psna", "pve", "pvp", "wvw", "strikes", "fractals"],
-            ctx=ctx,
-            tomorrow=tomorrow,
-        )
-        embed.set_thumbnail(
-            url="https://wiki.guildwars2.com/images/1/14/Daily_Achievement.png"
-        )
-        await ctx.send(embed=embed)
+        embed = await self.daily_embed(category,
+                                       interaction=interaction,
+                                       tomorrow=tomorrow)
+        await interaction.followup.send(embed=embed)
 
     def get_year_day(self, tomorrow=True):
         date = datetime.datetime.utcnow().date()
@@ -96,14 +71,14 @@ class DailyMixin:
                           categories,
                           *,
                           doc=None,
-                          ctx=None,
+                          interaction=None,
                           tomorrow=False):
         # All of this mess needs a rewrite at this point tbh, but I just keep
         # adding more on top of it. Oh well, it works.. for now
         if not doc:
             doc = await self.bot.database.get_cog_config(self)
-        if ctx:
-            color = await self.get_embed_color(ctx)
+        if interaction:
+            color = await self.get_embed_color(interaction)
         else:
             color = self.embed_color
         embed = discord.Embed(title="Dailies", color=color)
@@ -119,30 +94,30 @@ class DailyMixin:
                     value = "\n".join(dailies["psna"])
             elif category == "fractals":
                 fractals = self.get_fractals(dailies["fractals"],
-                                             ctx,
+                                             interaction,
                                              tomorrow=tomorrow)
                 value = "\n".join(fractals[0])
             elif category == "strikes":
                 category = "Priority Strike"
-                strikes = self.get_strike(ctx, tomorrow=tomorrow)
+                strikes = self.get_strike(interaction, tomorrow=tomorrow)
                 value = strikes
             else:
                 lines = []
                 for i, d in enumerate(dailies[category]):
                     # HACK handling for emojis for lws dailies. Needs rewrite
-                    emoji = self.get_emoji(ctx, f"daily {category}")
+                    emoji = self.get_emoji(interaction, f"daily {category}")
                     if category == "pve":
                         if i == 5:
-                            emoji = self.get_emoji(ctx, "daily lws3")
+                            emoji = self.get_emoji(interaction, "daily lws3")
                         elif i == 6:
-                            emoji = self.get_emoji(ctx, "daily lws4")
+                            emoji = self.get_emoji(interaction, "daily lws4")
                     lines.append(emoji + d)
                 value = "\n".join(lines)
             if category == "psna_later":
                 category = "psna in 8 hours"
             value = re.sub(r"(?:Daily|Tier 4|PvP|WvW) ", "", value)
             if category.startswith("psna"):
-                category = self.get_emoji(ctx, "daily psna") + category
+                category = self.get_emoji(interaction, "daily psna") + category
             if category == "fractals":
                 embed.add_field(name="> Daily Fractals",
                                 value="\n".join(fractals[0]))
@@ -161,11 +136,11 @@ class DailyMixin:
             embed.set_footer(
                 text=self.bot.user.name +
                 " | Instabilities shown only apply to the highest scale",
-                icon_url=self.bot.user.avatar_url,
+                icon_url=self.bot.user.avatar.url,
             )
         else:
             embed.set_footer(text=self.bot.user.name,
-                             icon_url=self.bot.user.avatar_url)
+                             icon_url=self.bot.user.avatar.url)
         embed.timestamp = datetime.datetime.utcnow()
         return embed
 

@@ -1,7 +1,7 @@
 import math
 
 import discord
-from discord_slash import SlashContext, cog_ext
+from discord import app_commands
 
 from .exceptions import APIError, APINotFound
 from .utils.chat import cleanup_xml_tags
@@ -10,38 +10,39 @@ from .utils.db import prepare_search
 
 class AchievementsMixin:
 
-    @cog_ext.cog_slash(name="achievement")
-    async def achievementinfo(self, ctx: SlashContext, achievement):
+    async def achievement_autocomplete(self, interaction: discord.Interaction,
+                                       current: str):
+        if not current:
+            return []
+        query = {"name": prepare_search(current)}
+        cursor = self.db.achievements.find(query).limit(25)
+        return [
+            app_commands.Choice(name=ach["name"], value=str(ach["_id"]))
+            async for ach in cursor
+        ]
+
+    @app_commands.command(name="achievement")
+    @app_commands.describe(
+        achievement_name="Name of achievement. Example: Playing Chicken")
+    @app_commands.autocomplete(achievement_name=achievement_autocomplete)
+    async def achievementinfo(self, interaction: discord.Interaction,
+                              achievement_name: str):
         """Display achievement information and your completion status"""
-        user = ctx.author
-        query = {"name": prepare_search(achievement)}
-        count = await self.db.achievements.count_documents(query)
-        cursor = self.db.achievements.find(query)
-        choice = await self.selection_menu(ctx, cursor, count)
-        answer = None
-        if not choice:
-            return
-        if type(choice) is tuple:
-            choice, answer = choice
-        if not answer:
-            await ctx.defer()
+        user = interaction.user
+        await interaction.response.defer()
+        choice = await self.db.achievements.find_one(
+            {"_id": int(achievement_name)})
         try:
             doc = await self.fetch_key(user, ["progression"])
-            endpoint = "account/achievements?id=" + str(choice["_id"])
+            endpoint = "account/achievements?id=" + achievement_name
             results = await self.call_api(endpoint, key=doc["key"])
         except APINotFound:
             results = {}
-        except APIError as e:
-            return await self.error_handler(ctx, e)
-        embed = await self.ach_embed(ctx, results, choice)
-        embed.set_author(name=doc["account_name"], icon_url=user.avatar_url)
-        try:
-            if answer:
-                await answer.edit_origin(components=None, embed=embed)
-            else:
-                await ctx.send(embed=embed)
-        except discord.Forbidden:
-            await ctx.send("Need permission to embed links")
+        except APIError:
+            raise
+        embed = await self.ach_embed(interaction, results, choice)
+        embed.set_author(name=doc["account_name"], icon_url=user.avatar.url)
+        await interaction.followup.send(embed=embed)
 
     async def ach_embed(self, ctx, res, ach):
         description = cleanup_xml_tags(ach["description"])
@@ -114,8 +115,8 @@ class AchievementsMixin:
         data.add_field(name="AP earned",
                        value="{}/{}".format(earned_ap, max_ap),
                        inline=False)
-        footer += f" | ID: {ach['id']}"
-        data.set_footer(text=footer, icon_url=self.bot.user.avatar_url)
+        footer += f" | ID: {ach['_id']}"
+        data.set_footer(text=footer, icon_url=self.bot.user.avatar.url)
         return data
 
     def tier_progress(self, tiers, res):

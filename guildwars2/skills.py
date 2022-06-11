@@ -9,9 +9,8 @@ import struct
 import discord
 import requests
 from discord.ext import commands
-from discord.ext.commands.cooldowns import BucketType
-from discord_slash import cog_ext
-from discord_slash.model import SlashCommandOptionType
+from discord import app_commands
+from discord.app_commands import Choice
 from PIL import Image, ImageDraw
 
 from .utils.chat import cleanup_xml_tags, embed_list_lines
@@ -346,71 +345,68 @@ class Build:
 
 
 class SkillsMixin:
-    @cog_ext.cog_slash(name="skill",
-            options=[{
-            "name": "skill",
-            "description":
-            "The skill name to search for. Example: Meteor Shower.",
-            "type": SlashCommandOptionType.STRING,
-            "required": True,
-        }])
-    async def skillinfo(self, ctx, *, skill):
-        """Information about a given skill"""
-        query = {"name": prepare_search(skill), "professions": {"$ne": None}}
-        count = await self.db.skills.count_documents(query)
-        cursor = self.db.skills.find(query)
-        await ctx.defer()
-
-        def remove_duplicates(items):
-            unique_items = []
-            for item in items:
-                for unique in unique_items:
-                    if (unique["name"] == item["name"]
-                            and unique["facts"] == item["facts"]):
-                        unique_items.remove(unique)
-                unique_items.append(item)
-            return unique_items
-        answer = None
-        choice = await self.selection_menu(ctx,
-                                           cursor,
-                                           count,
-                                           filter_callable=remove_duplicates)
-        if not choice:
-            return
-        if type(choice) is tuple:
-            choice, answer = choice
-        data = await self.skill_embed(choice, ctx)
-        if answer:
-            return await answer.edit_origin(embed=data, components=None)
-        await ctx.send(embed=data)
-
-    @cog_ext.cog_slash(name="trait",
-            options=[{
-            "name": "trait",
-            "description":
-            "The trait name to search for. Example: Brave Stride.",
-            "type": SlashCommandOptionType.STRING,
-            "required": True,
-        }])
-    async def traitinfo(self, ctx, *, trait):
-        """Information about a given trait"""
-        await ctx.defer()
+    async def skill_autocomplete(self,
+                                         interaction: discord.Interaction,
+                                         current: str):
+        if not current:
+            return []
+        query = prepare_search(current)
         query = {
-            "name": prepare_search(trait),
+            "name": query,  "professions": {"$ne": None}
         }
-        count = await self.db.traits.count_documents(query)
-        cursor = self.db.traits.find(query)
+        items = await self.db.skills.find(query).to_list(25)
+        return [Choice(name=it["name"], value=str(it["_id"])) for it in items]
 
-        choice = await self.selection_menu(ctx, cursor, count)
-        answer = None
-        if not choice:
-            return
-        if type(choice) is tuple:
-            choice, answer = choice
-        data = await self.skill_embed(choice, ctx)
-        if answer:
-            return await answer.edit_origin(embed=data, components=None)
-        await ctx.send(embed=data)
+    async def trait_autocomplete(self,
+                                         interaction: discord.Interaction,
+                                         current: str):
+        if not current:
+            return []
+        query = prepare_search(current)
+        query = {
+            "name": query
+        }
+        items = await self.db.traits.find(query).to_list(25)
+        return [Choice(name=it["name"], value=str(it["_id"])) for it in items]
+
+    @app_commands.command(name="skill")
+    @app_commands.describe(skill="The skill name to search for. "
+    "Example: Meteor Shower.")
+    @app_commands.autocomplete(skill=skill_autocomplete)
+    async def skillinfo(self, interaction : discord.Interaction, skill: str):
+        """Information about a given skill"""
+        try:
+            skill_id = int(skill)
+        except ValueError:
+            try:
+                choices = await self.skill_autocomplete(interaction, skill)
+                skill_id = int(choices[0].value)
+            except (ValueError, IndexError):
+                return await interaction.followup.send(
+                    "Could not find any skills with that name.")
+        await interaction.response.defer()
+        choice = await self.db.skills.find_one({"_id": skill_id})
+        data = await self.skill_embed(choice, interaction)
+        await interaction.followup.send(embed=data)
+
+    @app_commands.command(name="trait")
+    @app_commands.describe(trait="The trait name to search for. Example: Fresh Air")
+    @app_commands.autocomplete(trait=trait_autocomplete)
+    async def traitinfo(self, interaction: discord.Interaction, trait : str):
+        """Information about a given trait"""
+        await interaction.response.defer()
+        try:
+            trait_id = int(trait)
+        except ValueError:
+            try:
+                choices = await self.trait_autocomplete(interaction, trait)
+                trait_id = int(choices[0].value)
+            except (ValueError, IndexError):
+                return await interaction.followup.send(
+                    "Could not find any traits with that name.")
+        choice = await self.db.traits.find_one({"_id" : trait_id})
+        data = await self.skill_embed(choice, interaction)
+        await interaction.followup.send(embed=data)
 
     async def skill_embed(self, skill, ctx):
         def get_skill_type():
@@ -437,15 +433,6 @@ class SkillsMixin:
                         best_match = emoji
             if best_match:
                 return self.get_emoji(ctx, best_match)
-            if isinstance(ctx, discord.Message):
-                if ctx.guild:
-                    me = ctx.guild.me
-                else:
-                    me = self.bot.user
-            elif ctx:
-                me = ctx.me
-            if ctx.channel.permissions_for(me).external_emojis:
-                return "❔"
             return ""
 
         def get_resource_name(prof):
@@ -755,14 +742,14 @@ class SkillsMixin:
             link_type = types[header]
             embed = discord.Embed(title=link_type, color=self.embed_color)
             embed.set_author(name=message.author.display_name,
-                             icon_url=message.author.avatar_url)
+                             icon_url=message.author.avatar.url)
             if message.guild:
                 embed.set_footer(text=(
                     "Server admins can opt out of chat link "
                     "previewing by using the \"/server preview_chat_links\" command"),
-                                 icon_url=self.bot.user.avatar_url)
+                                 icon_url=self.bot.user.avatar.url)
             else:
-                embed.set_footer(icon_url=self.bot.user.avatar_url)
+                embed.set_footer(icon_url=self.bot.user.avatar.url)
             embed.description = "Chat link preview"
             match link_type:
                 case "Coin":
