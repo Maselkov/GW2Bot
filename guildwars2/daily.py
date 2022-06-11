@@ -41,7 +41,12 @@ class DailyMixin:
     @app_commands.command()
     @app_commands.describe(category="Daily type",
                            tomorrow="Show tomorrow's dailies instead")
-    @app_commands.choices(category=[Choice(**cat) for cat in DAILY_CATEGORIES])
+    @app_commands.choices(category=[
+        Choice(**cat) for cat in [{
+            "name": "All",
+            "value": "all"
+        }] + DAILY_CATEGORIES
+    ])
     async def daily(self,
                     interaction: discord.Interaction,
                     category: str,
