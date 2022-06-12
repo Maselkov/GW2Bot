@@ -167,7 +167,7 @@ class AccountMixin:
 
     @app_commands.command()
     async def kp(self, interaction: discord.Interaction):
-        """Shows completed raids and fractals"""
+        """Shows completed raids, fractals, and strikes, as well as important challenges"""
         await interaction.response.defer()
         user = interaction.user
         scopes = ["progression"]

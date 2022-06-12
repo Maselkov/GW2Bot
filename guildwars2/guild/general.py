@@ -249,7 +249,7 @@ class GeneralGuild:
     @app_commands.autocomplete(guild=guild_name_autocomplete)
     async def guild_log(self, interaction: discord.Interaction, log_type: str,
                         guild: str):
-        """"Get log of last 20 entries of stash/treasury/members"""
+        """Get log of last 20 entries of stash/treasury/members"""
         member_list = [
             "invited", "joined", "invite_declined", "rank_change", "kick"
         ]

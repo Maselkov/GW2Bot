@@ -82,7 +82,7 @@ class WvwMixin:
                        interaction: discord.Interaction,
                        *,
                        world: str = None):
-        """Info about a world. Defaults to account"s world"""
+        """Info about a world. Defaults to account's world"""
         user = interaction.user
         await interaction.response.defer()
         if not world:

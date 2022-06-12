@@ -299,7 +299,7 @@ class NotiifiersMixin:
     ])
     async def mystic_forger_notifier(self, interaction: discord.Interaction,
                                      reminder_frequency: str):
-        """Get a personal reminder whenever Daily Mystic Forger becomes active.!"""
+        """Get a personal reminder whenever Daily Mystic Forger becomes active."""
         await interaction.response.defer(ephemeral=True)
         doc = await self.bot.database.get(interaction.user, self)
         doc = doc.get("mystic_forger", {})

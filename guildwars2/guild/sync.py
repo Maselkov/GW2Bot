@@ -384,10 +384,9 @@ class GuildSync:
     @guildsync_group.command(name="edit")
     @app_commands.checks.has_permissions(manage_guild=True)
     @app_commands.describe(
-        api_key="The api key to use for authorization. Use only if "
-        "you've selected it as the authentication_method.",
-        operation="Select the operation. You will be prompted to "
-        "select the sync after the command",
+        api_key="The API key to use for authorization. Use only if you've "
+        "selected the 'Change API key' operation.",
+        operation="Select the operation.",
         sync="The guildsync to modify")
     @app_commands.autocomplete(sync=guildsync_autocomplete)
     @app_commands.choices(operation=[
@@ -400,7 +399,7 @@ class GuildSync:
         Choice(name="Change API key. Make sure to "
                "fill out the api_key optional argument",
                value="change_key"),
-        Choice(name="Delete a guildsync", value="delete")
+        Choice(name="Delete the guildsync", value="delete")
     ])
     async def guildsync_edit(self,
                              interaction: discord.Interaction,
