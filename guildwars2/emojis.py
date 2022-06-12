@@ -50,16 +50,16 @@ class EmojiMixin:
             else:
                 me = self.bot.user
         elif isinstance(ctx, discord.Interaction):
-            if isinstance(ctx.channel, (discord.TextChannel, discord.Thread)):
+            is_dm = ctx.guild is None
+            if not is_dm:
                 me = ctx.channel.guild.me
-            elif isinstance(ctx.channel, discord.DMChannel):
+            else:
                 em = get_emoji()
                 if em:
                     return em
                 elif fallback:
                     return fallback_fmt.format(emoji)
-            else:
-                me = ctx.client.user
+                return ""
         else:
             me = None
         if ctx:
