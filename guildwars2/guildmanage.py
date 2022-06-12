@@ -89,6 +89,11 @@ class GuildManageMixin:
                               role: discord.Role = None):
         """A feature to automatically add a role to members that have added an
         API key to the bot."""
+        if enabled and not role:
+            return await interaction.response.send_message(
+                "If enabling, you must specify a role "
+                "to give to members with an API key.",
+                ephemeral=True)
         guild = interaction.guild
         await self.bot.database.set(guild, {
             "key_sync.enabled": enabled,
