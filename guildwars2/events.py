@@ -84,16 +84,19 @@ class EventsMixin:
                 subtypes = "normal", "hardcore"
                 for subtype in subtypes:
                     for boss in timers[category][subtype]:
-                        names.add(boss["name"])
+                        name = boss["name"]
+                        if current in name.lower():
+                            names.add(Choice(name=name, value=name))
             else:
                 for subcategory in timers[category]:
+                    map_name = subcategory["name"]
                     for event in subcategory["phases"]:
                         if event["name"]:
-                            names.add(event["name"])
-        return sorted([
-            Choice(name=n, value=n) for n in names if current in n.lower()
-        ][:25],
-                      key=lambda c: c.name)
+                            name = f"{map_name} - {event['name']}"
+                            if current in name.lower():
+                                names.add(
+                                    Choice(name=name, value=event["name"]))
+        return sorted(list(names)[:25], key=lambda c: c.name)
 
     @app_commands.command()
     @app_commands.describe(
