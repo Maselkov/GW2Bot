@@ -105,9 +105,9 @@ class WalletMixin:
                                 inline=False)
                 embed.set_thumbnail(url=choice["icon"])
                 embed.set_author(name=doc["account_name"],
-                                 icon_url=interaction.user.avatar.url)
+                                 icon_url=interaction.user.display_avatar.url)
                 embed.set_footer(text=self.bot.user.name,
-                                 icon_url=self.bot.user.avatar.url)
+                                 icon_url=self.bot.user.display_avatar.url)
                 return await interaction.followup.send(embed=embed)
         ids_cur = [1, 4, 2, 3, 18, 23, 16, 50, 47]
         ids_keys = [43, 40, 41, 37, 42, 38, 44, 49, 51]
@@ -186,7 +186,7 @@ class WalletMixin:
                                  "> **RAIDS**",
                                  inline=True)
         embed.set_author(name=doc["account_name"],
-                         icon_url=interaction.user.avatar.url)
+                         icon_url=interaction.user.display_avatar.url)
         embed.set_footer(text=self.bot.user.name,
-                         icon_url=self.bot.user.avatar.url)
+                         icon_url=self.bot.user.display_avatar.url)
         await interaction.followup.send(embed=embed)

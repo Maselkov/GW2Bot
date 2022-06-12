@@ -305,7 +305,7 @@ class EventsMixin:
             )
         data.set_footer(
             text="The timestamps are dynamically adjusted to your timezone",
-            icon_url=self.bot.user.avatar.url,
+            icon_url=self.bot.user.display_avatar.url,
         )
         return data
 
@@ -365,7 +365,7 @@ class EventsMixin:
                      "\nNext phase: **{}** {}".format(next_phase, timestamp))
             embed.add_field(name=location["name"], value=value, inline=False)
         embed.set_footer(text=self.bot.user.name,
-                         icon_url=self.bot.user.avatar.url)
+                         icon_url=self.bot.user.display_avatar.url)
         return embed
 
     async def get_timezone(self, guild):

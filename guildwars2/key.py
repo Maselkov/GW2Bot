@@ -211,7 +211,7 @@ class KeyMixin:
         embed = discord.Embed(title="Your keys",
                               color=await self.get_embed_color(interaction))
         embed.set_author(name=interaction.user.name,
-                         icon_url=interaction.user.avatar.url)
+                         icon_url=interaction.user.display_avatar.url)
         if display_active:
             active_key = doc.get("key", {})
             if active_key:
@@ -227,5 +227,5 @@ class KeyMixin:
                 name += " - " + token_name
             embed.add_field(name=name, value=get_value(key), inline=False)
         embed.set_footer(text=self.bot.user.name,
-                         icon_url=self.bot.user.avatar.url)
+                         icon_url=self.bot.user.display_avatar.url)
         return embed

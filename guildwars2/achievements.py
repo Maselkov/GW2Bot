@@ -41,7 +41,8 @@ class AchievementsMixin:
         except APIError:
             raise
         embed = await self.ach_embed(interaction, results, choice)
-        embed.set_author(name=doc["account_name"], icon_url=user.avatar.url)
+        embed.set_author(name=doc["account_name"],
+                         icon_url=user.display_avatar.url)
         await interaction.followup.send(embed=embed)
 
     async def ach_embed(self, ctx, res, ach):
@@ -116,7 +117,7 @@ class AchievementsMixin:
                        value="{}/{}".format(earned_ap, max_ap),
                        inline=False)
         footer += f" | ID: {ach['_id']}"
-        data.set_footer(text=footer, icon_url=self.bot.user.avatar.url)
+        data.set_footer(text=footer, icon_url=self.bot.user.display_avatar.url)
         return data
 
     def tier_progress(self, tiers, res):

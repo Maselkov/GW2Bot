@@ -88,9 +88,9 @@ class AccountMixin:
             access = "\n".join([format_name(e) for e in access])
             if access:
                 embed.add_field(name="Expansion access", value=access)
-        embed.set_author(name=accountname, icon_url=user.avatar.url)
+        embed.set_author(name=accountname, icon_url=user.display_avatar.url)
         embed.set_footer(text=self.bot.user.name,
-                         icon_url=self.bot.user.avatar.url)
+                         icon_url=self.bot.user.display_avatar.url)
         await interaction.followup.send(embed=embed)
 
     @app_commands.command()
@@ -159,10 +159,11 @@ class AccountMixin:
             total, ', '.join(trophy_names[:-1]), trophy_names[-1])
         embed.description = "{} on hand, {} used in crafting".format(
             total - crafted_total, crafted_total)
-        embed.set_author(name=doc["account_name"], icon_url=user.avatar.url)
+        embed.set_author(name=doc["account_name"],
+                         icon_url=user.display_avatar.url)
         embed.set_thumbnail(url="https://resources.gw2bot.info/icons/lild.png")
         embed.set_footer(text=self.bot.user.name,
-                         icon_url=self.bot.user.avatar.url)
+                         icon_url=self.bot.user.display_avatar.url)
         await interaction.followup.send(embed=embed)
 
     @app_commands.command()
@@ -225,7 +226,8 @@ class AccountMixin:
 
         embed = discord.Embed(title="Kill Proof",
                               color=await self.get_embed_color(interaction))
-        embed.set_author(name=doc["account_name"], icon_url=user.avatar.url)
+        embed.set_author(name=doc["account_name"],
+                         icon_url=user.display_avatar.url)
         for area in areas:
             value = ["```diff"]
             encounters = area["encounters"]
@@ -258,7 +260,8 @@ class AccountMixin:
         raids = await self.get_raids()
         embed = await self.boss_embed(interaction, raids, results,
                                       doc["account_name"], last_modified)
-        embed.set_author(name=doc["account_name"], icon_url=user.avatar.url)
+        embed.set_author(name=doc["account_name"],
+                         icon_url=user.display_avatar.url)
         await interaction.followup.send(embed=embed)
 
     async def item_autocomplete(self, interaction: discord.Interaction,
@@ -395,13 +398,14 @@ class AccountMixin:
             else:
                 data.add_field(name=item_doc["name"],
                                value="```ml\n{}\n```".format(value))
-            data.set_author(name=doc["account_name"], icon_url=user.avatar.url)
+            data.set_author(name=doc["account_name"],
+                            icon_url=user.display_avatar.url)
             if 'is_upgrade' in item_doc and item_doc['is_upgrade']:
                 data.set_footer(text="Amount in inventory / Amount in gear",
-                                icon_url=self.bot.user.avatar.url)
+                                icon_url=self.bot.user.display_avatar.url)
             else:
                 data.set_footer(text=self.bot.user.name,
-                                icon_url=self.bot.user.avatar.url)
+                                icon_url=self.bot.user.display_avatar.url)
             data.set_thumbnail(url=icon_url)
             return data
 
@@ -451,9 +455,10 @@ class AccountMixin:
         embed = discord.Embed(color=await self.get_embed_color(interaction))
         embed = embed_list_lines(embed, lines,
                                  "Cats you haven't collected yet")
-        embed.set_author(name=doc["account_name"], icon_url=user.avatar.url)
+        embed.set_author(name=doc["account_name"],
+                         icon_url=user.display_avatar.url)
         embed.set_footer(text=self.bot.user.name,
-                         icon_url=self.bot.user.avatar.url)
+                         icon_url=self.bot.user.display_avatar.url)
         await interaction.followup.send(embed=embed)
 
     @app_commands.command()
@@ -475,9 +480,10 @@ class AccountMixin:
         embed = discord.Embed(color=await self.get_embed_color(interaction))
         embed = embed_list_lines(embed, lines,
                                  "Nodes you haven't collected yet:")
-        embed.set_author(name=doc["account_name"], icon_url=user.avatar.url)
+        embed.set_author(name=doc["account_name"],
+                         icon_url=user.display_avatar.url)
         embed.set_footer(text=self.bot.user.name,
-                         icon_url=self.bot.user.avatar.url)
+                         icon_url=self.bot.user.display_avatar.url)
         await interaction.followup.send(embed=embed)
 
     async def boss_embed(self, ctx, raids, results, account_name,
@@ -591,7 +597,7 @@ class AccountMixin:
         embed.set_footer(text="Logs uploaded via evtc will "
                          "appear here with links - they don't have to be "
                          "uploaded by you",
-                         icon_url=self.bot.user.avatar.url)
+                         icon_url=self.bot.user.display_avatar.url)
         return embed
 
     async def find_items_in_account(self,

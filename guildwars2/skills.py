@@ -742,14 +742,14 @@ class SkillsMixin:
             link_type = types[header]
             embed = discord.Embed(title=link_type, color=self.embed_color)
             embed.set_author(name=message.author.display_name,
-                             icon_url=message.author.avatar.url)
+                             icon_url=message.author.display_avatar.url)
             if message.guild:
                 embed.set_footer(text=(
                     "Server admins can opt out of chat link "
                     "previewing by using the \"/server preview_chat_links\" command"),
-                                 icon_url=self.bot.user.avatar.url)
+                                 icon_url=self.bot.user.display_avatar.url)
             else:
-                embed.set_footer(icon_url=self.bot.user.avatar.url)
+                embed.set_footer(icon_url=self.bot.user.display_avatar.url)
             embed.description = "Chat link preview"
             match link_type:
                 case "Coin":

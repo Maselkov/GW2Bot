@@ -141,11 +141,11 @@ class DailyMixin:
             embed.set_footer(
                 text=self.bot.user.name +
                 " | Instabilities shown only apply to the highest scale",
-                icon_url=self.bot.user.avatar.url,
+                icon_url=self.bot.user.display_avatar.url,
             )
         else:
             embed.set_footer(text=self.bot.user.name,
-                             icon_url=self.bot.user.avatar.url)
+                             icon_url=self.bot.user.display_avatar.url)
         embed.timestamp = datetime.datetime.utcnow()
         return embed
 

@@ -375,7 +375,8 @@ class CharactersMixin:
         characters = await self.get_all_characters(user)
         embed = discord.Embed(title="Your characters",
                               colour=await self.get_embed_color(interaction))
-        embed.set_author(name=doc["account_name"], icon_url=user.avatar.url)
+        embed.set_author(name=doc["account_name"],
+                         icon_url=user.display_avatar.url)
         output = []
         for character in sorted(characters, key=get_sort_key()):
             spec = await character.get_spec_info()
@@ -647,7 +648,7 @@ class CharactersMixin:
         embed = discord.Embed(title="Days until...",
                               colour=await self.get_embed_color(interaction))
         embed.set_author(name=doc["account_name"],
-                         icon_url=interaction.user.avatar.url)
+                         icon_url=interaction.user.display_avatar.url)
         for k, v in sorted(fields.items(), reverse=True, key=lambda k: k[0]):
             lines = [
                 "{}: **{}**".format(*line)
@@ -1019,7 +1020,7 @@ class CharactersMixin:
         data = discord.Embed(description='Crafting overview',
                              colour=await self.get_embed_color(interaction))
         data.set_author(name=doc["account_name"],
-                        icon_url=interaction.user.avatar.url)
+                        icon_url=interaction.user.display_avatar.url)
         counter = 0
         for character in characters:
             if counter == 25:

@@ -353,7 +353,8 @@ class EvtcMixin:
         if not duplicate:
             await self.db.encounters.insert_one(doc)
         embed.timestamp = date
-        embed.set_footer(text="Recorded at", icon_url=self.bot.user.avatar.url)
+        embed.set_footer(text="Recorded at",
+                         icon_url=self.bot.user.display_avatar.url)
         if boss:
             embed.set_author(name=data["fightName"], icon_url=boss["icon"])
         return embed

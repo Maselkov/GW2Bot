@@ -353,7 +353,7 @@ class NotiifiersMixin:
         embed.timestamp = datetime.datetime.utcnow()
         embed.set_footer(text="You can disable "
                          "these notifications with /notifier mystic_forger",
-                         icon_url=self.bot.user.avatar.url)
+                         icon_url=self.bot.user.display_avatar.url)
         cursor = self.bot.database.iter("users", {"mystic_forger": search},
                                         self)
         async for doc in cursor:
