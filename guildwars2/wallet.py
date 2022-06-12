@@ -12,20 +12,17 @@ from .utils.db import prepare_search
 
 class WalletMixin:
 
-    async def get_wallet(self, ctx, ids):
+    async def get_wallet(self, interaction: discord.Interaction, ids):
         flattened_ids = [y for x in ids for y in x]
-        try:
-            doc = await self.fetch_key(ctx.author, ["wallet"])
-            results = await self.call_api("account/wallet", key=doc["key"])
-        except APIError as e:
-            return await self.error_handler(ctx, e)
+        doc = await self.fetch_key(interaction.user, ["wallet"])
+        results = await self.call_api("account/wallet", key=doc["key"])
         lines = [[] for i in range(len(ids))]
         found_ids = []
         for c in results:
             found_ids.append(c["id"])
         for id in flattened_ids:
             c_doc = await self.db.currencies.find_one({"_id": id})
-            emoji = self.get_emoji(ctx, c_doc["name"])
+            emoji = self.get_emoji(interaction, c_doc["name"])
             for i in range(0, len(lines)):
                 if id in ids[i]:
                     try:
@@ -36,7 +33,7 @@ class WalletMixin:
                         value = 0
                     if c_doc["name"] == "Coin":
                         lines[i].append("{} {} {}".format(
-                            emoji, self.gold_to_coins(ctx, value),
+                            emoji, self.gold_to_coins(interaction, value),
                             c_doc["name"]))
                     else:
                         lines[i].append("{} {} {}".format(
@@ -44,13 +41,12 @@ class WalletMixin:
         return lines
 
     # Searches account for items and returns list of strings
-    async def get_item_currency(self, ctx, ids):
-        user = ctx.author
+    async def get_item_currency(self, interaction: discord.Interaction, ids):
         scopes = ["inventories", "characters"]
         lines = []
         flattened_ids = [y for x in ids for y in x]
-        doc = await self.fetch_key(user, scopes)
-        search_results = await self.find_items_in_account(ctx,
+        doc = await self.fetch_key(interaction.user, scopes)
+        search_results = await self.find_items_in_account(interaction.user,
                                                           flattened_ids,
                                                           doc=doc)
 
@@ -61,7 +57,7 @@ class WalletMixin:
                     doc = await self.db.items.find_one({"_id": k})
                     name = doc["name"]
                     name = re.sub(r'^\d+ ', '', name)
-                    emoji = self.get_emoji(ctx, name)
+                    emoji = self.get_emoji(interaction, name)
                     lines[i].append("{} {} {}".format(emoji, sum(v.values()),
                                                       name))
         return lines
