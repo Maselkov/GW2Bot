@@ -24,10 +24,14 @@ class CharacterGearDropdown(discord.ui.Select):
         options = []
         self.is_equipment = tab_type == "equipment"
         for i, tab in enumerate(tabs):
+            try:
+                emoji = emojis[i]
+            except IndexError:
+                emoji = None
             options.append(
                 discord.SelectOption(label=f"{tab_type.title()} Tab {i+1}",
                                      value=i,
-                                     emoji=emojis[i],
+                                     emoji=emoji,
                                      description=tab["name"]))
 
         super().__init__(placeholder=f"Select {tab_type} template",
@@ -539,13 +543,11 @@ class CharactersMixin:
                 self.get_emoji(interaction,
                                f"active_build_{i}",
                                return_obj=True))
-            letter = chr(64 + i)  # ord("A") == 65
             emojis_cache["equipment"]["inactive"].append(
-                self.get_emoji(interaction, f"build_{letter}",
-                               return_obj=True))
+                self.get_emoji(interaction, f"build_{i}", return_obj=True))
             emojis_cache["equipment"]["active"].append(
                 self.get_emoji(interaction,
-                               f"active_build_{letter}",
+                               f"active_build_{i}",
                                return_obj=True))
         cog_doc = await self.bot.database.get_cog_config(self)
         if not cog_doc:
