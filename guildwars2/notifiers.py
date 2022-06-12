@@ -39,7 +39,7 @@ class DailyCategoriesDropdown(discord.ui.Select):
         self.view.selected_options = self.values
         await interaction.response.defer(ephemeral=True)
         categories = self.values
-        embed = await self.cog.daily_embed(categories, interaction)
+        embed = await self.cog.daily_embed(categories, interaction=interaction)
         autodelete = False
         autoedit = False
         if self.behavior == "autodelete":
@@ -55,7 +55,7 @@ class DailyCategoriesDropdown(discord.ui.Select):
             "daily.categories": categories
         }
         await self.cog.bot.database.set(interaction.guild, settings, self)
-        await interaction.followup.edit(
+        await interaction.edit_original_message(
             content="I will now send "
             f"dailies to {self.channel.mention}. Here's an example "
             "notification:",
@@ -129,8 +129,8 @@ class NotiifiersMixin:
         await interaction.response.send_message("** **",
                                                 view=view,
                                                 ephemeral=True)
-        if view.wait():
-            return await interaction.response.edit_message(
+        if await view.wait():
+            return await interaction.followup.edit_message(
                 content="No response in time.", view=None)
 
     @notifier_group.command(name="news")
