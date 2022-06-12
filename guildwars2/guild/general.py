@@ -1,6 +1,5 @@
 import asyncio
 import datetime
-from re import A
 
 import discord
 from discord import app_commands
@@ -8,6 +7,49 @@ from discord.app_commands import Choice
 
 from ..exceptions import APIError, APIForbidden, APINotFound
 from ..utils.chat import embed_list_lines, zero_width_space
+
+
+class ArrowButton(discord.ui.Button):
+
+    def __init__(self, left):
+        emoji = "⬅️" if left else "➡️"
+        disabled = True if left else False
+        super().__init__(style=discord.ButtonStyle.blurple,
+                         disabled=disabled,
+                         emoji=emoji)
+        self.left = left
+
+    async def callback(self, interaction: discord.Interaction):
+        if self.left:
+            self.view.i -= 1
+            if self.view.i == 0:
+                self.disabled = True
+            self.view.children[1].disabled = False
+            await interaction.response.edit_message(
+                embed=self.view.embeds[self.view.i], view=self.view)
+        else:
+            self.view.i += 1
+            if self.view.i == len(self.view.embeds) - 1:
+                self.disabled = True
+            self.view.children[0].disabled = False
+            await interaction.response.edit_message(
+                embed=self.view.embeds[self.view.i], view=self.view)
+
+
+class PaginatedEmbeds(discord.ui.View):
+
+    def __init__(self, embeds, user):
+        super().__init__()
+        self.i = 0
+        self.user = user
+        self.embeds = embeds
+        self.add_item(ArrowButton(left=True)).add_item(ArrowButton(left=False))
+        self.response = None
+
+    async def on_timeout(self) -> None:
+        for child in self.children:
+            child.disabled = True
+        await self.response.edit(view=self)
 
 
 class GeneralGuild:
@@ -142,9 +184,10 @@ class GeneralGuild:
                 "You don't have enough permissions in game to "
                 "use this command",
                 ephemeral=True)
-        embed = discord.Embed(description=zero_width_space,
-                              colour=await self.get_embed_color(interaction))
-        embed.set_author(name=base["name"])
+        embed = discord.Embed(
+            colour=await self.get_embed_color(interaction),
+            title=base["name"],
+        )
         order_id = 1
         # For each order the rank has, go through each member and add it with
         # the current order increment to the embed
@@ -167,6 +210,7 @@ class GeneralGuild:
                     return member.mention
             return ""
 
+        embeds = []
         for order in ranks:
             for member in results:
                 # Filter invited members
@@ -184,9 +228,28 @@ class GeneralGuild:
                                     member['name'], mention, member['rank'])
                                 if len(str(lines)) + len(line) < 6000:
                                     lines.append(line)
+                                else:
+                                    embeds.append(
+                                        embed_list_lines(embed,
+                                                         lines,
+                                                         "> **MEMBERS**",
+                                                         inline=True))
+                                    lines = [line]
+                                    embed = discord.Embed(
+                                        title=base["name"],
+                                        colour=await
+                                        self.get_embed_color(interaction))
+
             order_id += 1
-        embed = embed_list_lines(embed, lines, "> **MEMBERS**", inline=True)
-        await interaction.followup.send(embed=embed)
+        embeds.append(
+            embed_list_lines(embed, lines, "> **MEMBERS**", inline=True))
+        if len(embeds) == 1:
+            return await interaction.followup.send(embed=embed)
+        for i, embed in enumerate(embeds, start=1):
+            embed.set_footer(text="Page {}/{}".format(i, len(embeds)))
+        view = PaginatedEmbeds(embeds, interaction.user)
+        out = await interaction.followup.send(embed=embeds[0], view=view)
+        view.response = out
 
     @guild_group.command(name="treasury")
     @app_commands.describe(guild="Guild name.")
