@@ -18,7 +18,7 @@ class EmojiMixin:
                   fallback_fmt="{}",
                   return_obj=False,
                   force_emoji=False):
-
+        # This monstrosity is due for a rework. But at least it works
         def get_emoji():
             search_str = emoji.lower().replace(" ", "_")
             # Remove illegal emoji characters
@@ -52,6 +52,12 @@ class EmojiMixin:
         elif isinstance(ctx, discord.Interaction):
             if isinstance(ctx.channel, (discord.TextChannel, discord.Thread)):
                 me = ctx.channel.guild.me
+            elif isinstance(ctx.channel, discord.DMChannel):
+                em = get_emoji()
+                if em:
+                    return em
+                elif fallback:
+                    return fallback_fmt.format(emoji)
             else:
                 me = ctx.client.user
         else:
