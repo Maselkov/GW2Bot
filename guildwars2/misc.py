@@ -41,7 +41,16 @@ class MiscMixin:
             "es": "{}/index.php?title=Especial%3ABuscar&search={}"
         }
         url = (search_url[language].format(wiki[language], search_text))
-        async with self.session.get(url) as r:
+        headers = {"User-Agent": "TybaltBot/v2"}
+        # Overzealous filtering on the wiki's side lead to the bot's IP being blocked.
+        # Seems to be a common issue, based on https://wiki.guildwars2.com/wiki/Guild_Wars_2_Wiki:Reporting_wiki_bugs#Forbidden_403
+        # And based on the information within, the wiki had added an exemption for requests with this user-string header
+        # It is just a little dirty, but, it doesn't really change anything in the end.
+        # The only thing being checked is this user-string, and
+        # given the lack of any other verification, I don't think it's anything too bad.
+        # That being said, if anyone takes an issue with this, I will contact the wiki
+        # and get an exemption for GW2bot too.
+        async with self.session.get(url, headers=headers) as r:
             if r.history:  # Redirected
                 embed = await self.search_results_embed(interaction,
                                                         "Wiki",
