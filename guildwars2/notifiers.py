@@ -695,7 +695,7 @@ class NotiifiersMixin:
     @tasks.loop(minutes=3)
     async def daily_checker(self):
         if await self.check_day():
-            await asyncio.sleep(300)
+            await asyncio.sleep(1200)
             if not self.bot.available:
                 await asyncio.sleep(360)
             await self.cache_dailies()
