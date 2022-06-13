@@ -353,7 +353,8 @@ class GuildSync:
                 if highest_rank not in current_rank_roles:
                     role = sync_guild.roles.get(highest_rank)
                     if role:
-                        to_add.append(role)
+                        if role < self.member.guild.me.top_role:
+                            to_add.append(role)
             if sync_guild.tag_enabled and sync_guild.tag_role:
                 if not current_tag_role and belongs:
                     to_add.append(sync_guild.tag_role)
@@ -380,6 +381,63 @@ class GuildSync:
         for sync in syncs:
             options.append(Choice(name=sync.guild_name, value=sync.id))
         return options
+
+    @guildsync_group.command(name="diagnose")
+    @app_commands.checks.has_permissions(manage_guild=True, manage_roles=True)
+    @app_commands.describe(sync="The guildsync to debug",
+                           user="The user to test the config of")
+    @app_commands.autocomplete(sync=guildsync_autocomplete)
+    async def guildsync_diagnose(self,
+                                 interaction: discord.Interaction,
+                                 sync: str,
+                                 user: discord.User = None):
+        """Diagnose common issues with your guildsync configuration."""
+        await interaction.response.defer()
+        sync = await self.db.guildsyncs.find_one({
+            "guild_id":
+            interaction.guild.id,
+            "gid":
+            sync
+        })
+        if not sync:
+            return await interaction.followup.send("No valid sync chosen")
+        if not interaction.guild.me.guild_permissions.manage_roles:
+            return await interaction.followup.send(
+                "I don't have the manage roles permission")
+        gs = self.SyncGuild(self, sync, interaction.guild)
+        key_ok = await self.verify_leader_permissions(gs.key, gs.id)
+        if not key_ok:
+            return await interaction.followup.send(
+                "The added key is no longer valid. "
+                "Please change the key using /guildsync edit.")
+        if not gs.ranks_enabled and not gs.tag_enabled:
+            return await interaction.followup.send(
+                "Both rank sync and tag role sync are disabled")
+        await gs.synchronize_roles()
+        if user:
+            await gs.fetch_members()
+            user_doc = await self.bot.database.get(user, self)
+            keys = user_doc.get("keys", [])
+            if not keys:
+                key = user_doc.get("key")
+                if key:
+                    keys.append(key)
+            for key in keys:
+                if key["account_name"] in gs.members:
+                    break
+                else:
+                    return await interaction.followup.send(
+                        "The provided user "
+                        "is not in the guild.")
+        for rank in gs.roles:
+            if gs.roles[rank] > interaction.guild.me.top_role:
+                return await interaction.followup.send(
+                    f"The synced role {gs.roles[rank]} is higher on the "
+                    "hierarchy than my highest role. I am unable to sync it.")
+        return await interaction.followup.send(
+            "Everything seems to be "
+            "in order! If you're still having trouble, ask for "
+            "help in the support server.")
 
     @guildsync_group.command(name="edit")
     @app_commands.checks.has_permissions(manage_guild=True)
@@ -456,7 +514,7 @@ class GuildSync:
                               color=self.embed_color,
                               description=description)
         await interaction.followup.send(embed=embed)
-        self.schedule_guildsync(interaction.guild, 1)
+        await self.run_guildsyncs(interaction.guild)
 
     @guildsync_group.command(name="add")
     @app_commands.guild_only()
@@ -654,7 +712,7 @@ class GuildSync:
             await self.bot.database.set(guild, {"guildsync.enabled": True},
                                         self)
         await destination.send("Guildsync succesfully added!")
-        self.schedule_guildsync(guild, 0)
+        await self.run_guildsyncs(guild)
 
     @guildsync_group.command(name="toggle")
     @app_commands.guild_only()
@@ -678,7 +736,7 @@ class GuildSync:
 
     async def guildsync_now(self, ctx):
         """Force a synchronization"""
-        self.schedule_guildsync(ctx.guild, 0)
+        await self.run_guildsyncs(ctx.guild)
 
     @guildsync_group.command(name="purge")
     @app_commands.guild_only()
@@ -785,16 +843,16 @@ class GuildSync:
     async def guild_synchronizer(self):
         cursor = self.bot.database.iter("guilds", {"guildsync.enabled": True},
                                         self,
-                                        batch_size=20)
+                                        batch_size=10)
         async for doc in cursor:
             try:
                 if doc["_obj"]:
-                    self.schedule_guildsync(doc["_obj"], 2)
+                    coro = self.run_guildsyncs(doc["_obj"])
+                    await asyncio.wait_for(coro, timeout=200)
             except asyncio.CancelledError:
                 return
             except Exception:
                 pass
-        await self.guildsync_queue.join()
 
     @guild_synchronizer.before_loop
     async def before_guild_synchronizer(self):
@@ -815,4 +873,4 @@ class GuildSync:
         sync = doc.get("guildsync", {})
         enabled = sync.get("enabled", False)
         if enabled:
-            self.schedule_guildsync(guild, 1, member=member)
+            await self.run_guildsyncs(guild, sync_for=member)
