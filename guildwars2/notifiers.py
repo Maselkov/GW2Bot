@@ -110,14 +110,12 @@ class NotiifiersMixin:
                                         self)
             return await interaction.response.send_message(
                 "Daily notifier disabled.")
-        if not interaction.channel.permissions_for(
-                interaction.guild.me).send_messages:
+        if not channel.permissions_for(interaction.guild.me).send_messages:
             return await interaction.response.send_message(
                 "I do not have permissions to send "
                 f"messages to {channel.mention}",
                 ephemeral=True)
-        if not interaction.channel.permissions_for(
-                interaction.guild.me).embed_links:
+        if not channel.permissions_for(interaction.guild.me).embed_links:
             return await interaction.response.send_message(
                 "I do not have permissions to embed links in "
                 f"{channel.mention}",
