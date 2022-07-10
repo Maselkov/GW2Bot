@@ -539,11 +539,14 @@ class AccountMixin:
                               color=await self.get_embed_color(ctx))
         wings = [wing for raid in raids for wing in raid["wings"]]
         cotm = self.get_emoji(ctx, "call_of_the_mists")
-        start_date = datetime.date(year=2019, month=1, day=21)
-        seconds = int(
-            (datetime.datetime.utcnow().date() - start_date).total_seconds())
-        weeks = seconds // (60 * 60 * 24 * 7 * 2)
-        cotm_index = weeks % (len(wings) - 1)
+        emboldened = self.get_emoji(ctx, "emboldened")
+        start_date = datetime.date(year=2022, month=6, day=20)
+        current = datetime.datetime.utcnow().date()
+        monday_1 = (start_date - datetime.timedelta(days=start_date.weekday()))
+        monday_2 = (current - datetime.timedelta(days=current.weekday()))
+        weeks = (monday_2 - monday_1).days // 7
+        cotm_index = weeks % len(wings)
+        emboldened_index = (weeks + 1) % len(wings)
         for index, wing in enumerate(wings):
             wing_done = True
             value = []
@@ -563,9 +566,11 @@ class AccountMixin:
                 else:
                     boss_name = readable_id(boss["id"])
                 value.append("> " + is_killed(boss) + boss_name)
-            cotm_active = index in (len(wings) - 1, cotm_index)
-            name = cotm if cotm_active else ""
-            name += readable_id(wing["id"])
+            name = readable_id(wing["id"])
+            if index == cotm_index:
+                name = f"{cotm}{name}"
+            elif index == emboldened_index:
+                name = f"{emboldened}{name}"
             if wing_done:
                 name += " :white_check_mark:"
             else:
