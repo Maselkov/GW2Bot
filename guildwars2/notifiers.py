@@ -95,17 +95,19 @@ class NotiifiersMixin:
                              behavior: str = None):
         """Send daily achievements to a channel every day"""
         doc = await self.bot.database.get(interaction.guild, self)
-        enabled = doc.get("daily", {}).get("on", False)
-
-        # IF ENABLED AND NOT CHANNEL
-
-        if not enabled and not channel:
+        already_enabled = doc.get("daily", {}).get("on", False)
+        if enabled and not channel:
+            await interaction.response.send_message(
+                "You must specify a channel to post to. using the 'Channel' parameter",
+                ephemeral=True)
+            return
+        if not enabled and not already_enabled:
             return await interaction.response.send_message(
                 "Daily notifier is aleady disabled. If "
                 "you were trying to enable it, make sure to fill out "
                 "the `channel` argument.",
                 ephemeral=True)
-        if enabled and not channel:
+        if not enabled:
             await self.bot.database.set(interaction.guild, {"daily.on": False},
                                         self)
             return await interaction.response.send_message(
