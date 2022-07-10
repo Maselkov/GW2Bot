@@ -396,8 +396,8 @@ class CharactersMixin:
 
     @character_group.command(name="gear")
     @app_commands.autocomplete(character=character_autocomplete)
-    @app_commands.checks.has_permissions(embed_links=True,
-                                         external_emojis=True)
+    # @app_commands.checks.has_permissions(embed_links=True,
+    #                                      external_emojis=True)
     async def character_gear(self, interaction: discord.Interaction,
                              character: str):
         """Displays the gear, attributes and build of given character"""
