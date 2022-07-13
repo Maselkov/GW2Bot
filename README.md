@@ -8,7 +8,7 @@ An extension to [Toothy](https://github.com/Maselkov/Toothy).
 
 First you must install Toothy by following the [Toothy setup instructions](https://github.com/Maselkov/Toothy/blob/master/README.md).
 
-Then clone GW2Bot into the `cogs` directory of Toothy and install the dependencies:
+Then clone GW2Bot into the `cogs` directory and install the dependencies:
 ```bash
 # Go to Toothy directory
 cd path/to/Toothy
@@ -68,8 +68,8 @@ Now you should be able to use slash commands with your Toothy bot in your Discor
 * [WvW info](https://i.imgur.com/vCetQbN.png)
 * [Achievement info](https://i.imgur.com/EZWaLDZ.png)
 * [Wallet commands](https://i.imgur.com/qbxsbHQ.png)
-* [Guild commands](https://i.imgur.com/qBBG8CF.png) - courtesy of @n1tr0-5urf3r
-* [Current TP transactions](https://i.imgur.com/UXD6MEf.png) - courtesy of @n1tr0-5urf3r
+* [Guild commands](https://i.imgur.com/qBBG8CF.png) - courtesy of [@n1tr0-5urf3r](https://github.com/n1tr0-5urf3r)
+* [Current TP transactions](https://i.imgur.com/UXD6MEf.png) - courtesy of [@n1tr0-5urf3r](https://github.com/n1tr0-5urf3r)
 * [Dailies](https://i.imgur.com/RTc0NAa.png)
 * [Wiki search](https://i.imgur.com/Uc7j0eb.png)
 * [Gem price](https://i.imgur.com/3oWPYOX.png)
@@ -79,4 +79,4 @@ Now you should be able to use slash commands with your Toothy bot in your Discor
 
 
 ## Licensed Works Used
-[gw2-fotm-instabilities](https://github.com/Invisi/gw2-fotm-instabilities) by @Invisi which is licensed under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/)
+[gw2-fotm-instabilities](https://github.com/Invisi/gw2-fotm-instabilities) by [@Invisi](https://github.com/Invisi) which is licensed under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/)
