@@ -54,7 +54,7 @@ class DailyCategoriesDropdown(discord.ui.Select):
             "daily.autoedit": autoedit,
             "daily.categories": categories
         }
-        await self.cog.bot.database.set(interaction.guild, settings, self)
+        await self.cog.bot.database.set(interaction.guild, settings, self.cog)
         await interaction.edit_original_message(
             content="I will now send "
             f"dailies to {self.channel.mention}. Here's an example "
