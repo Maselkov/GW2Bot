@@ -611,7 +611,7 @@ class NotiifiersMixin:
 
         async for doc in cursor:
             asyncio.create_task(notify_guild(doc))
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(0.1)
 
     async def send_news(self, embeds):
         cursor = self.bot.database.iter(
