@@ -135,7 +135,7 @@ class MiscMixin:
         quantity="Item quantity, ranging from 1 to 255.",
         skin="Skin name to apply on the item.",
         upgrade_1="Name of the upgrade in the first slot. "
-        "Example: Mark of Penetration",
+        "Example: +1 Agony Infusion",
         upgrade_2="Name of the upgrade in the second slot. "
         "Example: Superior rune of Generosity")
     @app_commands.autocomplete(item=chatcode_item_autocomplete,
