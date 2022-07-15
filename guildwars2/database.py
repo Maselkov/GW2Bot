@@ -190,6 +190,8 @@ class DatabaseMixin:
         try:
             current_doc = await self.bot.database.get_cog_config(self)
             current_dailies = current_doc.get("cache", {}).get("dailies", {})
+            current_dailies.pop("psna", None)
+            current_dailies.pop("psna_later", None)
             for attempt in range(DAILY_API_BULLSHIT_RETRY_ATTEMPTS):
                 try:
                     ep = "achievements/daily"
@@ -226,19 +228,17 @@ class DatabaseMixin:
                     offset = 0
                     if tomorrow:
                         offset = 1
+                    if doc == current_dailies:
+                        print(f"Attempt {attempt} at caching dailies failed")
+                        continue
                     doc["psna"] = [self.get_psna(offset_days=offset)]
                     doc["psna_later"] = [self.get_psna(offset_days=1 + offset)]
                     key = "cache.dailies"
                     if tomorrow:
                         key += "_tomorrow"
-                    if current_dailies != doc:
-                        await self.bot.database.set_cog_config(
-                            self, {key: doc})
-                        self.log.info(
-                            f"Cached dailies after {attempt} attempts")
-                        break
-                    else:
-                        print(f"Attempt {attempt} at caching dailies failed")
+                    await self.bot.database.set_cog_config(self, {key: doc})
+                    self.log.info(f"Cached dailies after {attempt} attempts")
+                    break
 
                 except Exception as e:
                     self.log.exception(
