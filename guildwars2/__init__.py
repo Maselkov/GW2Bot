@@ -78,64 +78,6 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
         for task in self.tasks:
             task.start()
 
-        # TODO move this to main bot. Add code to register sub-error handlers
-        @bot.tree.error
-        async def on_app_command_error(interaction: Interaction,
-                                       error: AppCommandError):
-            responded = interaction.response.is_done()
-            msg = ""
-            user = interaction.user
-            if isinstance(error, app_commands.NoPrivateMessage):
-                msg = "This command cannot be used in DMs"
-            elif isinstance(error, app_commands.CommandOnCooldown):
-                msg = ("You cannot use this command again for the next "
-                       "{:.2f} seconds"
-                       "".format(error.retry_after))
-            elif isinstance(error, app_commands.CommandInvokeError):
-                exc = error.original
-                if isinstance(exc, APIKeyError):
-                    msg = str(exc)
-                elif isinstance(exc, APIInactiveError):
-                    msg = (f"{user.mention}, the API is currently down. "
-                           "Try again later.".format)
-                elif isinstance(exc, APIInvalidKey):
-                    msg = (
-                        f"{user.mention}, your API key is invalid! Remove your "
-                        "key and add a new one")
-                elif isinstance(exc, APIError):
-                    msg = (f"{user.mention}, API has responded with the "
-                           "following error: "
-                           f"`{exc}`".format(user, exc))
-                else:
-                    self.log.exception("Exception in command, ", exc_info=exc)
-                    msg = ("Something went wrong. If this problem persists, "
-                           "please report it or ask about it in the "
-                           "support server- https://discord.gg/VyQTrwP")
-            elif isinstance(error, app_commands.MissingPermissions):
-                missing = [
-                    p.replace("guild", "server").replace("_", " ").title()
-                    for p in error.missing_permissions
-                ]
-                msg = ("You're missing the following permissions to use this "
-                       "command: `{}`".format(", ".join(missing)))
-            elif isinstance(error, app_commands.BotMissingPermissions):
-                missing = [
-                    p.replace("guild", "server").replace("_", " ").title()
-                    for p in error.missing_permissions
-                ]
-                msg = (
-                    "The bot is missing the following permissions to be able to "
-                    "run this command:\n`{}`\nPlease add them then try again".
-                    format(", ".join(missing)))
-            elif isinstance(error, app_commands.CommandNotFound):
-                pass
-            elif isinstance(error, app_commands.CheckFailure):
-                pass
-            if not responded:
-                await interaction.response.send_message(msg, ephemeral=True)
-            else:
-                await interaction.followup.send(msg, ephemeral=True)
-
     async def cog_load(self):
         self.bot.add_view(EventTimerReminderUnsubscribeView(self))
         self.bot.add_view(GuildSyncPromptUserConfirmView(self))
@@ -143,6 +85,22 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
     async def cog_unload(self):
         for task in self.tasks:
             task.cancel()
+
+    async def cog_error_handler(self, interaction, error):
+        msg = ""
+        user = interaction.user
+        if isinstance(error, APIKeyError):
+            msg = str(error)
+        elif isinstance(error, APIInactiveError):
+            msg = ("The API is currently down. "
+                   "Try again later.".format)
+        elif isinstance(error, APIInvalidKey):
+            msg = ("Your API key is invalid! Remove your "
+                   "key and add a new one")
+        elif isinstance(error, APIError):
+            msg = (f"API has responded with the following error: "
+                   f"`{error}`".format(user, error))
+        return msg
 
     def can_embed_links(self, ctx):
         if not isinstance(ctx.channel, discord.abc.GuildChannel):
