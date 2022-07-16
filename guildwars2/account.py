@@ -37,12 +37,9 @@ class AccountMixin:
         world = await self.get_world_name(wid)
         embed.add_field(name="WvW Server", value=world)
         if "progression" in doc["permissions"]:
-            try:
-                endpoints = ["account/achievements", "account"]
-                achievements, account = await self.call_multiple(
-                    endpoints, user, ["progression"])
-            except APIError as e:
-                return await self.error_handler(interaction, e)
+            endpoints = ["account/achievements", "account"]
+            achievements, account = await self.call_multiple(
+                endpoints, user, ["progression"])
             possible_ap = await self.total_possible_ap()
             user_ap = await self.calculate_user_ap(achievements, account)
             embed.add_field(name="Achievement Points",
@@ -57,23 +54,17 @@ class AccountMixin:
             wvwrank = results["wvw_rank"]
             embed.add_field(name="WvW rank", value=wvwrank)
         if "pvp" in doc["permissions"]:
-            try:
-                pvp = await self.call_api("pvp/stats", user)
-            except APIError as e:
-                return await self.error_handler(interaction, e)
+            pvp = await self.call_api("pvp/stats", user)
             pvprank = pvp["pvp_rank"] + pvp["pvp_rank_rollovers"]
             embed.add_field(name="PVP rank", value=pvprank)
         if "characters" in doc["permissions"]:
-            try:
-                characters = await self.get_all_characters(user)
-                total_played = 0
-                for character in characters:
-                    total_played += character.age
-                embed.add_field(name="Total time played",
-                                value=self.format_age(total_played),
-                                inline=False)
-            except APIError as e:
-                return await self.error_handler(interaction, e)
+            characters = await self.get_all_characters(user)
+            total_played = 0
+            for character in characters:
+                total_played += character.age
+            embed.add_field(name="Total time played",
+                            value=self.format_age(total_played),
+                            inline=False)
         if "access" in results:
             access = results["access"]
             if len(access) > 1:
