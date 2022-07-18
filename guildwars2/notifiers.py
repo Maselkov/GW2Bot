@@ -558,7 +558,14 @@ class NotiifiersMixin:
                                            doc=daily_doc,
                                            interaction=channel,
                                            tomorrow=True)
-
+            embed.title = "Dailies"
+            tomorrow = datetime.datetime.now(
+                datetime.timezone.utc) + datetime.timedelta(days=1)
+            tomorrow = tomorrow.replace(hour=0,
+                                        minute=0,
+                                        second=0,
+                                        microsecond=0)
+            embed.timestamp = tomorrow
             edit = doc.get("autoedit", False)
             autodelete = doc.get("autodelete", False)
             old_message = None
