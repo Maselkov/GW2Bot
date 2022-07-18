@@ -255,7 +255,8 @@ class EvtcMixin:
                 boss_lines.append(f"**{target['name']}**")
             boss_lines.append(f"Health: **{health_left}%**")
             boss_lines.append(get_graph(health_left))
-        embed.add_field(name="> **BOSS**", value="\n".join(boss_lines))
+        if not wvw:
+            embed.add_field(name="> **BOSS**", value="\n".join(boss_lines))
         buff_lines = []
         sought_buffs = ["Might", "Fury", "Quickness", "Alacrity", "Protection"]
         buffs = []
@@ -294,7 +295,11 @@ class EvtcMixin:
         if len(groups) > 1:
             players.sort(key=lambda p: p["group"])
         current_group = None
+        iteration = 0
         for player in players:
+            if iteration > 10 and wvw:
+                break
+            iteration += 1
             if "buffUptimes" not in player:
                 continue
             if len(groups) > 1:
