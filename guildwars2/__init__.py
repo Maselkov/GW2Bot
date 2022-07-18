@@ -1,4 +1,3 @@
-import asyncio
 import datetime
 import json
 import logging
@@ -13,15 +12,12 @@ from .characters import CharactersMixin
 from .commerce import CommerceMixin
 from .daily import DailyMixin
 from .database import DatabaseMixin
-from discord.app_commands import AppCommandError
-from discord import app_commands
-from discord import Interaction
 from .emojis import EmojiMixin
 from .events import EventsMixin, EventTimerReminderUnsubscribeView
 from .evtc import EvtcMixin
 from .exceptions import APIError, APIInactiveError, APIInvalidKey, APIKeyError
-from .guild.sync import GuildSyncPromptUserConfirmView
 from .guild import GuildMixin
+from .guild.sync import GuildSyncPromptUserConfirmView
 from .guildmanage import GuildManageMixin
 from .key import KeyMixin
 from .misc import MiscMixin
@@ -68,12 +64,14 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
         for task in setup_tasks:
             bot.loop.create_task(task())
         self.tasks = [
-            self.game_update_checker, self.daily_checker, self.news_checker,
-            self.gem_tracker, self.world_population_checker,
-            self.guild_synchronizer, self.boss_notifier,
-            self.forced_account_names, self.event_reminder_task,
-            self.worldsync_task, self.post_evtc_notifications,
-            self.daily_mystic_forger_checker_task, self.key_sync_task
+            self.game_update_checker, self.news_checker, self.gem_tracker,
+            self.world_population_checker, self.guild_synchronizer,
+            self.boss_notifier, self.forced_account_names,
+            self.event_reminder_task, self.worldsync_task,
+            self.post_evtc_notifications,
+            self.daily_mystic_forger_checker_task, self.key_sync_task,
+            self.cache_dailies_tomorrow, self.swap_daily_tomorrow_and_today,
+            self.send_daily_notifs
         ]
         for task in self.tasks:
             task.start()

@@ -58,9 +58,20 @@ class DailyMixin:
             category = ["psna", "pve", "pvp", "wvw", "fractals", "strikes"]
         else:
             category = [category]
-        embed = await self.daily_embed(category,
-                                       interaction=interaction,
-                                       tomorrow=tomorrow)
+        try:
+            embed = await self.daily_embed(category,
+                                           interaction=interaction,
+                                           tomorrow=tomorrow)
+        except ValueError:
+            if tomorrow:
+                return await interaction.followup.send(
+                    "Due to current GW2 API issues, tomorrow "
+                    "dailies will not be avaialble for one hour after reset.",
+                    ephemeral=True)
+            else:
+                return await interaction.followup.send(
+                    "Dailies are current unavailable. Try again in a bit",
+                    ephemeral=True)
         await interaction.followup.send(embed=embed)
 
     def get_year_day(self, tomorrow=True):
@@ -91,6 +102,8 @@ class DailyMixin:
             embed.title += " tomorrow"
         key = "dailies" if not tomorrow else "dailies_tomorrow"
         dailies = doc["cache"][key]
+        if not dailies:
+            raise ValueError
         for category in categories:
             if category == "psna":
                 if datetime.datetime.utcnow().hour >= 8:

@@ -2,11 +2,12 @@ import asyncio
 import datetime
 import unicodedata
 import xml.etree.ElementTree as et
+
 import discord
 from bs4 import BeautifulSoup
-from discord.ext import tasks
 from discord import app_commands
 from discord.app_commands import Choice
+from discord.ext import tasks
 
 from .daily import DAILY_CATEGORIES
 from .exceptions import APIError
@@ -372,8 +373,9 @@ class NotiifiersMixin:
         notified = doc["cache"].get("mystic_forger", {})
         sent_24 = notified.get("sent_24_before", False)
         sent_reset = notified.get("sent_reset", False)
-        dailies = doc["cache"]["dailies"]["pve"]
-        dailies_tomorrow = doc["cache"]["dailies_tomorrow"]["pve"]
+        dailies = doc["cache"].get("dailies", {}).get("pve", [])
+        dailies_tomorrow = doc["cache"].get("dailies_tomorrow",
+                                            {}).get("pve", [])
         mf_today = achievement_name in dailies
         mf_tomorrow = achievement_name in dailies_tomorrow
         if sent_reset and not mf_today:
@@ -514,7 +516,10 @@ class NotiifiersMixin:
         else:
             return False
 
+    @tasks.loop(
+        time=[datetime.time(hour=23, minute=40, tzinfo=datetime.timezone.utc)])
     async def send_daily_notifs(self):
+        await self.cache_dailies(tomorrow=True)
         cursor = self.bot.database.iter("guilds", {
             "daily.on": True,
             "daily.channel": {
@@ -551,7 +556,8 @@ class NotiifiersMixin:
                                           "notifs!")
             embed = await self.daily_embed(categories,
                                            doc=daily_doc,
-                                           interaction=channel)
+                                           interaction=channel,
+                                           tomorrow=True)
 
             edit = doc.get("autoedit", False)
             autodelete = doc.get("autodelete", False)
@@ -612,6 +618,11 @@ class NotiifiersMixin:
         async for doc in cursor:
             asyncio.create_task(notify_guild(doc))
             await asyncio.sleep(0.1)
+
+    @send_daily_notifs.error
+    async def swap_daily_tomorrow_and_today_error(self, error):
+        self.log.exception("Error while sending dailies", exc_info=error)
+        self.send_daily_notifs.restart()
 
     async def send_news(self, embeds):
         cursor = self.bot.database.iter(
@@ -692,16 +703,7 @@ class NotiifiersMixin:
         except Exception as e:
             self.log.exception(e)
 
-    @tasks.loop(minutes=3)
-    async def daily_checker(self):
-        if await self.check_day():
-            await asyncio.sleep(1200)
-            if not self.bot.available:
-                await asyncio.sleep(360)
-            await self.cache_dailies()
-            await self.send_daily_notifs()
-
-    @daily_checker.before_loop
+    @send_daily_notifs.before_loop
     async def before_daily_checker(self):
         await self.bot.wait_until_ready()
 
