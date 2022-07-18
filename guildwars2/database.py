@@ -14,8 +14,6 @@ from discord.ext import tasks
 from .exceptions import APIError, APIKeyError
 from .utils.db import prepare_search
 
-DAILY_API_BULLSHIT_RETRY_ATTEMPTS = 20
-
 
 class DatabaseMixin:
 
