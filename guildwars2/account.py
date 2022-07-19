@@ -86,10 +86,10 @@ class AccountMixin:
 
     @app_commands.command()
     async def li(self, interaction: discord.Interaction):
-        """Shows how many Legendary Insights and Divinations you have earned"""
+        """Shows how many Legendary Insights you have earned"""
         await interaction.response.defer()
         user = interaction.user
-        scopes = ["inventories", "characters"]
+        scopes = ["inventories", "characters", "wallet"]
         trophies = self.gamedata["raid_trophies"]
         ids = []
         for trophy in trophies:
@@ -97,12 +97,20 @@ class AccountMixin:
                 ids += items["items"]
         doc = await self.fetch_key(user, scopes)
         search_results = await self.find_items_in_account(user, ids, doc=doc)
+        wallet = await self.call_api("account/wallet", key=doc["key"])
         embed = discord.Embed(color=0x4C139D)
         total = 0
         crafted_total = 0
         for trophy in trophies:
             trophy_total = 0
             breakdown = []
+            if trophy["wallet"]:
+                for currency_result in wallet:
+                    if currency_result["id"] == trophy["wallet"]:
+                        trophy_total += currency_result["value"]
+                        breakdown.append(
+                            f"Wallet - **{currency_result['value']}**")
+                        break
             for group in trophy["items"]:
                 if "reduced_worth" in group:
                     upgraded_sum = 0
@@ -145,14 +153,14 @@ class AccountMixin:
                                 value="\n".join(breakdown),
                                 inline=False)
                 total += trophy_total
-        trophy_names = [trophy["name"] for trophy in trophies]
-        embed.title = "{} Legendary {} and {} earned".format(
-            total, ', '.join(trophy_names[:-1]), trophy_names[-1])
+        embed.title = f"{total} Raid trophies earned".format(total)
         embed.description = "{} on hand, {} used in crafting".format(
             total - crafted_total, crafted_total)
         embed.set_author(name=doc["account_name"],
                          icon_url=user.display_avatar.url)
-        embed.set_thumbnail(url="https://resources.gw2bot.info/icons/lild.png")
+        embed.set_thumbnail(
+            url="https://wiki.guildwars2.com/images/5/5e/Legendary_Insight.png"
+        )
         embed.set_footer(text=self.bot.user.name,
                          icon_url=self.bot.user.display_avatar.url)
         await interaction.followup.send(embed=embed)
