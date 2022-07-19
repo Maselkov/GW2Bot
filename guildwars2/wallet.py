@@ -124,7 +124,7 @@ class WalletMixin:
         ids_maps = [32, 45, 25, 27, 19, 22, 20, 29, 34, 35]
         ids_wvw_cur = [15, 26, 31, 36, 65]
         ids_pvp_cur = [33]
-        ids_pvp = [70820]
+        ids_pvp = [70820, 71581]
         ids_maps_items = [46682]
         ids_token = [69, 7, 24, 59]
         ids_raid = [28, 70]
