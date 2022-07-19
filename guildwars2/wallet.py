@@ -64,10 +64,11 @@ class WalletMixin:
 
     async def currency_autocomplete(self, interaction: discord.Interaction,
                                     current: str):
+        current = current.lower()
         if not current:
             return []
         if current == "gold":
-            current = "coin"
+            return [Choice(name="Gold", value="1")]
         query = prepare_search(current)
         query = {"name": query}
         items = await self.db.currencies.find(query).to_list(25)
@@ -81,11 +82,22 @@ class WalletMixin:
                      interaction: discord.Interaction,
                      currency: str = None):
         """Shows your wallet"""
+        if currency:
+            try:
+                currency = int(currency)
+            except ValueError:
+                results = await self.currency_autocomplete(
+                    interaction, currency)
+                if not results:
+                    return await interaction.response.send_message(
+                        "No results found for {}".format(currency.title()),
+                        ephemeral=True)
+                currency = int(results[0].value)
         await interaction.response.defer()
         doc = await self.fetch_key(interaction.user, ["wallet"])
-        if currency:
+        if currency is not None:
             results = await self.call_api("account/wallet", key=doc["key"])
-            choice = await self.db.currencies.find_one({"_id": int(currency)})
+            choice = await self.db.currencies.find_one({"_id": currency})
             embed = discord.Embed(title=choice["name"].title(),
                                   description=choice["description"],
                                   colour=await
@@ -100,15 +112,13 @@ class WalletMixin:
                     break
                 else:
                     count = 0
-                embed.add_field(name="Amount in wallet",
-                                value=count,
-                                inline=False)
-                embed.set_thumbnail(url=choice["icon"])
-                embed.set_author(name=doc["account_name"],
-                                 icon_url=interaction.user.display_avatar.url)
-                embed.set_footer(text=self.bot.user.name,
-                                 icon_url=self.bot.user.display_avatar.url)
-                return await interaction.followup.send(embed=embed)
+            embed.add_field(name="Amount in wallet", value=count, inline=False)
+            embed.set_thumbnail(url=choice["icon"])
+            embed.set_author(name=doc["account_name"],
+                             icon_url=interaction.user.display_avatar.url)
+            embed.set_footer(text=self.bot.user.name,
+                             icon_url=self.bot.user.display_avatar.url)
+            return await interaction.followup.send(embed=embed)
         ids_cur = [1, 4, 2, 3, 18, 23, 16, 50, 47]
         ids_keys = [43, 40, 41, 37, 42, 38, 44, 49, 51]
         ids_maps = [32, 45, 25, 27, 19, 22, 20, 29, 34, 35]
