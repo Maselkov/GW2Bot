@@ -132,7 +132,10 @@ class DailyMixin:
                     lines.append(emoji + d)
                 value = "\n".join(lines)
             if category == "psna_later":
-                category = "psna in 8 hours"
+                no_upper = True
+                now = datetime.datetime.utcnow() + datetime.timedelta(days=1)
+                now = now.replace(minute=0, second=0, microsecond=0, hour=8)
+                category = f"PSNA <t:{int(now.timestamp())}:R>"
             value = re.sub(r"(?:Daily|Tier 4|PvP|WvW) ", "", value)
             if category.startswith("psna"):
                 category = self.get_emoji(interaction, "daily psna") + category
@@ -147,9 +150,9 @@ class DailyMixin:
                 )
 
             else:
-                embed.add_field(name=category.upper(),
-                                value=value,
-                                inline=False)
+                if not no_upper:
+                    category = category.upper()
+                embed.add_field(name=category, value=value, inline=False)
         if "fractals" in categories:
             embed.set_footer(
                 text=self.bot.user.name +
