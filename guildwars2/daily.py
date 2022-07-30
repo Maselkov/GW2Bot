@@ -105,8 +105,9 @@ class DailyMixin:
         if not dailies:
             raise ValueError
         for category in categories:
+            no_upper = False
             if category == "psna":
-                if datetime.datetime.utcnow().hour >= 8:
+                if datetime.datetime.utcnow().hour >= 8 and not tomorrow:
                     value = "\n".join(dailies["psna_later"])
                 else:
                     value = "\n".join(dailies["psna"])
@@ -228,9 +229,8 @@ class DailyMixin:
         offset = datetime.timedelta(hours=-8)
         tzone = datetime.timezone(offset)
         day = datetime.datetime.now(tzone).weekday()
-        if day + offset_days > 6:
-            offset_days = -6
-        return self.gamedata["pact_supply"][day + offset_days]
+        day = (day + offset_days) % 7
+        return self.gamedata["pact_supply"][day]
 
     def get_strike(self, ctx, tomorrow=False):
         day = self.get_year_day(tomorrow=tomorrow)

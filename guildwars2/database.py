@@ -180,7 +180,7 @@ class DatabaseMixin:
                     "checked".format(user, missing))
         return doc["key"]
 
-    async def cache_dailies(self, *, tomorrow=False):
+    async def cache_dailies(self, *, tomorrow=False, real_tomorrow=False):
         if not tomorrow:
             try:
                 await self.cache_endpoint("achievements")
@@ -217,7 +217,7 @@ class DatabaseMixin:
                     daily_list.extend(self.get_lw_dailies(tomorrow=tomorrow))
                 doc[category] = daily_list
             offset = 0
-            if tomorrow:
+            if real_tomorrow:
                 offset = 1
             doc["psna"] = [self.get_psna(offset_days=offset)]
             doc["psna_later"] = [self.get_psna(offset_days=1 + offset)]
@@ -423,7 +423,7 @@ class DatabaseMixin:
     @tasks.loop(
         time=[datetime.time(hour=1, minute=1, tzinfo=datetime.timezone.utc)])
     async def cache_dailies_tomorrow(self):
-        await self.cache_dailies(tomorrow=True)
+        await self.cache_dailies(tomorrow=True, real_tomorrow=True)
 
     @cache_dailies_tomorrow.error
     async def cache_dailies_tomorrow_error(self, error):
