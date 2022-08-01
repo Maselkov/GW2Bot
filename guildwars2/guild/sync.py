@@ -132,10 +132,17 @@ class GuildSyncPromptUserConfirmView(discord.ui.View):
 class GuildSync:
     # The good ol switcheroo
 
-    guildsync_group = app_commands.Group(
-        name="guildsync",
-        description="Sync your in-game guild roster with server roles",
-        guild_only=True)
+    @app_commands.guild_only()
+    @app_commands.default_permissions(manage_guild=True,
+                                      manage_roles=True,
+                                      kick_members=True)
+    class GuildsyncGroup(
+            app_commands.Group,
+            name="guildsync",
+            description="Sync your in-game guild roster with server roles"):
+        pass
+
+    guildsync_group = GuildsyncGroup(guild_only=True)
 
     class SyncGuild:
 
