@@ -1,4 +1,5 @@
 import asyncio
+from code import interact
 import datetime
 
 import discord
@@ -7,6 +8,68 @@ from discord.app_commands import Choice
 
 from ..exceptions import APIError, APIForbidden, APINotFound
 from ..utils.chat import embed_list_lines, zero_width_space
+
+
+async def guild_name_autocomplete(interaction: discord.Interaction,
+                                  current: str):
+    cog = interaction.command.binding
+    bot = cog.bot
+    doc = await bot.database.get(interaction.user, cog)
+    key = doc.get("key", {})
+    if not key:
+        return []
+    account_key = key["account_name"].replace(".", "_")
+
+    async def cache_guild():
+        try:
+            results = await cog.call_api("account",
+                                         scopes=["account"],
+                                         key=key["key"])
+        except APIError:
+            return choices
+        guild_ids = results.get("guilds", [])
+        endpoints = [f"guild/{gid}" for gid in guild_ids]
+        try:
+            guilds = await cog.call_multiple(endpoints)
+        except APIError:
+            return choices
+        guild_list = []
+        for guild in guilds:
+            guild_list.append({"name": guild["name"], "id": guild["id"]})
+        c = {
+            "last_update": datetime.datetime.utcnow(),
+            "guild_list": guild_list
+        }
+        await bot.database.set(interaction.user,
+                               {f"guild_cache.{account_key}": c}, cog)
+
+    choices = []
+    current = current.lower()
+    if interaction.guild:
+        doc = await bot.database.get(interaction.guild, cog)
+        guild_id = doc.get("guild_ingame")
+        if guild_id:
+            choices.append(
+                Choice(name="Server's default guild", value=guild_id))
+    doc = await bot.database.get(interaction.user, cog)
+    if not key:
+        return choices
+    cache = doc.get("guild_cache", {}).get(account_key, {})
+    if not cache:
+        if not choices:
+            cache = await cache_guild()
+        else:
+            asyncio.create_task(cache_guild())
+    elif cache["last_update"] < datetime.datetime.utcnow(
+    ) - datetime.timedelta(days=7):
+        asyncio.create_task(cache_guild())
+    if cache:
+        choices += [
+            Choice(name=guild["name"], value=guild["id"])
+            for guild in cache["guild_list"]
+            if current in guild["name"].lower()
+        ]
+    return choices
 
 
 class ArrowButton(discord.ui.Button):
@@ -56,66 +119,6 @@ class GeneralGuild:
 
     guild_group = app_commands.Group(name="guild",
                                      description="Guild related commands")
-
-    async def guild_name_autocomplete(self, interaction: discord.Interaction,
-                                      current: str):
-        doc = await self.bot.database.get(interaction.user, self)
-        key = doc.get("key", {})
-        if not key:
-            return []
-        account_key = key["account_name"].replace(".", "_")
-
-        async def cache_guild():
-            try:
-                results = await self.call_api("account",
-                                              scopes=["account"],
-                                              key=key["key"])
-            except APIError:
-                return choices
-            guild_ids = results.get("guilds", [])
-            endpoints = [f"guild/{gid}" for gid in guild_ids]
-            try:
-                guilds = await self.call_multiple(endpoints)
-            except APIError:
-                return choices
-            guild_list = []
-            for guild in guilds:
-                guild_list.append({"name": guild["name"], "id": guild["id"]})
-            c = {
-                "last_update": datetime.datetime.utcnow(),
-                "guild_list": guild_list
-            }
-            await self.bot.database.set(interaction.user,
-                                        {f"guild_cache.{account_key}": c},
-                                        self)
-
-        choices = []
-        current = current.lower()
-        if interaction.guild:
-            doc = await self.bot.database.get(interaction.guild, self)
-            guild_id = doc.get("guild_ingame")
-            if guild_id:
-                choices.append(
-                    Choice(name="Server's default guild", value=guild_id))
-        doc = await self.bot.database.get(interaction.user, self)
-        if not key:
-            return choices
-        cache = doc.get("guild_cache", {}).get(account_key, {})
-        if not cache:
-            if not choices:
-                cache = await cache_guild()
-            else:
-                asyncio.create_task(cache_guild())
-        elif cache["last_update"] < datetime.datetime.utcnow(
-        ) - datetime.timedelta(days=7):
-            asyncio.create_task(cache_guild())
-        if cache:
-            choices += [
-                Choice(name=guild["name"], value=guild["id"])
-                for guild in cache["guild_list"]
-                if current in guild["name"].lower()
-            ]
-        return choices
 
     @guild_group.command(name="info")
     @app_commands.describe(guild="Guild name.")
@@ -410,21 +413,3 @@ class GeneralGuild:
         data = embed_list_lines(data, lines,
                                 "> **{0} Log**".format(log_type.capitalize()))
         await interaction.followup.send(embed=data)
-
-    @guild_group.command(name="default")
-    @app_commands.describe(guild="Guild name")
-    @app_commands.autocomplete(guild=guild_name_autocomplete)
-    async def guild_default(self, interaction: discord.Interaction,
-                            guild: str):
-        """ Set your default guild for guild commands on this server."""
-        await interaction.response.defer()
-        results = await self.call_api(f"guild/{guild}")
-        await self.bot.database.set_guild(interaction.guild, {
-            "guild_ingame": guild,
-        }, self)
-        await interaction.followup.send(
-            f"Your default guild is now set to {results['name']} for this "
-            "server. All commands from the `guild` command group "
-            "invoked without a specified guild will default to "
-            "this guild. To reset, simply invoke this command "
-            "without specifying a guild")
