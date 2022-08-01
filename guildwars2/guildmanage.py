@@ -2,13 +2,21 @@ import asyncio
 import discord
 from discord.ext import tasks
 from discord import app_commands
+from .guild.general import guild_name_autocomplete
 
 
 class GuildManageMixin:
 
-    server_group = app_commands.Group(name="server",
-                                      description="Server management commands",
-                                      guild_only=True)
+    @app_commands.guild_only()
+    @app_commands.default_permissions(manage_guild=True,
+                                      manage_roles=True,
+                                      manage_nicknames=True)
+    class ServerGroup(app_commands.Group,
+                      name="server",
+                      description="Server management commands"):
+        pass
+
+    server_group = ServerGroup(guild_only=True)
 
     @server_group.command(name="force_account_names")
     @app_commands.checks.has_permissions(manage_nicknames=True)
@@ -108,6 +116,24 @@ class GuildManageMixin:
                 "will now be given the selected role")
             return await self.key_sync_guild(guild)
         await interaction.response.send_message("Key sync disabled.")
+
+    @server_group.command(name="default_guild")
+    @app_commands.describe(guild="Guild name")
+    @app_commands.autocomplete(guild=guild_name_autocomplete)
+    async def guild_default(self, interaction: discord.Interaction,
+                            guild: str):
+        """ Set your default guild for guild commands on this server."""
+        await interaction.response.defer()
+        results = await self.call_api(f"guild/{guild}")
+        await self.bot.database.set_guild(interaction.guild, {
+            "guild_ingame": guild,
+        }, self)
+        await interaction.followup.send(
+            f"Your default guild is now set to {results['name']} for this "
+            "server. All commands from the `guild` command group "
+            "invoked without a specified guild will default to "
+            "this guild. To reset, simply invoke this command "
+            "without specifying a guild")
 
     @tasks.loop(minutes=5)
     async def key_sync_task(self):
