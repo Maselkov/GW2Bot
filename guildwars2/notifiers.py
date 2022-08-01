@@ -286,7 +286,79 @@ class NotiifiersMixin:
         await interaction.followup.send(
             f"I will now send boss notifications to {channel.mention}.")
 
-    @notifier_group.command(name="mystic_forger")
+    async def event_name_autocomplete(self, interaction: discord.Interaction,
+                                      current):
+        if not current:
+            return []
+        current = current.lower()
+        names = set()
+        timers = self.gamedata["event_timers"]
+        for category in timers:
+            if category == "bosses":
+                subtypes = "normal", "hardcore"
+                for subtype in subtypes:
+                    for boss in timers[category][subtype]:
+                        name = boss["name"]
+                        if current in name.lower():
+                            names.add(Choice(name=name, value=name))
+            else:
+                for subcategory in timers[category]:
+                    map_name = subcategory["name"]
+                    for event in subcategory["phases"]:
+                        if event["name"]:
+                            name = f"{map_name} - {event['name']}"
+                            if current in name.lower():
+                                names.add(
+                                    Choice(name=name, value=event["name"]))
+        return sorted(list(names)[:25], key=lambda c: c.name)
+
+    @reminder_group.command(name="event")
+    @app_commands.describe(
+        event_name="Event name. Examples: Shadow Behemoth. Gerent Preparation",
+        minutes_before_event="The number of minutes before "
+        "the event that you'll be notified at")
+    @app_commands.autocomplete(event_name=event_name_autocomplete)
+    async def reminder_event(self,
+                             interaction: discord.Interaction,
+                             event_name: str,
+                             minutes_before_event: int = 5):
+        """Make the bot automatically notify you before an event starts"""
+        if minutes_before_event < 0:
+            return await interaction.response.send_message(
+                "That's not how time works!", ephemeral=True)
+        if minutes_before_event > 60:
+            return await interaction.response.send_message(
+                "Time can't be greater than one hour", ephemeral=True)
+        event_name = event_name.lower()
+        reminder = {}
+        for boss in self.boss_schedule:
+            if boss["name"].lower() == event_name:
+                reminder["type"] = "boss"
+                reminder["name"] = boss["name"]
+        if not reminder:
+            for group in "hot", "pof", "day", "ibs", "eod":
+                maps = self.gamedata["event_timers"][group]
+                for location in maps:
+                    for phase in location["phases"]:
+                        if not phase["name"]:
+                            continue
+                        if phase["name"].lower() == event_name:
+                            reminder["type"] = "phase"
+                            reminder["name"] = phase["name"]
+                            reminder["group"] = group
+                            reminder["map_name"] = location["name"]
+        if not reminder:
+            return await interaction.response.send_message(
+                "No event found matching that name", ephemeral=True)
+        reminder["time"] = minutes_before_event * 60
+        await self.bot.database.set(interaction.user,
+                                    {"event_reminders": reminder},
+                                    self,
+                                    operator="push")
+        await interaction.response.send_message("Reminder set succesfully",
+                                                ephemeral=True)
+
+    @reminder_group.command(name="mystic_forger")
     @app_commands.describe(
         reminder_frequency="Select when you want to be notified.")
     @app_commands.choices(reminder_frequency=[
