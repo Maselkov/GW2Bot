@@ -408,41 +408,55 @@ class NotiifiersMixin:
             async with self.session.get(url) as r:
                 return BeautifulSoup(await r.text(), 'html.parser')
 
-        base_url = "https://en-forum.guildwars2.com/"
-        category = await get_page(base_url + "forum/6-game-update-notes/")
-
-        patch_notes = discord.Embed.Empty
+        update_feed_url = "https://en-forum.guildwars2.com/forum/6-game-update-notes.xml"
+        async with self.bot.session.get(update_feed_url) as r:
+            feed = et.fromstring(await r.text())
+        channel = feed.find("channel")
+        item = channel.find("item")
+        title = item.find("title").text
+        link = item.find("link").text
+        page = await get_page(link)
+        item = page.find("script", {"type": "application/ld+json"})
+        data = json.loads(item.text)
+        update_notes = data["text"]
+        comments = data.get("comment")
+        minor = False
+        update_time = datetime.datetime.strptime(data["dateCreated"],
+                                                 "%Y-%m-%dT%H:%M:%S%z")
+        permalink = data["url"]
+        if comments:
+            comment = comments[-1]
+            minor = True
+            update_notes = comment["text"]
+            update_time = datetime.datetime.strptime(comment["dateCreated"],
+                                                     "%Y-%m-%dT%H:%M:%S%z")
+            permalink = comment["url"]
+        update_time = update_time.replace(tzinfo=None)
+        doc = await self.bot.database.get_cog_config(self)
+        if not doc:
+            return None
+        last_update_time = doc["cache"].get("last_update_time")
+        if not last_update_time:
+            await self.bot.database.set_cog_config(
+                self, {"cache.last_update_time": update_time})
+            return None
+        if last_update_time >= update_time:
+            return None
+        lines = update_notes.split("\n")
+        lines = [line.strip() for line in lines]
+        lines = [line for line in lines if line]
+        update_notes = "\n".join(lines)
+        update_notes = get_short_patchnotes(update_notes, permalink)
         title = "GW2 has just updated"
-        url = discord.Embed.Empty
-        try:  # Playing it safe in case forums die or something
-            topic_url = category.find("span", {
-                "class": "ipsType_break ipsContained"
-            }).find("a")["href"].split("?")[0]
-
-            topic = await get_page(topic_url)
-            comment = topic.find_all("div",
-                                     {"data-role": "commentContent"})[-1]
-            comment_id = comment.parent.parent["data-commentid"]
-            url = f"{topic_url}?do=findComment&comment={comment_id}"
-            patch_notes = "\n".join(line
-                                    for line in comment.get_text().split("\n")
-                                    if line)
-            patch_notes = get_short_patchnotes(patch_notes, url)
-            title = topic.find("span", {
-                "class": "ipsType_break ipsContained"
-            }).get_text().strip()
-
-        except Exception as e:
-            self.log.exception(e)
         embed = discord.Embed(title=f"**{title}**",
-                              url=url,
+                              url=permalink,
                               color=self.embed_color,
-                              description=patch_notes)
+                              description=update_notes)
         embed.set_footer(text="Build: {}".format(new_build))
-        text_version = ("@here Guild Wars 2 has just updated! "
+        text_version = ("Guild Wars 2 has just updated! "
                         "New build: {} Update notes: <{}>\n{}".format(
-                            new_build, url, patch_notes))
-        return embed, text_version
+                            new_build, permalink, update_notes))
+        return embed, text_version, minor
 
     async def check_news(self):
         doc = await self.bot.database.get_cog_config(self)
@@ -498,18 +512,18 @@ class NotiifiersMixin:
         else:
             return False
 
-    async def check_build(self):
+    async def game_build_changed(self):
+        pass
         doc = await self.bot.database.get_cog_config(self)
         if not doc:
             return False
         current_build = doc["cache"]["build"]
-        endpoint = "build"
-        try:
-            results = await self.call_api(endpoint)
-        except APIError:
-            return False
-        build = results["id"]
-        if not current_build == build:
+        url = "http://assetcdn.101.arenanetworks.com/latest/101"
+        async with self.session.get(url) as r:
+            some_weird_numbers: str = await r.text()
+        some_weird_numbers = some_weird_numbers.split()
+        build = some_weird_numbers[0]
+        if current_build != build:
             await self.bot.database.set_cog_config(self,
                                                    {"cache.build": build})
             return True
@@ -669,34 +683,39 @@ class NotiifiersMixin:
                 self.log.exception(e)
 
     async def send_update_notifs(self):
+        doc = await self.bot.database.get_cog_config(self)
+        build = doc["cache"]["build"]
+        embed_available = False
         try:
-            doc = await self.bot.database.get_cog_config(self)
-            build = doc["cache"]["build"]
-            name = self.__class__.__name__
-            embed_available = False
-            try:
-                embed, text = await self.update_notification(build)
-                embed_available = True
-            except Exception:
-                text = ("Guild Wars 2 has just updated! New build: {}".format(
-                    build))
-            cursor = self.bot.database.get_guilds_cursor(
-                {
-                    "updates.on": True,
-                    "updates.channel": {
-                        "$ne": None
-                    }
-                }, self)
+            result = await self.update_notification(build)
+            if not result:
+                return
+            embed, text, minor = result
+            embed_available = True
+            cursor = self.bot.database.iter("guilds", {
+                "updates.on": True,
+                "updates.channel": {
+                    "$ne": None
+                }
+            },
+                                            self,
+                                            subdocs=["updates"])
             sent = 0
             async for doc in cursor:
                 try:
-                    guild = doc["cogs"][name]["updates"]
-                    mention = guild.get("mention", "")
-                    if mention == "everyone" or mention == "here":  # Legacy, too lazy to update atm, TODO
-                        mention = "@" + mention
-                    if mention == "none":
+                    if not doc["on"]:
+                        continue
+                    channel = self.bot.get_channel(doc["channel"])
+                    if not channel:
+                        continue
+                    if not minor:
+                        mention = doc.get("mention", "")
+                        if mention == "everyone" or mention == "here":  # Legacy, too lazy to update atm, TODO
+                            mention = "@" + mention
+                        if mention == "none":
+                            mention = ""
+                    else:
                         mention = ""
-                    channel = self.bot.get_channel(guild["channel"])
                     if (channel.permissions_for(channel.guild.me).embed_links
                             and embed_available):
                         message = mention + " Guild Wars 2 has just updated!"
@@ -729,7 +748,7 @@ class NotiifiersMixin:
 
     @tasks.loop(minutes=1)
     async def game_update_checker(self):
-        if await self.check_build():
+        if await self.game_build_changed():
             await self.send_update_notifs()
             await self.rebuild_database()
 
