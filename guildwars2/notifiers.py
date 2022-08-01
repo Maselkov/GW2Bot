@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import json
 import unicodedata
 import xml.etree.ElementTree as et
 
@@ -66,12 +67,23 @@ class DailyCategoriesDropdown(discord.ui.Select):
 
 
 class NotiifiersMixin:
-    notifier_group = app_commands.Group(name="notifier",
-                                        description="Notifier Commands")
+
+    @app_commands.guild_only()
+    @app_commands.default_permissions(manage_guild=True)
+    class NotifierGroup(
+            app_commands.Group,
+            name="notifier",
+            description="Commands for setting various notifiers for your server"
+    ):
+        pass
+
+    notifier_group = NotifierGroup()
+    reminder_group = app_commands.Group(
+        name="reminder",
+        description="Commands for setting various personal reminders.")
 
     @notifier_group.command(name="daily")
     @app_commands.checks.has_permissions(manage_guild=True)
-    @app_commands.guild_only()
     @app_commands.describe(
         enabled="Enable or disable Daily Notifier. If "
         "enabling, channel argument must be set",
@@ -200,7 +212,8 @@ class NotiifiersMixin:
         """Send a notification whenever the game is updated"""
         if enabled and not channel:
             return await interaction.response.send_message(
-                "You must specify a channel.", ephemeral=True)
+                "You must specify a channel with the 'channel' optional argument.",
+                ephemeral=True)
         if not interaction.guild:
             return await interaction.response.send_message(
                 "This command can only be used in servers at the time.",
@@ -220,14 +233,7 @@ class NotiifiersMixin:
                 "Update notifier disabled.")
         mention_string = ""
         if mention:
-            mention = int(mention)
-            if mention == interaction.guild.id:
-                mention = "@everyone"
-            elif role := interaction.guild.get_role(mention):
-                mention_string = role.mention
-            else:
-                mention_string = interaction.guild.get_member(mention).mention
-
+            mention_string = mention.mention
         settings = {
             "updates.on": True,
             "updates.channel": channel.id,
