@@ -1,11 +1,10 @@
 import asyncio
 import datetime
-from dis import disco
 
 import discord
 from discord import app_commands
 from discord.app_commands import Choice
-from discord.ext import commands, tasks
+from discord.ext import tasks
 
 UTC_TZ = datetime.timezone.utc
 
