@@ -134,7 +134,8 @@ class DailyMixin:
                 value = "\n".join(lines)
             if category == "psna_later":
                 no_upper = True
-                now = datetime.datetime.utcnow() + datetime.timedelta(days=1)
+                now = datetime.datetime.now(
+                    datetime.timezone.utc) + datetime.timedelta(days=1)
                 now = now.replace(minute=0, second=0, microsecond=0, hour=8)
                 category = f"PSNA <t:{int(now.timestamp())}:R>"
             value = re.sub(r"(?:Daily|Tier 4|PvP|WvW) ", "", value)
