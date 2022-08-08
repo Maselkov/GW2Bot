@@ -134,8 +134,10 @@ class EvtcMixin:
             except Exception:
                 return None
 
-    async def upload_log(self, file, user):
+    async def upload_log(self, file, user, *, anonymous=False):
         params = {"json": 1}
+        if anonymous:
+            params["anonymous"] = "true"
         token = await self.get_dpsreport_usertoken(user)
         if token:
             params["userToken"] = token
@@ -222,7 +224,7 @@ class EvtcMixin:
         dpses = []
         charater_name_max_length = 19
         for player in players:
-            line = self.get_emoji(destination,
+t            line = self.get_emoji(destination,
                                   player["profession"],
                                   fallback=True,
                                   fallback_fmt="",
@@ -367,9 +369,12 @@ class EvtcMixin:
     @app_commands.command(name="evtc")
     @app_commands.checks.bot_has_permissions(embed_links=True)
     @app_commands.describe(
-        file="EVTC file to process. Accepted formats: .evtc, .zip, .zevtc")
-    async def evtc(self, interaction: discord.Interaction,
-                   file: discord.Attachment):
+        file="EVTC file to process. Accepted formats: .evtc, .zip, .zevtc",
+        anonymous="Set to true in order to anonymize the report")
+    async def evtc(self,
+                   interaction: discord.Interaction,
+                   file: discord.Attachment,
+                   anonymous: bool = False):
         """Process an EVTC combat log in an attachment"""
         if not file.filename.endswith(ALLOWED_FORMATS):
             return await interaction.response.send_message(
@@ -377,7 +382,10 @@ class EvtcMixin:
                 f"Allowed file extensions: `{', '.join(ALLOWED_FORMATS)}`",
                 ephemeral=True)
         await interaction.response.defer()
-        await self.process_evtc([file], interaction.user, interaction.followup)
+        await self.process_evtc([file],
+                                interaction.user,
+                                interaction.followup,
+                                anonymous=anonymous)
 
     @evtc_automation_group.command(name="channel")
     @app_commands.guild_only()
@@ -549,13 +557,18 @@ class EvtcMixin:
             EvtcAutouploadDestinationsSelect(self, channels, destinations))
         await interaction.followup.send("** **", view=view)
 
-    async def process_evtc(self, files: list[discord.Attachment], user,
-                           destination):
+    async def process_evtc(self,
+                           files: list[discord.Attachment],
+                           user,
+                           destination,
+                           anonymous=False):
         embeds = []
         for attachment in files:
             if attachment.filename.endswith(ALLOWED_FORMATS):
                 try:
-                    resp = await self.upload_log(attachment, user)
+                    resp = await self.upload_log(attachment,
+                                                 user,
+                                                 anonymous=anonymous)
                     data = await self.get_encounter_data(resp["id"])
                     embeds.append(await
                                   self.upload_embed(destination, data,
