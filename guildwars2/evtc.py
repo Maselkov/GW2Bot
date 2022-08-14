@@ -224,7 +224,7 @@ class EvtcMixin:
         dpses = []
         charater_name_max_length = 19
         for player in players:
-t            line = self.get_emoji(destination,
+            line = self.get_emoji(destination,
                                   player["profession"],
                                   fallback=True,
                                   fallback_fmt="",
@@ -577,8 +577,7 @@ t            line = self.get_emoji(destination,
                     self.log.exception("Exception processing EVTC log ",
                                        exc_info=e)
                     return await destination.send(
-                        content="Error processing your log! :x:",
-                        ephemeral=True)
+                        content="Error processing your log! :x:")
         for embed in embeds:
             await destination.send(embed=embed)
 
