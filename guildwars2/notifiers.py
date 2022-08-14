@@ -219,14 +219,14 @@ class NotiifiersMixin:
                 "This command can only be used in servers at the time.",
                 ephemeral=True)
         doc = await self.bot.database.get(interaction.guild, self)
-        enabled = doc.get("updates", {}).get("on", False)
-        if not enabled and not channel:
+        already_enabled = doc.get("updates", {}).get("on", False)
+        if not already_enabled and not enabled:
             return await interaction.response.send_message(
                 "Update notifier is aleady disabled. If "
                 "you were trying to enable it, make sure to fill out "
                 "the `channel` argument.",
                 ephemeral=True)
-        if enabled and not channel:
+        if not enabled:
             await self.bot.database.set(interaction.guild,
                                         {"updates.on": False}, self)
             return await interaction.response.send_message(
