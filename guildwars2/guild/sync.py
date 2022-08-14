@@ -768,7 +768,7 @@ class GuildSync:
                 ephemeral=True)
             await view.wait()
             if view.value is None:
-                return await interaction.edit_original_message(
+                return await interaction.edit_original_response(
                     content="Timed out.", view=None)
             elif view.value:
                 await self.bot.database.set(interaction.guild,
