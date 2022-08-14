@@ -26,7 +26,7 @@ class AccountMixin:
         await interaction.response.defer()
         user = interaction.user
         doc = await self.fetch_key(user, ["account"])
-        results = await self.call_api("account", key=doc["key"])
+        results = await self.call_api("account", user)
         accountname = doc["account_name"]
         created = results["created"].split("T", 1)[0]
         hascommander = "Yes" if results["commander"] else "No"

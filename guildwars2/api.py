@@ -2,7 +2,7 @@ import asyncio
 from aiohttp import ContentTypeError
 from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
                       wait_chain, wait_fixed)
-
+import copy
 from .exceptions import (APIBadRequest, APIConnectionError, APIForbidden,
                          APIInactiveError, APIInvalidKey, APINotFound,
                          APIRateLimited)
@@ -25,8 +25,31 @@ class ApiMixin:
             tasks.append(self.call_api(e, key=key, **kwargs))
         return await asyncio.gather(*tasks)
 
-    async def cache_result(self, endpoint, key, user):
-        pass
+    async def cache_result(self, endpoint, result, used_key, user):
+        if endpoint == "account" and user:
+            doc = await self.bot.database.get(user, self)
+            key = doc["key"]
+            keys = doc["keys"]
+            if key["account_name"] != result["name"]:
+                if used_key == key["key"]:
+                    old_name = copy.copy(key["account_name"])
+                    new_name = result["name"]
+                    key["account_name"] = new_name
+                    for alt_key in keys:
+                        if alt_key["account_name"] == old_name:
+                            alt_key["account_name"] = new_name
+                    await self.bot.database.set(user, {
+                        "key": key,
+                        "keys": keys
+                    }, self)
+                    await user.send("Your account name seems to have "
+                                    "changed! I went ahead and updated it, "
+                                    "from `{}` to `{}`.".format(
+                                        old_name, new_name))
+                    await self.bot.database.set(
+                        user, {"name_changes": [old_name, new_name]},
+                        self,
+                        operator="push")
 
     @retry(retry=retry_if_exception_type(APIBadRequest),
            reraise=True,
@@ -47,7 +70,8 @@ class ApiMixin:
             headers.update({"Authorization": "Bearer " + key})
         if user:
             doc = await self.fetch_key(user, scopes)
-            headers.update({"Authorization": "Bearer " + doc["key"]})
+            key = doc["key"]
+            headers.update({"Authorization": "Bearer " + key})
         if schema_version:
             schema = schema_version.replace(microsecond=0).isoformat() + "Z"
             headers.update({"X-Schema-Version": schema})
@@ -81,5 +105,5 @@ class ApiMixin:
                 else:
                     raise APIConnectionError("{} {}".format(r.status, err_msg))
             data = await r.json()
-            asyncio.create_task(self.cache_result(endpoint, key, user))
+            asyncio.create_task(self.cache_result(endpoint, data, key, user))
             return data
