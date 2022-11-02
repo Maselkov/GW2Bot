@@ -1373,6 +1373,11 @@
             "name": "Harvest Temple",
             "type": "single_achievement",
             "id": 6513
+          },
+          {
+            "name": "Harvest Temple CM",
+            "type": "single_achievement",
+            "id": 6532
           }
         ]
       }
