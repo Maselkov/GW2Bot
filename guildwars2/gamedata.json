@@ -1775,10 +1775,30 @@
       "name": "Slothasor",
       "api_name": "slothasor"
     },
+    "16088": {
+      "icon": "https://i.imgur.com/oeDU3JB.png",
+      "name": "Bandit Trio",
+      "api_name": "bandit_trio"
+    },
+    "16137": {
+      "icon": "https://i.imgur.com/oeDU3JB.png",
+      "name": "Bandit Trio",
+      "api_name": "bandit_trio"
+    },
+    "16125": {
+      "icon": "https://i.imgur.com/oeDU3JB.png",
+      "name": "Bandit Trio",
+      "api_name": "bandit_trio"
+    },
     "16115": {
       "icon": "https://wiki.guildwars2.com/images/5/5d/Mini_Matthias_Abomination.png",
       "name": "Matthias Gabrel",
       "api_name": "matthias"
+    },
+    "16253": {
+      "icon": "https://wiki.guildwars2.com/images/b/b5/Mini_McLeod_the_Silent.png",
+      "name": "Escort",
+      "api_name": "escort"
     },
     "16235": {
       "icon": "https://wiki.guildwars2.com/images/e/ea/Mini_Keep_Construct.png",
@@ -1814,6 +1834,31 @@
       "icon": "https://wiki.guildwars2.com/images/d/d4/Mini_Desmina.png",
       "name": "Soulless Horror",
       "api_name": "soulless_horror"
+    },
+    "19828": {
+      "icon": "https://wiki.guildwars2.com/images/c/c4/Silver_River_of_Souls_Trophy.png",
+      "name": "River of Souls",
+      "api_name": "river_of_souls"
+    },
+    "19691": {
+      "icon": "https://wiki.guildwars2.com/images/3/37/Mini_Broken_King.png",
+      "name": "Broken King",
+      "api_name": "statues_of_grenth"
+    },
+    "19536": {
+      "icon": "https://i.imgur.com/bb7VOtW.png",
+      "name": "Eater of Souls",
+      "api_name": "statues_of_grenth"
+    },
+    "19651": {
+      "icon": "https://i.imgur.com/Rr8ToDY.png",
+      "name": "Eyes 👀",
+      "api_name": "statues_of_grenth"
+    },
+    "19844": {
+      "icon": "https://i.imgur.com/Rr8ToDY.png",
+      "name": "Eyes 👀",
+      "api_name": "statues_of_grenth"
     },
     "19450": {
       "icon": "https://wiki.guildwars2.com/images/e/e4/Mini_Dhuum.png",
@@ -1854,51 +1899,6 @@
       "icon": "https://wiki.guildwars2.com/images/8/8b/Mini_Qadim_the_Peerless.png",
       "name": "Qadim the Peerless",
       "api_name": "qadim_the_peerless"
-    },
-    "16088": {
-      "icon": "https://i.imgur.com/oeDU3JB.png",
-      "name": "Bandit Trio",
-      "api_name": "bandit_trio"
-    },
-    "16137": {
-      "icon": "https://i.imgur.com/oeDU3JB.png",
-      "name": "Bandit Trio",
-      "api_name": "bandit_trio"
-    },
-    "16125": {
-      "icon": "https://i.imgur.com/oeDU3JB.png",
-      "name": "Bandit Trio",
-      "api_name": "bandit_trio"
-    },
-    "16253": {
-      "icon": "https://wiki.guildwars2.com/images/b/b5/Mini_McLeod_the_Silent.png",
-      "name": "Escort",
-      "api_name": "escort"
-    },
-    "19828": {
-      "icon": "https://wiki.guildwars2.com/images/c/c4/Silver_River_of_Souls_Trophy.png",
-      "name": "River of Souls",
-      "api_name": "river_of_souls"
-    },
-    "19691": {
-      "icon": "https://wiki.guildwars2.com/images/3/37/Mini_Broken_King.png",
-      "name": "Broken King",
-      "api_name": "statues_of_grenth"
-    },
-    "19536": {
-      "icon": "https://i.imgur.com/bb7VOtW.png",
-      "name": "Eater of Souls",
-      "api_name": "statues_of_grenth"
-    },
-    "19651": {
-      "icon": "https://i.imgur.com/Rr8ToDY.png",
-      "name": "Eyes 👀",
-      "api_name": "statues_of_grenth"
-    },
-    "19844": {
-      "icon": "https://i.imgur.com/Rr8ToDY.png",
-      "name": "Eyes 👀",
-      "api_name": "statues_of_grenth"
     },
     "17021": {
       "icon": "https://i.imgur.com/szBjyva.png",
