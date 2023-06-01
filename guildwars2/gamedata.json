@@ -1378,6 +1378,21 @@
             "name": "Harvest Temple CM",
             "type": "single_achievement",
             "id": 6532
+          },
+          {
+            "name": "Old Lion's Court",
+            "type": "single_achievement",
+            "id": 6797
+          },
+          {
+            "name": "Old Lion's Court CM",
+            "type": "single_achievement",
+            "id": 6804
+          },
+          {
+            "name": "Old Lion's Court: Fear Not This Knight",
+            "type": "single_achievement",
+            "id": 6778
           }
         ]
       }
