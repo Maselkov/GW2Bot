@@ -441,7 +441,7 @@ class NotiifiersMixin:
             if not user:
                 return
             try:
-                await user.send(embed=embed)
+                await user.send("@silent", embed=embed)
             except discord.HTTPException:
                 pass
 
