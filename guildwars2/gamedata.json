@@ -92,6 +92,13 @@
     "Whisper of Jormag",
     "Boneskinner"
   ],
+  "eod_strike_missions": [
+    "Aetherblade Hideout",
+    "Xunlai Jade Junkyard",
+    "Kaening Overlook",
+    "Harvest Temple",
+    "Old Lion's Court"
+  ],
   "fractals": {
     "Aetherblade": [
       14,
