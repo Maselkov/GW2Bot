@@ -102,9 +102,9 @@
   "fractals": {
     "Aetherblade": [
       14,
-      46,
+      45,
       65,
-      71,
+      70,
       96
     ],
     "Aquatic Ruins": [
@@ -116,7 +116,7 @@
     "Captain Mai Trin Boss": [
       18,
       42,
-      72,
+      71,
       95
     ],
     "Chaos": [
@@ -124,14 +124,13 @@
       30,
       38,
       63,
-      88,
-      97
+      88
     ],
     "Cliffside": [
       6,
       21,
-      47,
-      69,
+      46,
+      68,
       94
     ],
     "Deepstone": [
@@ -143,27 +142,33 @@
     "Molten Boss": [
       10,
       40,
-      70,
+      69,
       90
     ],
     "Molten Furnace": [
       9,
-      22,
+      17,
       39,
       58,
       83
     ],
     "Nightmare": [
+      22,
+      47,
+      72,
+      97
+    ],
+    "Shattered Observatory": [
       23,
       48,
       73,
       98
     ],
-    "Shattered Observatory": [
-      24,
-      49,
-      74,
-      99
+    "Silent Surf": [
+      25,
+      50,
+      75,
+      100
     ],
     "Siren's Reef": [
       12,
@@ -175,26 +180,24 @@
       3,
       27,
       51,
-      68,
       86,
       93
     ],
     "Solid Ocean": [
       20,
       35,
-      45,
+      44,
       60,
       80
     ],
     "Sunqua Peak": [
-      25,
-      50,
-      75,
-      100
+      24,
+      49,
+      74,
+      99
     ],
     "Swampland": [
       5,
-      17,
       32,
       56,
       77,
@@ -217,7 +220,6 @@
     "Uncategorized": [
       2,
       36,
-      44,
       62,
       79,
       91
