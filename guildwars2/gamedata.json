@@ -1281,9 +1281,19 @@
             "id": 3465
           },
           {
+            "name": "Shattered Observatory: Be Dynamic",
+            "type": "single_achievement",
+            "id": 3535
+          },
+          {
             "name": "Sunqua Peak CM",
             "type": "single_achievement",
             "id": 5443
+          },
+          {
+            "name": "Sunqua Peak: Dancing with Demons",
+            "type": "single_achievement",
+            "id": 5439
           }
         ]
       },
