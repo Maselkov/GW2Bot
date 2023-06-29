@@ -117,7 +117,7 @@ class DailyMixin:
                                              tomorrow=tomorrow)
                 value = "\n".join(fractals[0])
             elif category == "strikes":
-                category = "Priority Strike"
+                category = "Priority Strikes"
                 strikes = self.get_strike(interaction, tomorrow=tomorrow)
                 value = strikes
             else:
@@ -235,9 +235,14 @@ class DailyMixin:
 
     def get_strike(self, ctx, tomorrow=False):
         day = self.get_year_day(tomorrow=tomorrow)
-        index = day % len(self.gamedata["strike_missions"])
-        return (self.get_emoji(ctx, "daily strike") +
-                self.gamedata["strike_missions"][index])
+        ibs_strikes = self.gamedata["strike_missions"]
+        eod_strikes = self.gamedata["eod_strike_missions"]
+        ibs_index = day % len(ibs_strikes)
+        eod_index = day % len(eod_strikes)
+        strike_emoji = self.get_emoji(ctx, "daily strike")
+        ibs_daily = strike_emoji + ibs_strikes[ibs_index]
+        eod_daily = strike_emoji + eod_strikes[eod_index]
+        return "\n".join([ibs_daily, eod_daily])
 
     def get_instabilities(self, fractal_level, *, tomorrow=False, ctx=None):
         fractal_level = str(fractal_level)
