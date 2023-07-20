@@ -520,14 +520,14 @@ class NotiifiersMixin:
             return body[:1000] + "... [Read more]({})".format(url)
 
         async def get_page(url):
-            async with self.session.get(url) as r:
-                return BeautifulSoup(await r.text(), "html.parser")
+            response = await self.httpx_client.get(url)
+            return BeautifulSoup(response.text, "html.parser")
 
         update_feed_url = (
             "https://en-forum.guildwars2.com/forum/6-game-update-notes.xml"
         )
-        async with self.bot.session.get(update_feed_url) as r:
-            feed = et.fromstring(await r.text())
+        response = await self.httpx_client.get(update_feed_url)
+        feed = et.fromstring(response.text)
         channel = feed.find("channel")
         item = channel.find("item")
         title = item.find("title").text
@@ -638,7 +638,6 @@ class NotiifiersMixin:
             return False
 
     async def game_build_changed(self):
-        pass
         doc = await self.bot.database.get_cog_config(self)
         if not doc:
             return False

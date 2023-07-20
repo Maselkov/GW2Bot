@@ -4,6 +4,7 @@ import logging
 
 import discord
 from PIL import ImageFont
+import httpx
 
 from .account import AccountMixin
 from .achievements import AchievementsMixin
@@ -29,26 +30,44 @@ from .worldsync import WorldsyncMixin
 from .wvw import WvwMixin
 
 
-class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
-                 ApiMixin, CharactersMixin, CommerceMixin, DailyMixin,
-                 DatabaseMixin, EmojiMixin, EventsMixin, EvtcMixin, GuildMixin,
-                 GuildManageMixin, KeyMixin, MiscMixin, NotiifiersMixin,
-                 PvpMixin, SkillsMixin, WalletMixin, WorldsyncMixin, WvwMixin):
+class GuildWars2(
+    discord.ext.commands.Cog,
+    AccountMixin,
+    AchievementsMixin,
+    ApiMixin,
+    CharactersMixin,
+    CommerceMixin,
+    DailyMixin,
+    DatabaseMixin,
+    EmojiMixin,
+    EventsMixin,
+    EvtcMixin,
+    GuildMixin,
+    GuildManageMixin,
+    KeyMixin,
+    MiscMixin,
+    NotiifiersMixin,
+    PvpMixin,
+    SkillsMixin,
+    WalletMixin,
+    WorldsyncMixin,
+    WvwMixin,
+):
     """Guild Wars 2 commands"""
 
     def __init__(self, bot):
         self.bot = bot
         self.db = self.bot.database.db.gw2
-        with open("cogs/guildwars2/gamedata.json", encoding="utf-8",
-                  mode="r") as f:
+        with open("cogs/guildwars2/gamedata.json", encoding="utf-8", mode="r") as f:
             self.gamedata = json.load(f)
-        with open("cogs/guildwars2/instabilities.json",
-                  encoding="utf-8",
-                  mode="r") as f:
+        with open(
+            "cogs/guildwars2/instabilities.json", encoding="utf-8", mode="r"
+        ) as f:
             self.instabilities = json.load(f)
         self.session = bot.session
+        self.httpx_client = httpx.AsyncClient()
         self.boss_schedule = self.generate_schedule()
-        self.embed_color = 0xc12d2b
+        self.embed_color = 0xC12D2B
         self.log = logging.getLogger(__name__)
         self.tasks = []
         self.waiting_for = []
@@ -58,20 +77,25 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
             self.font = ImageFont.truetype("GWTwoFont1p1.ttf", size=30)
         except IOError:
             self.font = ImageFont.load_default()
-        setup_tasks = [
-            self.prepare_emojis, self.prepare_linkpreview_guild_cache
-        ]
+        setup_tasks = [self.prepare_emojis, self.prepare_linkpreview_guild_cache]
         for task in setup_tasks:
             bot.loop.create_task(task())
         self.tasks = [
-            self.game_update_checker, self.news_checker, self.gem_tracker,
-            self.world_population_checker, self.guild_synchronizer,
-            self.boss_notifier, self.forced_account_names,
-            self.event_reminder_task, self.worldsync_task,
+            self.game_update_checker,
+            self.news_checker,
+            self.gem_tracker,
+            self.world_population_checker,
+            self.guild_synchronizer,
+            self.boss_notifier,
+            self.forced_account_names,
+            self.event_reminder_task,
+            self.worldsync_task,
             self.post_evtc_notifications,
-            self.daily_mystic_forger_checker_task, self.key_sync_task,
-            self.cache_dailies_tomorrow, self.swap_daily_tomorrow_and_today,
-            self.send_daily_notifs
+            self.daily_mystic_forger_checker_task,
+            self.key_sync_task,
+            self.cache_dailies_tomorrow,
+            self.swap_daily_tomorrow_and_today,
+            self.send_daily_notifs,
         ]
         for task in self.tasks:
             task.start()
@@ -83,6 +107,7 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
     async def cog_unload(self):
         for task in self.tasks:
             task.cancel()
+        await self.httpx_client.aclose()
 
     async def cog_error_handler(self, interaction, error):
         msg = ""
@@ -90,14 +115,13 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
         if isinstance(error, APIKeyError):
             msg = str(error)
         elif isinstance(error, APIInactiveError):
-            msg = ("The API is currently down. "
-                   "Try again later.".format)
+            msg = "The API is currently down. " "Try again later.".format
         elif isinstance(error, APIInvalidKey):
-            msg = ("Your API key is invalid! Remove your "
-                   "key and add a new one")
+            msg = "Your API key is invalid! Remove your " "key and add a new one"
         elif isinstance(error, APIError):
-            msg = (f"API has responded with the following error: "
-                   f"`{error}`".format(user, error))
+            msg = f"API has responded with the following error: " f"`{error}`".format(
+                user, error
+            )
         return msg
 
     def can_embed_links(self, ctx):
@@ -108,32 +132,32 @@ class GuildWars2(discord.ext.commands.Cog, AccountMixin, AchievementsMixin,
     async def get_embed_color(self, ctx):
         if not hasattr(ctx, "author"):
             return self.embed_color
-        doc = await self.bot.database.users.find_one({"_id": ctx.author.id}, {
-            "embed_color": 1,
-            "_id": 0
-        })
+        doc = await self.bot.database.users.find_one(
+            {"_id": ctx.author.id}, {"embed_color": 1, "_id": 0}
+        )
         if doc and doc["embed_color"]:
             return int(doc["embed_color"], 16)
         return self.embed_color
 
-    def tell_off(self,
-                 component_context,
-                 message="Only the command owner may do that."):
-        self.bot.loop.create_task(
-            component_context.send(message, ephemeral=True))
+    def tell_off(
+        self, component_context, message="Only the command owner may do that."
+    ):
+        self.bot.loop.create_task(component_context.send(message, ephemeral=True))
 
 
 async def setup(bot):
     cog = GuildWars2(bot)
     await bot.database.setup_cog(
-        cog, {
+        cog,
+        {
             "cache": {
                 "day": datetime.datetime.utcnow().weekday(),
                 "news": [],
                 "build": 0,
                 "dailies": {},
-                "dailies_tomorrow": {}
+                "dailies_tomorrow": {},
             },
-            "emojis": {}
-        })
+            "emojis": {},
+        },
+    )
     await bot.add_cog(cog)

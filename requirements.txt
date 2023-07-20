@@ -4,3 +4,4 @@ requests
 tenacity
 matplotlib
 discord-py-interactions
+httpx
