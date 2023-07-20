@@ -787,6 +787,8 @@ class NotiifiersMixin:
         ]
         async for doc in cursor:
             try:
+                if not doc["_obj"]:
+                    continue
                 channel = self.bot.get_channel(doc["channel"])
                 if not channel:
                     continue
@@ -802,6 +804,8 @@ class NotiifiersMixin:
                         if embed.title in filtered:
                             continue
                     await channel.send(content, embed=embed)
+            except discord.Forbidden:
+                await self.bot.database.set(doc["_obj"], {"news.on": False}, self)
             except Exception as e:
                 self.log.exception(e)
 
