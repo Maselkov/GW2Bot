@@ -588,7 +588,7 @@ class NotiifiersMixin:
 
                     # Sanitize HTML output
                     # Remove tag parameters
-                    patch_notes = re.sub(r"<([a-z]{,5}) .*>", r"<\1>", patch_notes)
+                    patch_notes = re.sub(r"<([a-z]{,5}) .*?>", r"<\1>", patch_notes)
                     # Remove closing tags
                     patch_notes = patch_notes.replace("</span>", "")
                     patch_notes = patch_notes.replace("</div>", "")
