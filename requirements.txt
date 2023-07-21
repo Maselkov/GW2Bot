@@ -5,5 +5,4 @@ tenacity
 matplotlib
 discord-py-interactions
 httpx
-feedparser
 html2markdown

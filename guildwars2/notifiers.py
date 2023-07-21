@@ -3,7 +3,6 @@ import datetime
 import json
 import unicodedata
 import xml.etree.ElementTree as et
-import feedparser
 import html2markdown
 import re
 
@@ -522,6 +521,15 @@ class NotiifiersMixin:
                 return body
             return body[:1000] + " ..."
 
+        async def db_find_forum_post(title):
+            return await self.bot.database.db.gw2.updates.find_one({"title": title})
+
+        async def db_insert_forum_post(title):
+            await self.bot.database.db.gw2.updates.insert_one({"title": title, "count": 0})
+
+        async def db_update_forum_post(title, count):
+            await self.bot.database.db.gw2.updates.update_one({"title": title}, { "$set": {"title": title, "count": count} })
+
         def build_embed(title, url, data):
             e = discord.Embed(title=title, color=discord.Color.dark_red())
             e.url = url
@@ -539,17 +547,20 @@ class NotiifiersMixin:
         )
 
         # Get latest forum post from RSS feed
-        data = feedparser.parse(update_feed_url)
-        latest_post = data.entries[0]
-        title = latest_post.title
-        link = latest_post.link
+        response = await self.httpx_client.get(update_feed_url)
+        feed = et.fromstring(response.text)
+        channel = feed.find("channel")
+        latest_post = channel.find("item")
+
+        title = latest_post.find("title").text
+        link = latest_post.find("link").text
 
         # Search for the main post
-        post_is_in_db = await self.db_find_forum_post(title)
+        post_is_in_db = await db_find_forum_post(title)
 
         if not post_is_in_db:
             # New forum post, insert with 0 messages sent
-            await self.db_insert_forum_post(title)
+            await db_insert_forum_post(title)
             count = 0
             minor = False
         else:
@@ -597,7 +608,7 @@ class NotiifiersMixin:
                     text_version = "Guild Wars 2 has just updated!"
                     notes = (e, text_version, minor)
                     all_notes.append(notes)
-                await self.db_update_forum_post(title, amount_comments_in_post)
+                await db_update_forum_post(title, amount_comments_in_post)
                 return all_notes
         
     async def check_news(self):
@@ -892,7 +903,7 @@ class NotiifiersMixin:
     async def before_news_checker(self):
         await self.bot.wait_until_ready()
 
-    @tasks.loop(minutes=1)
+    @tasks.loop(seconds=10)
     async def game_update_checker(self):
         if await self.game_build_changed():
             await self.rebuild_database()
@@ -1038,12 +1049,3 @@ class NotiifiersMixin:
     @forced_account_names.before_loop
     async def before_forced_account_names(self):
         await self.bot.wait_until_ready()
-
-    async def db_find_forum_post(self, title):
-        return await self.bot.database.db.gw2.updates.find_one({"title": title})
-
-    async def db_insert_forum_post(self, title):
-        await self.bot.database.db.gw2.updates.insert_one({"title": title, "count": 0})
-
-    async def db_update_forum_post(self, title, count):
-        await self.bot.database.db.gw2.updates.update_one({"title": title}, { "$set": {"title": title, "count": count} })
