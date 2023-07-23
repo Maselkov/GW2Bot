@@ -903,7 +903,7 @@ class NotiifiersMixin:
     async def before_news_checker(self):
         await self.bot.wait_until_ready()
 
-    @tasks.loop(seconds=10)
+    @tasks.loop(minutes=1)
     async def game_update_checker(self):
         if await self.game_build_changed():
             await self.rebuild_database()
