@@ -3,6 +3,8 @@ import datetime
 import json
 import unicodedata
 import xml.etree.ElementTree as et
+import html2markdown
+import re
 
 import discord
 from bs4 import BeautifulSoup
@@ -517,7 +519,24 @@ class NotiifiersMixin:
         def get_short_patchnotes(body, url):
             if len(body) < 1000:
                 return body
-            return body[:1000] + "... [Read more]({})".format(url)
+            return body[:1000] + " ..."
+
+        async def db_find_forum_post(title):
+            return await self.bot.database.db.gw2.updates.find_one({"title": title})
+
+        async def db_insert_forum_post(title):
+            await self.bot.database.db.gw2.updates.insert_one({"title": title, "count": 0})
+
+        async def db_update_forum_post(title, count):
+            await self.bot.database.db.gw2.updates.update_one({"title": title}, { "$set": {"title": title, "count": count} })
+
+        def build_embed(title, url, data):
+            e = discord.Embed(title=title, color=discord.Color.dark_red())
+            e.url = url
+            data = get_short_patchnotes(data, url)
+            e.add_field(name="Update Notes", value=data)
+            e.set_footer(text="Build: {}".format(new_build))
+            return e
 
         async def get_page(url):
             response = await self.httpx_client.get(url)
@@ -526,63 +545,72 @@ class NotiifiersMixin:
         update_feed_url = (
             "https://en-forum.guildwars2.com/forum/6-game-update-notes.xml"
         )
+
+        # Get latest forum post from RSS feed
         response = await self.httpx_client.get(update_feed_url)
         feed = et.fromstring(response.text)
         channel = feed.find("channel")
-        item = channel.find("item")
-        title = item.find("title").text
-        link = item.find("link").text
-        page = await get_page(link)
-        item = page.find("script", {"type": "application/ld+json"})
-        data = json.loads(item.text)
-        update_notes = data["text"]
-        comments = data.get("comment")
-        minor = False
-        update_time = datetime.datetime.strptime(
-            data["dateCreated"], "%Y-%m-%dT%H:%M:%S%z"
-        )
-        permalink = data["url"]
-        if comments:
-            comment = comments[-1]
-            minor = True
-            update_notes = comment["text"]
-            update_time = datetime.datetime.strptime(
-                comment["dateCreated"], "%Y-%m-%dT%H:%M:%S%z"
-            )
-            permalink = comment["url"]
-        update_time = update_time.replace(tzinfo=None)
-        doc = await self.bot.database.get_cog_config(self)
-        if not doc:
-            return None
-        last_update_time = doc["cache"].get("last_update_time")
-        if not last_update_time:
-            await self.bot.database.set_cog_config(
-                self, {"cache.last_update_time": update_time}
-            )
-            return None
-        if last_update_time >= update_time:
-            return None
-        lines = update_notes.split("\n")
-        lines = [line.strip() for line in lines]
-        lines = [line for line in lines if line]
-        update_notes = "\n".join(lines)
-        update_notes = get_short_patchnotes(update_notes, permalink)
-        title = "GW2 has just updated"
-        embed = discord.Embed(
-            title=f"**{title}**",
-            url=permalink,
-            color=self.embed_color,
-            description=update_notes,
-        )
-        embed.set_footer(text="Build: {}".format(new_build))
-        text_version = (
-            "Guild Wars 2 has just updated! "
-            "New build: {} Update notes: <{}>\n{}".format(
-                new_build, permalink, update_notes
-            )
-        )
-        return embed, text_version, minor
+        latest_post = channel.find("item")
 
+        title = latest_post.find("title").text
+        link = latest_post.find("link").text
+
+        # Search for the main post
+        post_is_in_db = await db_find_forum_post(title)
+
+        if not post_is_in_db:
+            # New forum post, insert with 0 messages sent
+            await db_insert_forum_post(title)
+            count = 0
+            minor = False
+        else:
+            # Retrieve amount of messages sent for this post
+            count = post_is_in_db['count']
+            minor = True
+
+        # Retrieve HTML source from forum
+        forum_post = await get_page(link)
+        if forum_post:
+            posts = forum_post.select('#elPostFeed')
+            comments = [element.find_all('article') for element in posts]
+            comments = [element.select('div[data-role="commentContent"]') for element in posts]
+            filtered_div_tags = [tag for sublist in comments for tag in sublist]
+
+            # Check for new posts
+            amount_comments_in_post = len(filtered_div_tags)
+
+            if count < amount_comments_in_post:
+                all_notes = []
+                for comment in filtered_div_tags[count:]:
+                    for tag in comment:
+                        tag.attrs = {}
+                    patch_notes = str(comment)
+
+                    # Sanitize HTML output
+                    # Remove tag parameters
+                    patch_notes = re.sub(r"<([a-z]{,5}) .*?>", r"<\1>", patch_notes)
+                    # Remove closing tags
+                    patch_notes = patch_notes.replace("</span>", "")
+                    patch_notes = patch_notes.replace("</div>", "")
+                    patch_notes = patch_notes.replace("<span>", "")
+                    patch_notes = patch_notes.replace("<div>", "")
+
+                    md_text = html2markdown.convert(str(patch_notes))
+                    # Some more sanitizing
+                    md_text = md_text.replace("<li>", "")
+                    md_text = md_text.replace("</li>", "")
+                    md_text = re.sub(r"^[\s]*$", r"", md_text)
+                    md_text = re.sub(r"^\n$", r"", md_text)
+                    md_text = re.sub(r"[#]{2,} (.*)", r"*\1*", md_text)
+                    md_text = re.sub(r"# (.*)", r"**\1**", md_text)
+                    e = build_embed(title, link, md_text)
+
+                    text_version = "Guild Wars 2 has just updated!"
+                    notes = (e, text_version, minor)
+                    all_notes.append(notes)
+                await db_update_forum_post(title, amount_comments_in_post)
+                return all_notes
+        
     async def check_news(self):
         doc = await self.bot.database.get_cog_config(self)
         if not doc:
@@ -817,44 +845,44 @@ class NotiifiersMixin:
             result = await self.update_notification(build)
             if not result:
                 return
-            embed, text, minor = result
-            embed_available = True
-            cursor = self.bot.database.iter(
-                "guilds",
-                {"updates.on": True, "updates.channel": {"$ne": None}},
-                self,
-                subdocs=["updates"],
-            )
-            sent = 0
-            async for doc in cursor:
-                try:
-                    if not doc["on"]:
-                        continue
-                    channel = self.bot.get_channel(doc["channel"])
-                    if not channel:
-                        continue
-                    if not minor:
-                        mention = doc.get("mention", "")
-                        if (
-                            mention == "everyone" or mention == "here"
-                        ):  # Legacy, too lazy to update atm, TODO
-                            mention = "@" + mention
-                        if mention == "none":
+            for embed, text, minor in result:
+                embed_available = True
+                cursor = self.bot.database.iter(
+                    "guilds",
+                    {"updates.on": True, "updates.channel": {"$ne": None}},
+                    self,
+                    subdocs=["updates"],
+                )
+                sent = 0
+                async for doc in cursor:
+                    try:
+                        if not doc["on"]:
+                            continue
+                        channel = self.bot.get_channel(doc["channel"])
+                        if not channel:
+                            continue
+                        if not minor:
+                            mention = doc.get("mention", "")
+                            if (
+                                mention == "everyone" or mention == "here"
+                            ):  # Legacy, too lazy to update atm, TODO
+                                mention = "@" + mention
+                            if mention == "none":
+                                mention = ""
+                        else:
                             mention = ""
-                    else:
-                        mention = ""
-                    if (
-                        channel.permissions_for(channel.guild.me).embed_links
-                        and embed_available
-                    ):
-                        message = mention + " Guild Wars 2 has just updated!"
-                        await channel.send(message, embed=embed)
-                    else:
-                        await channel.send(text)
-                    sent += 1
-                except Exception:
-                    pass
-            self.log.info("Update notifs: sent {}".format(sent))
+                        if (
+                            channel.permissions_for(channel.guild.me).embed_links
+                            and embed_available
+                        ):
+                            message = mention + " Guild Wars 2 has just updated!"
+                            await channel.send(message, embed=embed)
+                        else:
+                            await channel.send(text)
+                        sent += 1
+                    except Exception as e:
+                        self.log.exception(e)
+                self.log.info("Update notifs: sent {}".format(sent))
         except Exception as e:
             self.log.exception(e)
 
@@ -878,8 +906,8 @@ class NotiifiersMixin:
     @tasks.loop(minutes=1)
     async def game_update_checker(self):
         if await self.game_build_changed():
-            await self.send_update_notifs()
             await self.rebuild_database()
+        await self.send_update_notifs()
 
     @game_update_checker.before_loop
     async def before_update_checker(self):
