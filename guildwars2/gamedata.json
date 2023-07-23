@@ -1296,6 +1296,16 @@
             "name": "Sunqua Peak: Dancing with Demons",
             "type": "single_achievement",
             "id": 5439
+          },
+          {
+            "name": "Silent Surf CM",
+            "type": "single_achievement",
+            "id": 6938
+          },
+          {
+            "name": "Silent Surf: Stalwart Serpents",
+            "type": "single_achievement",
+            "id": 6950
           }
         ]
       },
