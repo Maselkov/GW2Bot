@@ -545,7 +545,7 @@ class AccountMixin:
         monday_2 = (current - datetime.timedelta(days=current.weekday()))
         weeks = (monday_2 - monday_1).days // 7
         cotm_index = weeks % len(wings)
-        emboldened_index = (weeks + 1) % len(wings)
+        emboldened_index = (weeks - 1) % len(wings)
         for index, wing in enumerate(wings):
             wing_done = True
             value = []
