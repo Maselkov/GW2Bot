@@ -594,6 +594,7 @@ class NotiifiersMixin:
                     patch_notes = patch_notes.replace("</div>", "")
                     patch_notes = patch_notes.replace("<span>", "")
                     patch_notes = patch_notes.replace("<div>", "")
+                    patch_notes = patch_notes.replace("&nbsp;", " ")
 
                     md_text = html2markdown.convert(str(patch_notes))
                     # Some more sanitizing

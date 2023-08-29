@@ -132,11 +132,12 @@ class WalletMixin:
         ids_l4 = [86069, 86977, 87645, 88955, 89537, 90783]
         ids_ibs = [92072, 92272]
         ids_ibs_cur = [58, 60]
-        ids_eod_cur = [61, 62, 64, 67, 68]
+        ids_eod_cur = [61, 66, 64, 67, 68, 71]
+        ids_soto_cur = [62, 63, 72, 73]
         ids_strikes_cur = [53, 55, 57, 54]
         ids_wallet = [
             ids_cur, ids_keys, ids_maps, ids_token, ids_raid, ids_ibs_cur,
-            ids_strikes_cur, ids_eod_cur, ids_wvw_cur, ids_pvp_cur
+            ids_strikes_cur, ids_eod_cur, ids_wvw_cur, ids_pvp_cur, ids_soto_cur
         ]
         ids_items = [ids_l3, ids_l4, ids_ibs, ids_maps_items, ids_pvp]
         currencies_wallet = await self.get_wallet(interaction, ids_wallet)
@@ -181,6 +182,10 @@ class WalletMixin:
         embed = embed_list_lines(embed,
                                  currencies_wallet[7],
                                  "> **END OF DRAGONS**",
+                                 inline=True)
+        embed = embed_list_lines(embed,
+                                 currencies_wallet[10],
+                                 "> **SECRETS OF THE OBSCURE**",
                                  inline=True)
         embed = embed_list_lines(embed,
                                  currencies_wallet[6],
