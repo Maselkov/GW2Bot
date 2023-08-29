@@ -32,3 +32,7 @@ class APIKeyError(APIError):
 
 class APIRateLimited(APIError):
     pass
+
+
+class APIUnavailable(APIError):
+    pass

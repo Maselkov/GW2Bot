@@ -1,22 +1,30 @@
 import asyncio
 from aiohttp import ContentTypeError
-from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
-                      wait_chain, wait_fixed)
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_chain,
+    wait_fixed,
+)
 import copy
-from .exceptions import (APIBadRequest, APIConnectionError, APIForbidden,
-                         APIInactiveError, APIInvalidKey, APINotFound,
-                         APIRateLimited)
+from .exceptions import (
+    APIBadRequest,
+    APIConnectionError,
+    APIForbidden,
+    APIInactiveError,
+    APIInvalidKey,
+    APINotFound,
+    APIRateLimited,
+    APIUnavailable,
+)
 import json
 
 
 class ApiMixin:
-
-    async def call_multiple(self,
-                            endpoints,
-                            user=None,
-                            scopes=None,
-                            key=None,
-                            **kwargs):
+    async def call_multiple(
+        self, endpoints, user=None, scopes=None, key=None, **kwargs
+    ):
         if key is None and user:
             doc = await self.fetch_key(user, scopes)
             key = doc["key"]
@@ -38,34 +46,35 @@ class ApiMixin:
                     for alt_key in keys:
                         if alt_key["account_name"] == old_name:
                             alt_key["account_name"] = new_name
-                    await self.bot.database.set(user, {
-                        "key": key,
-                        "keys": keys
-                    }, self)
-                    await user.send("Your account name seems to have "
-                                    "changed! I went ahead and updated it, "
-                                    "from `{}` to `{}`.".format(
-                                        old_name, new_name))
+                    await self.bot.database.set(user, {"key": key, "keys": keys}, self)
+                    await user.send(
+                        "Your account name seems to have "
+                        "changed! I went ahead and updated it, "
+                        "from `{}` to `{}`.".format(old_name, new_name)
+                    )
                     await self.bot.database.set(
-                        user, {"name_changes": [old_name, new_name]},
+                        user,
+                        {"name_changes": [old_name, new_name]},
                         self,
-                        operator="push")
+                        operator="push",
+                    )
 
-    @retry(retry=retry_if_exception_type(APIBadRequest),
-           reraise=True,
-           stop=stop_after_attempt(4),
-           wait=wait_chain(wait_fixed(2), wait_fixed(4), wait_fixed(8)))
-    async def call_api(self,
-                       endpoint,
-                       user=None,
-                       scopes=None,
-                       key=None,
-                       schema_version=None,
-                       schema_string=None):
-        headers = {
-            'User-Agent': "GW2Bot - a Discord bot",
-            'Accept': 'application/json'
-        }
+    @retry(
+        retry=retry_if_exception_type(APIBadRequest),
+        reraise=True,
+        stop=stop_after_attempt(4),
+        wait=wait_chain(wait_fixed(2), wait_fixed(4), wait_fixed(8)),
+    )
+    async def call_api(
+        self,
+        endpoint,
+        user=None,
+        scopes=None,
+        key=None,
+        schema_version=None,
+        schema_string=None,
+    ):
+        headers = {"User-Agent": "GW2Bot - a Discord bot", "Accept": "application/json"}
         if key:
             headers.update({"Authorization": "Bearer " + key})
         if user:
@@ -77,7 +86,7 @@ class ApiMixin:
             headers.update({"X-Schema-Version": schema})
         if schema_string:
             headers.update({"X-Schema-Version": schema_string})
-        apiserv = 'https://api.guildwars2.com/v2/'
+        apiserv = "https://api.guildwars2.com/v2/"
         url = apiserv + endpoint
         async with self.session.get(url, headers=headers) as r:
             if r.status != 200 and r.status != 206:
@@ -101,7 +110,10 @@ class ApiMixin:
                 if r.status == 429:
                     self.log.error("API Call limit saturated")
                     raise APIRateLimited(
-                        "Requests limit has been saturated. Try again later.")
+                        "Requests limit has been saturated. Try again later."
+                    )
+                if r.status == 503:
+                    raise APIUnavailable("ArenaNet has disabled the API.")
                 else:
                     raise APIConnectionError("{} {}".format(r.status, err_msg))
             data = await r.json()
