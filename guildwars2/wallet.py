@@ -185,7 +185,7 @@ class WalletMixin:
                                  inline=True)
         embed = embed_list_lines(embed,
                                  currencies_wallet[10],
-                                 "> **Secrets of the Obscure**",
+                                 "> **SECRETS OF THE OBSCURE**",
                                  inline=True)
         embed = embed_list_lines(embed,
                                  currencies_wallet[6],
