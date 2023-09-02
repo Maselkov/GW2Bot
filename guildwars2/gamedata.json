@@ -1950,7 +1950,7 @@
     },
     "17028": {
       "icon": "https://wiki.guildwars2.com/images/d/d0/Mini_Toxic_Warlock.png",
-      "name": "Siax the Corrupted"
+      "name": "Siax"
     },
     "16948": {
       "icon": "https://wiki.guildwars2.com/images/5/5e/Mini_Toxic_Hybrid.png",
@@ -1971,6 +1971,14 @@
     "23254": {
       "icon": "https://i.imgur.com/R5w3sXS.png",
       "name": "Ai, Keeper of the Peak"
+    },
+    "25572": {
+      "icon": "https://wiki.guildwars2.com/images/3/31/Mini_Kanaxai.png",
+      "name": "Kanaxai, Scythe of House Aurkus"
+    },
+    "25577": {
+      "icon": "https://wiki.guildwars2.com/images/3/31/Mini_Kanaxai.png",
+      "name": "Kanaxai, Scythe of House Aurkus"
     },
     "22154": {
       "icon": "https://wiki.guildwars2.com/images/f/f4/Mini_Icebrood_Construct.png",
@@ -2052,6 +2060,14 @@
       "icon": "https://i.imgur.com/4PWffRa.png",
       "name": "Watchknight Triumvirate"
     },
+    "25705": {
+      "icon": "https://wiki.guildwars2.com/images/5/52/Mini_Dagda.png",
+      "name": "Dagda"
+    },
+    "25989": {
+      "icon": "https://wiki.guildwars2.com/wiki/File:Mini_Cerus.png",
+      "name": "Cerus"
+    },
     "21333": {
       "icon": "https://wiki.guildwars2.com/images/d/d9/Mini_Freezie.png",
       "name": "Freezie"
@@ -2081,7 +2097,7 @@
       "name": "Vital Kitty Golem"
     },
     "1": {
-      "icon": "https://wiki.guildwars2.com/images/3/35/WvW_Rank_up.png",
+      "icon": "https://wiki.guildwars2.com/images/4/40/Mini_Chest_of_the_Mists.png",
       "name": "WvW"
     }
   }
