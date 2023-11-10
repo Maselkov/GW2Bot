@@ -1424,6 +1424,26 @@
             "id": 6778
           }
         ]
+      },
+      {
+        "name": "Secrets of the Obscure Strike Missions",
+        "encounters": [
+          {
+            "name": "Cosmic Observatory",
+            "type": "single_achievement",
+            "id": 7163
+          },
+          {
+            "name": "Cosmic Observatory CM",
+            "type": "single_achievement",
+            "id": 7678
+          },
+          {
+            "name": "Temple of Febe",
+            "type": "single_achievement",
+            "id": 7116
+          }
+        ]
       }
     ]
   },
