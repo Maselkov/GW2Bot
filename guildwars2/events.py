@@ -19,10 +19,7 @@ ET_CATEGORIES = [{
     "name": "IBS - The Icebrood Saga"
 }, {
     "value": "eod",
-    "name": "EoD - End of Dragons"
-}, {
-    "value": "soto",
-    "name": "SotO - Secrets of the Obscure"
+    "name": "EoD- End of Dragons"
 }, {
     "value": "day",
     "name": "Day/night cycle"
