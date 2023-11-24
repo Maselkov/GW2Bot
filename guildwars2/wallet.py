@@ -133,7 +133,7 @@ class WalletMixin:
         ids_ibs = [92072, 92272]
         ids_ibs_cur = [58, 60]
         ids_eod_cur = [61, 66, 64, 67, 68, 71]
-        ids_soto_cur = [62, 63, 72, 73]
+        ids_soto_cur = [62, 63, 72, 73, 75]
         ids_strikes_cur = [53, 55, 57, 54]
         ids_wallet = [
             ids_cur, ids_keys, ids_maps, ids_token, ids_raid, ids_ibs_cur,
