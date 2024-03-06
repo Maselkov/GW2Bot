@@ -1488,9 +1488,24 @@
             "id": 7678
           },
           {
+            "name": "Cosmic Observatory: Precision Anxiety",
+            "type": "single_achievement",
+            "id": 7833
+          },
+          {
             "name": "Temple of Febe",
             "type": "single_achievement",
             "id": 7116
+          },
+          {
+            "name": "Temple of Febe CM",
+            "type": "single_achievement",
+            "id": 7790
+          },
+          {
+            "name": "Temple of Febe: Apathetic",
+            "type": "single_achievement",
+            "id": 7820
           }
         ]
       }
