@@ -588,9 +588,12 @@ class NotiifiersMixin:
 
                     # Sanitize HTML output
                     # Remove tag parameters
-                    patch_notes = re.sub(r"<([a-z]{,5}) .*?>", r"<\1>", patch_notes)
+                    patch_notes = re.sub(r"<([a-z]{0,5}) (?!href).*?>", r"<\1>", patch_notes)
+                    # Keep refs
+                    patch_notes = re.sub(r"(<a href=\".*\") .*?>", r"\1>", patch_notes)
                     # Remove closing tags
                     patch_notes = patch_notes.replace("</span>", "")
+                    patch_notes = patch_notes.replace("<img>", "")
                     patch_notes = patch_notes.replace("</div>", "")
                     patch_notes = patch_notes.replace("<span>", "")
                     patch_notes = patch_notes.replace("<div>", "")
@@ -600,6 +603,7 @@ class NotiifiersMixin:
                     # Some more sanitizing
                     md_text = md_text.replace("<li>", "")
                     md_text = md_text.replace("</li>", "")
+                    md_text = md_text.replace("&nbsp;", " ")
                     md_text = re.sub(r"^[\s]*$", r"", md_text)
                     md_text = re.sub(r"^\n$", r"", md_text)
                     md_text = re.sub(r"[#]{2,} (.*)", r"*\1*", md_text)
