@@ -1355,6 +1355,16 @@
             "name": "Silent Surf: Stalwart Serpents",
             "type": "single_achievement",
             "id": 6950
+          },
+          {
+            "name": "Lonely Tower CM",
+            "type": "single_achievement",
+            "id": 8020
+          },
+          {
+            "name": "Lonely Tower: Wavering Ward",
+            "type": "single_achievement",
+            "id": 8089
           }
         ]
       },
