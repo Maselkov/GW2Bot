@@ -261,7 +261,7 @@ class DailyMixin:
 
     def get_cm_instabilities(self, *, ctx=None, tomorrow=False):
         cm_instabs = []
-        cm_fractals = "Nightmare", "Shattered Observatory", "Sunqua Peak", "Silent Surf"
+        cm_fractals = "Nightmare", "Shattered Observatory", "Sunqua Peak", "Silent Surf", "Lonely Tower"
         for fractal in cm_fractals:
             scale = self.gamedata["fractals"][fractal][-1]
             line = self.get_emoji(ctx, "daily fractal") + fractal
