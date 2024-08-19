@@ -73,6 +73,10 @@ class AccountMixin:
                     if d in access:
                         access.remove(d)
 
+                # Having PathOfFire access implies HeartOfThorns access.
+                if "PathOfFire" in access and "HeartOfThorns" not in access:
+                    access += "HeartOfThorns"
+
             def format_name(name):
                 return " ".join(re.findall(r'[A-Z\d][^A-Z\d]*', name))
 
