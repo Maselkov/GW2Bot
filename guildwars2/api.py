@@ -75,12 +75,20 @@ class ApiMixin:
         schema_string=None,
     ):
         headers = {"User-Agent": "GW2Bot - a Discord bot", "Accept": "application/json"}
+        params = []
+        use_headers = False
         if key:
-            headers.update({"Authorization": "Bearer " + key})
+            if use_headers:
+                headers.update({"Authorization": "Bearer " + key})
+            else:
+                params.append(("access_token", key))
         if user:
             doc = await self.fetch_key(user, scopes)
             key = doc["key"]
-            headers.update({"Authorization": "Bearer " + key})
+            if use_headers:
+                headers.update({"Authorization": "Bearer " + key})
+            else:
+                params.append(("access_token", key))
         if schema_version:
             schema = schema_version.replace(microsecond=0).isoformat() + "Z"
             headers.update({"X-Schema-Version": schema})
@@ -88,7 +96,7 @@ class ApiMixin:
             headers.update({"X-Schema-Version": schema_string})
         apiserv = "https://api.guildwars2.com/v2/"
         url = apiserv + endpoint
-        async with self.session.get(url, headers=headers) as r:
+        async with self.session.get(url, headers=headers, params=params) as r:
             if r.status != 200 and r.status != 206:
                 try:
                     err = await r.json()
