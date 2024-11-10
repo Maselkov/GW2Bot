@@ -91,24 +91,25 @@ class KeyMixin:
                 await self.guildsync_on_member_join(interaction.user)
                 await self.key_sync_user(interaction.user)
                 return
-            for guild in self.bot.guilds:
-                try:
-                    if len(guild.members) > 5000:
-                        continue
-                    if interaction.user not in guild.members:
-                        continue
-                    member = guild.get_member(interaction.user.id)
-                    await self.key_sync_user(member)
-                    doc = await self.bot.database.get(guild, self)
-                    worldsync = doc.get("worldsync", {})
-                    worldsync_enabled = worldsync.get("enabled", False)
-                    if worldsync_enabled:
-                        await self.worldsync_on_member_join(member)
-                    guildsync = doc.get("sync", {})
-                    if guildsync.get("on", False) and guildsync.get("setupdone", False):
-                        await self.guildsync_on_member_join(member)
-                except Exception:
-                    pass
+            # Disabled for now while chunking is further investigated
+            # for guild in self.bot.guilds:
+            #     try:
+            #         if len(guild.members) > 5000:
+            #             continue
+            #         if interaction.user not in guild.members:
+            #             continue
+            #         member = guild.get_member(interaction.user.id)
+            #         await self.key_sync_user(member)
+            #         doc = await self.bot.database.get(guild, self)
+            #         worldsync = doc.get("worldsync", {})
+            #         worldsync_enabled = worldsync.get("enabled", False)
+            #         if worldsync_enabled:
+            #             await self.worldsync_on_member_join(member)
+            #         guildsync = doc.get("sync", {})
+            #         if guildsync.get("on", False) and guildsync.get("setupdone", False):
+            #             await self.guildsync_on_member_join(member)
+            #     except Exception:
+            #         pass
         except Exception:
             pass
 

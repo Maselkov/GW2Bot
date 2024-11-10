@@ -12,9 +12,9 @@ from discord.app_commands import Choice
 
 class WorldsyncMixin:
 
-    async def worldsync_world_autocomplete(self,
-                                           interaction: discord.Interaction,
-                                           current: str):
+    async def worldsync_world_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ):
         if not current:
             return []
         query = prepare_search(current)
@@ -30,14 +30,17 @@ class WorldsyncMixin:
         enabled="Enable or disable Worldsync",
         world="The world name to use for Worldsync",
         world_role="The role to give to members of the chosen world",
-        ally_role="The role to give to allies of the chosen world")
+        ally_role="The role to give to allies of the chosen world",
+    )
     @app_commands.autocomplete(world=worldsync_world_autocomplete)
-    async def worldsync(self,
-                        interaction: discord.Interaction,
-                        enabled: bool,
-                        world: str = None,
-                        world_role: discord.Role = None,
-                        ally_role: discord.Role = None):
+    async def worldsync(
+        self,
+        interaction: discord.Interaction,
+        enabled: bool,
+        world: str = None,
+        world_role: discord.Role = None,
+        ally_role: discord.Role = None,
+    ):
         """Role management based on in game account world"""
         await interaction.response.defer()
         doc = await self.bot.database.get(interaction.guild, self)
@@ -45,24 +48,25 @@ class WorldsyncMixin:
         current = doc.get("enabled", False)
         if not current and not enabled:
             return await interaction.followup.send(
-                "Worldsync is aleady disabled.", ephemeral=True)
+                "Worldsync is aleady disabled.", ephemeral=True
+            )
         if current and not enabled:
-            await self.bot.database.set(interaction.guild,
-                                        {"worldsync.enabled": enabled}, self)
-            return await interaction.followup.send("Worldsync is now disabled."
-                                                   )
+            await self.bot.database.set(
+                interaction.guild, {"worldsync.enabled": enabled}, self
+            )
+            return await interaction.followup.send("Worldsync is now disabled.")
         if not world:
             return await interaction.followup.send(
-                "You must specify a world name.", ephemeral=True)
+                "You must specify a world name.", ephemeral=True
+            )
         try:
             wid = int(world)
         except ValueError:
-            return await interaction.followup.send("Invalid world name",
-                                                   ephemeral=True)
+            return await interaction.followup.send("Invalid world name", ephemeral=True)
         if not world_role and not ally_role:
             return await interaction.followup.send(
-                "You need to use the role arguments for the bot to do "
-                "anytihng.")
+                "You need to use the role arguments for the bot to do " "anytihng."
+            )
         settings = {
             "worldsync.world_id": wid,
             "worldsync.world_role": world_role.id if world_role else None,
@@ -72,8 +76,8 @@ class WorldsyncMixin:
         await self.bot.database.set(interaction.guild, settings, self)
         if enabled:
             await interaction.followup.send(
-                "Worldsync is now enabled. Use the same "
-                "command to disable.")
+                "Worldsync is now enabled. Use the same " "command to disable."
+            )
             return await self.sync_worlds(settings, interaction.guild)
 
     async def worldsync_now(self, ctx):
@@ -94,8 +98,9 @@ class WorldsyncMixin:
                 return worlds
         return []
 
-    async def worldsync_member(self, member, world_role, ally_role, world_id,
-                               linked_worlds):
+    async def worldsync_member(
+        self, member, world_role, ally_role, world_id, linked_worlds
+    ):
         on_world = False
         on_linked = False
         try:
@@ -112,8 +117,7 @@ class WorldsyncMixin:
                     continue
                 try:
                     await asyncio.sleep(0.3)
-                    results = await self.call_api("account",
-                                                  key=key_doc["key"])
+                    results = await self.call_api("account", key=key_doc["key"])
                     user_world = results["world"]
                     if user_world == world_id:
                         on_world = True
@@ -140,7 +144,7 @@ class WorldsyncMixin:
                 if not (single_role and has_world_role):
                     await member.remove_roles(ally_role)
 
-    async def sync_worlds(self, doc, guild):
+    async def sync_worlds(self, doc, guild: discord.Guild):
         world_id = doc.get("world_id")
         try:
             linked_worlds = await self.get_linked_worlds(world_id)
@@ -150,12 +154,15 @@ class WorldsyncMixin:
         ally_role = guild.get_role(doc.get("ally_role"))
         if not world_role and not ally_role:
             return
+        if not guild.chunked:
+            await guild.chunk()
         for member in guild.members:
             try:
                 if member.bot:
                     continue
-                await self.worldsync_member(member, world_role, ally_role,
-                                            world_id, linked_worlds)
+                await self.worldsync_member(
+                    member, world_role, ally_role, world_id, linked_worlds
+                )
             except discord.HTTPException:
                 pass
 
@@ -178,14 +185,15 @@ class WorldsyncMixin:
             linked_worlds = await self.get_linked_worlds(world_id)
         except APIError:
             return
-        await self.worldsync_member(member, world_role, ally_role, world_id,
-                                    linked_worlds)
+        await self.worldsync_member(
+            member, world_role, ally_role, world_id, linked_worlds
+        )
 
     @tasks.loop(minutes=5)
     async def worldsync_task(self):
-        cursor = self.bot.database.iter("guilds", {"worldsync.enabled": True},
-                                        self,
-                                        subdocs=["worldsync"])
+        cursor = self.bot.database.iter(
+            "guilds", {"worldsync.enabled": True}, self, subdocs=["worldsync"]
+        )
         start = time.time()
         async for doc in cursor:
             try:
