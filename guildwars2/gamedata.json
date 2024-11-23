@@ -1321,6 +1321,31 @@
         ]
       },
       {
+        "name": "Mount Balrior",
+        "encounters": [
+          {
+            "name": "Greer",
+            "type": "single_achievement",
+            "id": 8454
+          },
+          {
+            "name": "Decima",
+            "type": "single_achievement",
+            "id": 8485
+          },
+          {
+            "name": "Ura",
+            "type": "single_achievement",
+            "id": 8472
+          },
+          {
+            "name": "Undefeated: Mount Balrior",
+            "type": "single_achievement",
+            "id": 8502
+          }
+        ]
+      },
+      {
         "name": "Fractals",
         "encounters": [
           {
