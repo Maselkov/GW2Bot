@@ -579,9 +579,9 @@ class GuildSync:
         "the leadership of the guild",
         sync_type="Select how you want the synced roles to behave.",
         user_to_prompt="The user to prompt for authorization. Use "
-        "only if you've selected it as the authentication_method.",
+        "only if selected as the authentication_method.",
         api_key="The api key to use for authorization. "
-        "Use only if you've selected it as the authentication_method.",
+        "Use only if selected as the authentication_method.",
     )
     async def guildsync_add(
         self,

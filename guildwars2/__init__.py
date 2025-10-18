@@ -1,15 +1,18 @@
 import datetime
 import json
 import logging
+from types import SimpleNamespace
 
 import discord
+from discord.ext import commands
 from PIL import ImageFont
 import httpx
 
 from .account import AccountMixin
 from .achievements import AchievementsMixin
 from .api import ApiMixin
-from .characters import CharactersMixin
+
+# from .characters import CharactersMixin
 from .commerce import CommerceMixin
 from .daily import DailyMixin
 from .database import DatabaseMixin
@@ -28,14 +31,16 @@ from .skills import SkillsMixin
 from .wallet import WalletMixin
 from .worldsync import WorldsyncMixin
 from .wvw import WvwMixin
+from .core.container import ServiceContainer
+from .adapters.discord.commands import register_all as register_commands
 
 
 class GuildWars2(
-    discord.ext.commands.Cog,
+    commands.Cog,
     AccountMixin,
     AchievementsMixin,
     ApiMixin,
-    CharactersMixin,
+    # CharactersMixin,
     CommerceMixin,
     DailyMixin,
     DatabaseMixin,
@@ -55,8 +60,12 @@ class GuildWars2(
 ):
     """Guild Wars 2 commands"""
 
+    # Hint editors that this attribute exists and its type
+    container: ServiceContainer
+
     def __init__(self, bot):
         self.bot = bot
+        self.container = ServiceContainer(bot)
         self.db = self.bot.database.db.gw2
         with open("cogs/guildwars2/gamedata.json", encoding="utf-8", mode="r") as f:
             self.gamedata = json.load(f)
@@ -103,6 +112,16 @@ class GuildWars2(
     async def cog_load(self):
         self.bot.add_view(EventTimerReminderUnsubscribeView(self))
         self.bot.add_view(GuildSyncPromptUserConfirmView(self))
+        # Auto-discover and register commands in adapters/discord/commands
+        register_commands(self)
+        # Sync command tree so newly registered slash commands are available
+        # Fast-path: copy global commands to each guild for immediate availability
+        for guild in getattr(self.bot, "guilds", []) or []:
+            try:
+                self.bot.tree.copy_global_to(guild=guild)
+                await self.bot.tree.sync(guild=guild)
+            except Exception:
+                continue
 
     async def cog_unload(self):
         for task in self.tasks:
@@ -143,6 +162,40 @@ class GuildWars2(
         self, component_context, message="Only the command owner may do that."
     ):
         self.bot.loop.create_task(component_context.send(message, ephemeral=True))
+
+    # Command methods are auto-registered via adapters; keep Cog thin
+
+    # Backward-compatible shims for migrated helpers
+    def get_crafting(self, character):
+        """Shim: delegate to CharactersService.get_crafting."""
+        try:
+            return self.container.characters_service.get_crafting(character)
+        except Exception:
+            # Fallback to simple formatting to avoid breaking
+            out = []
+            for c in character.get("crafting", []) or []:
+                r = c.get("rating")
+                d = c.get("discipline")
+                if r is not None and d:
+                    out.append(f"Level {r} {d}")
+            return out
+
+    async def get_profession(self, profession, specializations):
+        """Shim: delegate to CharactersService.get_profession.
+
+        specializations is a list of specialization documents (from DB).
+        """
+        data = await self.container.characters_service.get_profession(
+            profession, specializations, self.gamedata
+        )
+        # Preserve attribute access and Color instance expected by legacy code
+        if isinstance(data.get("color"), int):
+            color = discord.Color(data["color"])  # type: ignore[index]
+        else:
+            color = data.get("color")
+        return SimpleNamespace(
+            name=data.get("name"), icon=data.get("icon"), color=color
+        )
 
 
 async def setup(bot):

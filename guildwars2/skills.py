@@ -267,7 +267,7 @@ class Build:
         for i, skill in enumerate(self.skills, start=0):
             resp = session.get(skill["icon"])
             skill_icon = Image.open(io.BytesIO(resp.content))
-            skill_icon = skill_icon.resize((64, 64), Image.ANTIALIAS)
+            skill_icon = skill_icon.resize((64, 64), Image.Resampling.LANCZOS)
             skill_icon = skill_icon.crop(
                 (
                     crop_amount,
@@ -301,7 +301,7 @@ class Build:
             resp = session.get(icon_url)
             image = Image.open(io.BytesIO(resp.content))
             image = image.crop((4, 4, image.width - 4, image.height - 4))
-            return image.resize((size, size), Image.ANTIALIAS)
+            return image.resize((size, size), Image.Resampling.LANCZOS)
 
         resp = session.get(specialization["background"])
         background = Image.open(io.BytesIO(resp.content))
