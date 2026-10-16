@@ -1,0 +1,62 @@
+{
+  "name": "Zojja's Claymore",
+  "description": "<c=@flavor>Crafted in the style of the renowned asuran genius, Zojja.</c>",
+  "type": "Weapon",
+  "level": 80,
+  "rarity": "Ascended",
+  "vendor_value": 10000,
+  "default_skin": 4223,
+  "game_types": [
+    "Activity",
+    "Wvw",
+    "Dungeon",
+    "Pve"
+  ],
+  "flags": [
+    "HideSuffix",
+    "AccountBound",
+    "AccountBindOnUse"
+  ],
+  "restrictions": [],
+  "id": 46762,
+  "chat_link": "[&AgGqtgAA]",
+  "icon": "https://render.guildwars2.com/file/B1A52DB3FCD8A6C744144FD4770BCBE8F95A4CBA/631562.png",
+  "details": {
+    "type": "Greatsword",
+    "damage_type": "Physical",
+    "min_power": 1045,
+    "max_power": 1155,
+    "defense": 0,
+    "infusion_slots": [
+      {
+        "flags": [
+          "Infusion"
+        ]
+      },
+      {
+        "flags": [
+          "Infusion"
+        ]
+      }
+    ],
+    "attribute_adjustment": 717.024,
+    "infix_upgrade": {
+      "id": 161,
+      "attributes": [
+        {
+          "attribute": "Power",
+          "modifier": 251
+        },
+        {
+          "attribute": "Precision",
+          "modifier": 179
+        },
+        {
+          "attribute": "CritDamage",
+          "modifier": 179
+        }
+      ]
+    },
+    "secondary_suffix_item_id": ""
+  }
+}

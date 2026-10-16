@@ -109,3 +109,4 @@ ENV/
 # Fonts are mounted into the Docker container, not committed
 fonts/*
 !fonts/.gitkeep
+.venv-test/

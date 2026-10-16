@@ -60,6 +60,39 @@ After the GW2Bot extension has loaded successfully, send another direct message 
 
 Now you should be able to use slash commands with your Toothy bot in your Discord server!
 
+## Running Tests
+
+```bash
+python -m venv .venv-test
+.venv-test/bin/pip install -r requirements-dev.txt
+.venv-test/bin/pytest
+```
+
+Tests don't need Discord, MongoDB or Toothy. `tests/conftest.py` makes the repository importable as `cogs.guildwars2`.
+
+Tests only check inputs and outputs, so they survive a restructure of the code. They never call the cog's mixins directly. Instead they go through the plain functions in `tests/subject.py`. When logic moves, point the matching function in `subject.py` at its new home and the tests stay the same.
+
+Known bugs are marked `xfail(strict=True)`. Fixing one makes its test report XPASS, which fails the run until the marker is removed.
+
+### Live API tests
+
+`pytest -m live` checks that the live GW2 API still returns the fields the bot reads. Tests that need an API key read it from `GW2_API_KEY` and are skipped without it. They also run nightly in GitHub Actions, using the `GW2_API_KEY` repository secret.
+
+### Recorded API responses
+
+`tests/fixtures/gw2api/` holds real API responses. To refresh them, including the authenticated endpoints:
+
+```bash
+GW2_API_KEY=... .venv-test/bin/python scripts/record_gw2_fixtures.py
+```
+
+The key is never written to disk. Scrubbing:
+- Account names, ids, guild ids and character names (including soulbound items' `bound_to`) are replaced with placeholders.
+- Creation dates are replaced with a fixed date, and the home world with another world in the same region.
+- Wallet values, PvP stats, AP, ranks, ages and death counts are randomly changed by up to 30%.
+
+The recorder aborts if any real name, id or the key would still be written. Check `git diff tests/fixtures` before committing.
+
 ## Feature List
 
 * [Persistent storage of API keys](https://i.imgur.com/m82tUfW.png)

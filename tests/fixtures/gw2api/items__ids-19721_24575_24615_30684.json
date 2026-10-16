@@ -1,0 +1,212 @@
+[
+  {
+    "name": "Glob of Ectoplasm",
+    "description": "Salvage Item",
+    "type": "Trophy",
+    "level": 0,
+    "rarity": "Exotic",
+    "vendor_value": 256,
+    "game_types": [
+      "Activity",
+      "Wvw",
+      "Dungeon",
+      "Pve"
+    ],
+    "flags": [],
+    "restrictions": [],
+    "id": 19721,
+    "chat_link": "[&AgEJTQAA]",
+    "icon": "https://render.guildwars2.com/file/18CE5D78317265000CF3C23ED76AB3CEE86BA60E/65941.png"
+  },
+  {
+    "name": "Superior Sigil of Bloodlust",
+    "description": "<c=@abilitytype>Element: </c>Enhancement<br>Double-click to apply to a weapon.",
+    "type": "UpgradeComponent",
+    "level": 60,
+    "rarity": "Exotic",
+    "vendor_value": 216,
+    "game_types": [
+      "Activity",
+      "Wvw",
+      "Dungeon",
+      "Pve"
+    ],
+    "flags": [],
+    "restrictions": [],
+    "id": 24575,
+    "chat_link": "[&AgH/XwAA]",
+    "icon": "https://render.guildwars2.com/file/77AAE10D3E03036D6E00642DEF01E5DF3468524F/220673.png",
+    "details": {
+      "type": "Sigil",
+      "flags": [
+        "ShortBow",
+        "Dagger",
+        "Focus",
+        "Greatsword",
+        "Hammer",
+        "Harpoon",
+        "Mace",
+        "Pistol",
+        "Rifle",
+        "Scepter",
+        "Shield",
+        "Speargun",
+        "Axe",
+        "Staff",
+        "Sword",
+        "Torch",
+        "Trident",
+        "Warhorn",
+        "LongBow"
+      ],
+      "infusion_upgrade_flags": [],
+      "attribute_adjustment": 0,
+      "infix_upgrade": {
+        "id": 218,
+        "buff": {
+          "skill_id": 9297,
+          "description": "Gain a charge of +10 power each time you kill a foe, five charges if you kill an enemy player. <c=@reminder>(Max 25 stacks; ends on down.)</c> <br><c=@reminder>(Only one attribute-stacking sigil can be active at a time.)</c>"
+        },
+        "attributes": []
+      },
+      "suffix": "of Bloodlust"
+    }
+  },
+  {
+    "name": "Superior Sigil of Force",
+    "description": "<c=@abilitytype>Element: </c>Enhancement<br>Double-click to apply to a weapon.",
+    "type": "UpgradeComponent",
+    "level": 60,
+    "rarity": "Exotic",
+    "vendor_value": 216,
+    "game_types": [
+      "Activity",
+      "Wvw",
+      "Dungeon",
+      "Pve"
+    ],
+    "flags": [],
+    "restrictions": [],
+    "id": 24615,
+    "chat_link": "[&AgEnYAAA]",
+    "icon": "https://render.guildwars2.com/file/D7420E430D002E07382035EF0D0F77370C4EE6B8/220662.png",
+    "details": {
+      "type": "Sigil",
+      "flags": [
+        "ShortBow",
+        "Dagger",
+        "Focus",
+        "Greatsword",
+        "Hammer",
+        "Harpoon",
+        "Mace",
+        "Pistol",
+        "Rifle",
+        "Scepter",
+        "Shield",
+        "Speargun",
+        "Axe",
+        "Staff",
+        "Sword",
+        "Torch",
+        "Trident",
+        "Warhorn",
+        "LongBow"
+      ],
+      "infusion_upgrade_flags": [],
+      "attribute_adjustment": 0,
+      "infix_upgrade": {
+        "id": 261,
+        "buff": {
+          "skill_id": 9322,
+          "description": "+5% Damage"
+        },
+        "attributes": []
+      },
+      "suffix": "of Force"
+    }
+  },
+  {
+    "name": "Frostfang",
+    "type": "Weapon",
+    "level": 80,
+    "rarity": "Legendary",
+    "vendor_value": 100000,
+    "default_skin": 4674,
+    "game_types": [
+      "Activity",
+      "Wvw",
+      "Dungeon",
+      "Pve"
+    ],
+    "flags": [
+      "HideSuffix",
+      "NoSalvage",
+      "NoSell",
+      "AccountBindOnUse",
+      "DeleteWarning"
+    ],
+    "restrictions": [],
+    "id": 30684,
+    "chat_link": "[&AgHcdwAA]",
+    "icon": "https://render.guildwars2.com/file/0F9C08DE12ADD1082A103DC6EF7401281B23985E/456009.png",
+    "details": {
+      "type": "Axe",
+      "damage_type": "Ice",
+      "min_power": 900,
+      "max_power": 1100,
+      "defense": 0,
+      "infusion_slots": [
+        {
+          "flags": [
+            "Infusion"
+          ]
+        }
+      ],
+      "attribute_adjustment": 358.512,
+      "suffix_item_id": 24555,
+      "stat_choices": [
+        161,
+        155,
+        159,
+        157,
+        158,
+        160,
+        153,
+        605,
+        700,
+        616,
+        154,
+        156,
+        162,
+        686,
+        559,
+        754,
+        753,
+        799,
+        1026,
+        1067,
+        628,
+        1032,
+        1111,
+        1109,
+        1123,
+        1140,
+        1085,
+        1153,
+        1118,
+        1131,
+        1222,
+        1344,
+        1363,
+        1364,
+        1559,
+        1556,
+        1681,
+        1686,
+        1826
+      ],
+      "secondary_suffix_item_id": ""
+    }
+  }
+]

@@ -1,0 +1,114 @@
+{
+  "pvp_rank": 64,
+  "pvp_rank_points": 805101,
+  "pvp_rank_rollovers": 26,
+  "aggregate": {
+    "wins": 985,
+    "losses": 824,
+    "desertions": 10,
+    "byes": 84,
+    "forfeits": 33
+  },
+  "professions": {
+    "elementalist": {
+      "wins": 78,
+      "losses": 66,
+      "desertions": 0,
+      "byes": 9,
+      "forfeits": 9
+    },
+    "engineer": {
+      "wins": 56,
+      "losses": 63,
+      "desertions": 0,
+      "byes": 1,
+      "forfeits": 0
+    },
+    "guardian": {
+      "wins": 6,
+      "losses": 6,
+      "desertions": 0,
+      "byes": 0,
+      "forfeits": 0
+    },
+    "mesmer": {
+      "wins": 91,
+      "losses": 117,
+      "desertions": 1,
+      "byes": 7,
+      "forfeits": 4
+    },
+    "necromancer": {
+      "wins": 87,
+      "losses": 52,
+      "desertions": 2,
+      "byes": 1,
+      "forfeits": 3
+    },
+    "ranger": {
+      "wins": 0,
+      "losses": 2,
+      "desertions": 0,
+      "byes": 0,
+      "forfeits": 0
+    },
+    "revenant": {
+      "wins": 158,
+      "losses": 135,
+      "desertions": 1,
+      "byes": 2,
+      "forfeits": 4
+    },
+    "thief": {
+      "wins": 126,
+      "losses": 159,
+      "desertions": 1,
+      "byes": 36,
+      "forfeits": 7
+    },
+    "warrior": {
+      "wins": 213,
+      "losses": 150,
+      "desertions": 4,
+      "byes": 13,
+      "forfeits": 9
+    }
+  },
+  "ladders": {
+    "2v2ranked": {
+      "wins": 1,
+      "losses": 3,
+      "desertions": 0,
+      "byes": 0,
+      "forfeits": 0
+    },
+    "3v3ranked": {
+      "wins": 10,
+      "losses": 10,
+      "desertions": 0,
+      "byes": 0,
+      "forfeits": 0
+    },
+    "none": {
+      "wins": 0,
+      "losses": 0,
+      "desertions": 0,
+      "byes": 0,
+      "forfeits": 0
+    },
+    "ranked": {
+      "wins": 537,
+      "losses": 629,
+      "desertions": 6,
+      "byes": 27,
+      "forfeits": 23
+    },
+    "unranked": {
+      "wins": 173,
+      "losses": 187,
+      "desertions": 3,
+      "byes": 31,
+      "forfeits": 11
+    }
+  }
+}
