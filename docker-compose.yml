@@ -16,12 +16,16 @@ services:
 
   mongo:
     image: mongo:9
+    # Don't log every connection; the healthcheck opens several each run
+    command: ["--quiet"]
     restart: unless-stopped
     volumes:
       - mongo-data:/data/db
     healthcheck:
       test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
+      interval: 30s
+      start_interval: 2s
+      start_period: 30s
       timeout: 5s
       retries: 5
 
