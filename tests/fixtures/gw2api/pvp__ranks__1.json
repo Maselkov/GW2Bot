@@ -1,0 +1,20 @@
+{
+  "id": 1,
+  "finisher_id": 1,
+  "name": "Rabbit",
+  "icon": "https://render.guildwars2.com/file/592A4144FE1B6904CD0C69230840B8C21A0C36F7/347222.png",
+  "min_rank": 1,
+  "max_rank": 9,
+  "levels": [
+    {
+      "min_rank": 1,
+      "max_rank": 5,
+      "points": 500
+    },
+    {
+      "min_rank": 6,
+      "max_rank": 9,
+      "points": 1500
+    }
+  ]
+}

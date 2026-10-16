@@ -1,0 +1,33 @@
+{
+  "id": 1510,
+  "tier": 3,
+  "order": 0,
+  "name": "Persisting Flames",
+  "description": "Fire fields created by weapon skills last longer. Whenever your fire fields hit a foe or you inflict burning, gain increased strike damage for a duration.",
+  "slot": "Major",
+  "facts": [
+    {
+      "text": "Duration Increase",
+      "type": "Time",
+      "icon": "https://render.guildwars2.com/file/7B2193ACCF77E56C13E608191B082D68AA0FAA71/156659.png",
+      "duration": 2
+    },
+    {
+      "text": "Apply Buff/Condition",
+      "type": "Buff",
+      "icon": "https://render.guildwars2.com/file/38496307B7C27BCB08D6800F2A699B4998DD1935/1012312.png",
+      "duration": 15,
+      "status": "Persisting Flames",
+      "description": "Deal increased strike damage per stack.",
+      "apply_count": 1
+    },
+    {
+      "text": "Maximum Stacks",
+      "type": "Number",
+      "icon": "https://render.guildwars2.com/file/B4490FB81AA1E7C06F1B22056AE09A0F54CBE2C4/1770201.png",
+      "value": 5
+    }
+  ],
+  "specialization": 31,
+  "icon": "https://render.guildwars2.com/file/38496307B7C27BCB08D6800F2A699B4998DD1935/1012312.png"
+}

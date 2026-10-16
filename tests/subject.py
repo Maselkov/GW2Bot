@@ -1,0 +1,298 @@
+"""Adapter between the tests and the code under test.
+
+Tests only call the plain functions in this module, never the cog's mixins
+directly. When a piece of logic moves during the rewrite, repoint the
+matching function here; the tests themselves should not need to change.
+"""
+import asyncio
+import datetime
+import json
+import logging
+import pathlib
+import re
+from unittest.mock import MagicMock
+
+import time_machine
+
+from cogs.guildwars2 import GuildWars2
+from cogs.guildwars2.achievements import AchievementsMixin
+from cogs.guildwars2.api import ApiMixin
+from cogs.guildwars2.characters import CharactersMixin
+from cogs.guildwars2.commerce import CommerceMixin
+from cogs.guildwars2.daily import DailyMixin
+from cogs.guildwars2.events import EventsMixin
+from cogs.guildwars2.misc import MiscMixin
+from cogs.guildwars2.skills import SkillsMixin
+from cogs.guildwars2.utils import chat, db
+from cogs.guildwars2.wvw import WvwMixin, generate_population_graph
+
+DATA_DIR = pathlib.Path(__file__).resolve().parent.parent / "guildwars2"
+UTC = datetime.timezone.utc
+
+
+def _load(name):
+    with open(DATA_DIR / name, encoding="utf-8") as f:
+        return json.load(f)
+
+
+_GAMEDATA = _load("gamedata.json")
+_INSTABILITIES = _load("instabilities.json")
+
+
+class _Harness(
+    AchievementsMixin,
+    ApiMixin,
+    CharactersMixin,
+    CommerceMixin,
+    DailyMixin,
+    EventsMixin,
+    MiscMixin,
+    SkillsMixin,
+    WvwMixin,
+):
+    """Just enough of the cog's state for its non-Discord logic to run."""
+
+    def __init__(self, session=None):
+        self.gamedata = _GAMEDATA
+        self.instabilities = _INSTABILITIES
+        self.embed_color = 0xC12D2B
+        self.emojis = {}
+        self.log = logging.getLogger("tests")
+        self.bot = MagicMock()
+        self.session = session
+
+    def get_emoji(self, ctx, emoji, *, fallback=False, fallback_fmt="{}", **kwargs):
+        return fallback_fmt.format(emoji) if fallback else ""
+
+    async def get_embed_color(self, ctx):
+        return self.embed_color
+
+    async def cache_result(self, *args, **kwargs):
+        pass
+
+
+def _at(when):
+    """Freeze the clock at `when` (a date means noon UTC that day)."""
+    if not isinstance(when, datetime.datetime):
+        when = datetime.datetime.combine(when, datetime.time(12), tzinfo=UTC)
+    return time_machine.travel(when, tick=False)
+
+
+# --- Items and coins -------------------------------------------------------
+
+def chat_code(item_id, count=1, skin_id=None, upgrades=()):
+    return _Harness().generate_chat_code(item_id, count, skin_id, list(upgrades))
+
+
+def format_coins(copper):
+    return _Harness().gold_to_coins(None, copper)
+
+
+# --- Formatting ------------------------------------------------------------
+
+def format_age(seconds, short=False):
+    return CharactersMixin.format_age(seconds, short=short)
+
+
+def readable_attribute(name):
+    return _Harness().readable_attribute(name)
+
+
+def format_timedelta(td):
+    return _Harness().format_timedelta(td)
+
+
+def population_to_int(population):
+    return _Harness().population_to_int(population)
+
+
+def population_graph(points):
+    """PNG bytes for a list of (datetime, population level 0-4)."""
+    return generate_population_graph(points).getvalue()
+
+
+def embed_list_lines(lines, field_name="Field", **kwargs):
+    """Return the embed's fields as a list of (name, value)."""
+    import discord
+
+    embed = chat.embed_list_lines(discord.Embed(), lines, field_name, **kwargs)
+    return [(f.name, f.value) for f in embed.fields]
+
+
+def cleanup_xml_tags(text):
+    return chat.cleanup_xml_tags(text)
+
+
+def search_pattern(text):
+    return db.prepare_search(text)
+
+
+# --- Achievements ----------------------------------------------------------
+
+def tier_progress(tiers, progress):
+    return _Harness().tier_progress(tiers, progress)
+
+
+def max_ap(achievement, repeatable=False):
+    return _Harness().max_ap(achievement, repeatable)
+
+
+def earned_ap(achievement, progress):
+    return _Harness().earned_ap(achievement, progress)
+
+
+# --- Skills ----------------------------------------------------------------
+
+def skill_fields(skill):
+    """List of (field, value) shown for a skill's facts."""
+    return [(f["field"], f.get("value")) for f in _Harness().get_skill_fields(skill)]
+
+
+# --- Dailies (all evaluated as of noon UTC on `date`) ----------------------
+
+def year_day(date):
+    with _at(date):
+        return _Harness().get_year_day(tomorrow=False)
+
+
+def living_world_dailies(date):
+    with _at(date):
+        return _Harness().get_lw_dailies(tomorrow=False)
+
+
+def strikes(date):
+    with _at(date):
+        return _Harness().get_strike(None, tomorrow=False).split("\n")
+
+
+def pact_supply_agents(date):
+    with _at(date):
+        return _Harness().get_psna()
+
+
+def instabilities(fractal_level, date):
+    with _at(date):
+        names = _Harness().get_instabilities(fractal_level, tomorrow=False)
+    return names.split("\n") if names is not None else None
+
+
+def cm_instabilities(date):
+    """{CM fractal name: [instability names]}."""
+    with _at(date):
+        text = _Harness().get_cm_instabilities(tomorrow=False)
+    result = {}
+    current = None
+    for line in text.split("\n"):
+        if line in _GAMEDATA["fractals"]:
+            current = line
+            result[current] = []
+        else:
+            result[current].append(line)
+    return result
+
+
+# --- Event timers ----------------------------------------------------------
+
+def upcoming_bosses(now, limit=8):
+    """[(boss name, datetime)] for the next `limit` world bosses."""
+    with _at(now):
+        harness = _Harness()
+        harness.boss_schedule = harness.generate_schedule()
+        bosses = harness.get_upcoming_bosses(limit)
+    return [
+        (b["name"], datetime.datetime.fromtimestamp(int(b["time"][3:-3]), UTC))
+        for b in bosses
+    ]
+
+
+def seconds_until_boss(name, now):
+    with _at(now):
+        harness = _Harness()
+        harness.boss_schedule = harness.generate_schedule()
+        return harness.get_time_until_event({"type": "boss", "name": name})
+
+
+def seconds_until_phase(group, map_name, phase, now):
+    reminder = {"type": "event", "group": group, "map_name": map_name, "name": phase}
+    with _at(now):
+        return _Harness().get_time_until_event(reminder)
+
+
+def timer_titles():
+    """{group: title} for every event-timer group in the game data."""
+    groups = [g for g in _GAMEDATA["event_timers"] if g != "bosses"]
+    titles = {}
+    for group in groups:
+        embed = asyncio.run(_Harness().timer_embed(None, group))
+        titles[group] = embed.title
+    return titles
+
+
+def timer_state(group, now):
+    """{map name: (current phase or None, next phase, datetime of next phase)}."""
+    with _at(now):
+        embed = asyncio.run(_Harness().timer_embed(None, group))
+    state = {}
+    for field in embed.fields:
+        current = re.search(r"Current phase: \*\*(.+?)\*\*", field.value)
+        nxt = re.search(r"Next phase: \*\*(.+?)\*\* <t:(\d+):R>", field.value)
+        state[field.name] = (
+            current.group(1) if current else None,
+            nxt.group(1),
+            datetime.datetime.fromtimestamp(int(nxt.group(2)), UTC),
+        )
+    return state
+
+
+# --- GW2 API ---------------------------------------------------------------
+
+class FakeResponse:
+    def __init__(self, status, body):
+        self.status = status
+        self._body = body
+
+    async def json(self):
+        import aiohttp
+
+        if isinstance(self._body, str):
+            raise aiohttp.ContentTypeError(MagicMock(), ())
+        return self._body
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+class FakeSession:
+    """Serves queued (status, body) responses; a str body is a non-JSON page.
+
+    The last response repeats once the queue is exhausted. Requests are
+    recorded as (url, dict of query params).
+    """
+
+    def __init__(self, *responses):
+        self.responses = list(responses)
+        self.requests = []
+
+    def get(self, url, headers=None, params=None):
+        self.requests.append((url, dict(params or [])))
+        status, body = self.responses.pop(0) if len(self.responses) > 1 else self.responses[0]
+        return FakeResponse(status, body)
+
+
+async def api_get(session, endpoint, key=None):
+    """Call the GW2 API through the bot's client, using `session` for HTTP."""
+    from unittest.mock import patch
+
+    from tenacity import wait_none
+
+    with patch.object(ApiMixin.call_api.retry, "wait", wait_none()):
+        return await _Harness(session).call_api(endpoint, key=key)
+
+
+def api_error_message(error):
+    """The message shown to the user for an exception from the API layer."""
+    interaction = MagicMock()
+    return asyncio.run(GuildWars2.cog_error_handler(None, interaction, error))
