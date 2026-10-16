@@ -1,74 +1,77 @@
 # GW2Bot
 
-An extension to [Toothy](https://github.com/Maselkov/Toothy).
+A Guild Wars 2 Discord bot.
 
 [Invite the public bot to your Discord Server!](https://discord.com/api/oauth2/authorize?client_id=310050883100737536&permissions=939879488&scope=bot%20applications.commands)
 
 ## How To Run
 
+GW2Bot needs a Discord bot token and a MongoDB server. In the [Discord Developer Portal](https://discord.com/developers/applications), enable the **Server Members** and **Message Content** privileged intents for your bot.
+
+Configuration is read from environment variables:
+
+| Variable | |
+|---|---|
+| `DISCORD_TOKEN` | Required. The bot token. |
+| `OWNER_ID` | Your Discord user ID, for owner-only commands like `>sync`. |
+| `TEST_GUILD` | Server ID that `>sync true` syncs commands to. |
+| `PREFIX` | Prefix for owner text commands (default `>`). |
+| `AUTO_SYNC` | Sync slash commands on startup when they changed (default `true`). Set to `false` when running a local copy with the production token, so it can't overwrite production's commands. |
+| `MONGO_URI` | Full MongoDB connection string. When set, the `MONGO_HOST`/`PORT`/`USER`/`PASSWORD`/`AUTH_DB` variables are ignored. |
+| `MONGO_HOST`, `MONGO_PORT` | Default `localhost:27017`. |
+| `MONGO_USER`, `MONGO_PASSWORD`, `MONGO_AUTH_DB` | Optional credentials. The auth database defaults to `admin`. |
+| `MONGO_DB` | Database name (default `toothy`, for compatibility with data from the Toothy days). |
+| `LOG_DIR` | Where `gw2bot.log` is written (default `logs`). |
+| `DEBUG` | `true` for debug logging. |
+
+On startup the bot syncs its slash commands with Discord, but only if they changed since the last sync. It stores a hash of the commands in MongoDB to tell. Owner text commands, sent to the bot in a direct message:
+
+- `>sync`: sync slash commands now, for example after commands were synced from somewhere else. `>sync true` syncs them to `TEST_GUILD` only.
+- `>reload`: reload the GW2 cog after a code change. Run `>sync` afterwards if its commands changed.
+
 ### With Docker
 
-The Docker image bundles Toothy and GW2Bot, and `docker-compose.yml` runs it alongside MongoDB.
+`docker-compose.yml` runs the bot alongside MongoDB.
 
 ```bash
-# Fill in DISCORD_TOKEN and OWNER_ID (see the Discord steps in the Toothy README)
+# Fill in DISCORD_TOKEN and OWNER_ID
 cp .env.example .env
 
 docker compose up -d --build
 ```
 
-The GW2Bot extension is loaded automatically. Once the bot is online, send it `>sync` in a direct message to register the slash commands.
-
-The container generates `settings/config.json` from the environment variables in `.env`. Settings and logs persist in the `settings` and `logs` volumes, and MongoDB data in `mongo-data`. To pin a different Toothy version, build with `--build-arg TOOTHY_REF=<branch|tag|commit>`.
+Logs persist in the `logs` volume, and MongoDB data in `mongo-data`.
 
 To use the Guild Wars 2 font in generated images, place `GWTwoFont1p1.ttf` in the `fonts` directory. It is mounted into the container. Without it, the default font is used.
 
 ### Manually
 
-First you must install Toothy by following the [Toothy setup instructions](https://github.com/Maselkov/Toothy/blob/master/README.md).
+Requires Python 3.15.
 
-Then clone GW2Bot into the `cogs` directory and install the dependencies:
 ```bash
-# Go to Toothy directory
-cd path/to/Toothy
+git clone https://github.com/Maselkov/GW2Bot.git
+cd GW2Bot
+python -m venv .venv
+.venv/bin/pip install .
 
-# Clone GW2Bot into the cogs directory
-git clone https://github.com/Maselkov/GW2Bot.git ./cogs
-
-# Go to cogs directory
-cd cogs
-
-# Activate the Toothy virtual environment you set up with Toothy
-source ~/.venvs/toothyenv/bin/activate # POSIX
-source ~/.venvs/toothyenv/Scripts/activate # Windows
-
-# Install GW2Bot dependencies
-pip install -r requirements.txt
+DISCORD_TOKEN=... OWNER_ID=... .venv/bin/gw2bot
 ```
 
-Now run Toothy. Note: The default prefix is `>` but you can change this in your `config.json` file.
+To use the Guild Wars 2 font, place `GWTwoFont1p1.ttf` in the directory you run the bot from.
 
-While Toothy is running, send a direct message via Discord to your Toothy bot to load the GW2Bot extension:
-```bash
->load guildwars2
-```
+### Moving from Toothy
 
-After the GW2Bot extension has loaded successfully, send another direct message to your Toothy bot to sync the command tree:
-```bash
->sync
-```
-
-Now you should be able to use slash commands with your Toothy bot in your Discord server!
+GW2Bot used to run as an extension of [Toothy](https://github.com/Maselkov/Toothy). It now runs on its own, and reads the same MongoDB data. Point it at the database Toothy used: set `MONGO_DB` to the `DATABASE.name` from Toothy's `config.json` (`toothy` unless you changed it).
 
 ## Running Tests
 
 ```bash
 python -m venv .venv-test
-.venv-test/bin/pip install -r requirements-dev.txt
+.venv-test/bin/pip install -e ".[dev]"
 .venv-test/bin/pytest
 ```
 
-Tests don't need Discord, MongoDB or Toothy. `tests/conftest.py` makes the repository importable as `cogs.guildwars2`.
+Tests don't need Discord or MongoDB.
 
 Tests only check inputs and outputs, so they survive a restructure of the code. They never call the cog's mixins directly. Instead they go through the plain functions in `tests/subject.py`. When logic moves, point the matching function in `subject.py` at its new home and the tests stay the same.
 

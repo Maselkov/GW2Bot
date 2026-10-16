@@ -398,7 +398,7 @@ def test_timer_next_phase_is_always_in_future(group):
     "APIInactiveError",
 )
 def test_api_inactive_error_message():
-    from cogs.guildwars2.exceptions import APIInactiveError
+    from gw2bot.cogs.guildwars2.exceptions import APIInactiveError
 
     assert subject.api_error_message(APIInactiveError()) == (
         "The API is currently down. Try again later."
@@ -406,7 +406,7 @@ def test_api_inactive_error_message():
 
 
 def test_api_error_messages():
-    from cogs.guildwars2.exceptions import APIError, APIInvalidKey, APIKeyError
+    from gw2bot.cogs.guildwars2.exceptions import APIError, APIInvalidKey, APIKeyError
 
     assert subject.api_error_message(APIKeyError("No key")) == "No key"
     assert "invalid" in subject.api_error_message(APIInvalidKey())

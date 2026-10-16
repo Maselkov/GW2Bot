@@ -14,19 +14,19 @@ from unittest.mock import MagicMock
 
 import time_machine
 
-from cogs.guildwars2 import GuildWars2
-from cogs.guildwars2.achievements import AchievementsMixin
-from cogs.guildwars2.api import ApiMixin
-from cogs.guildwars2.characters import CharactersMixin
-from cogs.guildwars2.commerce import CommerceMixin
-from cogs.guildwars2.daily import DailyMixin
-from cogs.guildwars2.events import EventsMixin
-from cogs.guildwars2.misc import MiscMixin
-from cogs.guildwars2.skills import SkillsMixin
-from cogs.guildwars2.utils import chat, db
-from cogs.guildwars2.wvw import WvwMixin, generate_population_graph
+from gw2bot.cogs.guildwars2 import GuildWars2
+from gw2bot.cogs.guildwars2.achievements import AchievementsMixin
+from gw2bot.cogs.guildwars2.api import ApiMixin
+from gw2bot.cogs.guildwars2.characters import CharactersMixin
+from gw2bot.cogs.guildwars2.commerce import CommerceMixin
+from gw2bot.cogs.guildwars2.daily import DailyMixin
+from gw2bot.cogs.guildwars2.events import EventsMixin
+from gw2bot.cogs.guildwars2.misc import MiscMixin
+from gw2bot.cogs.guildwars2.skills import SkillsMixin
+from gw2bot.cogs.guildwars2.utils import chat, db
+from gw2bot.cogs.guildwars2.wvw import WvwMixin, generate_population_graph
 
-DATA_DIR = pathlib.Path(__file__).resolve().parent.parent / "guildwars2"
+DATA_DIR = pathlib.Path(__file__).resolve().parent.parent / "gw2bot" / "cogs" / "guildwars2"
 UTC = datetime.timezone.utc
 
 

@@ -1,20 +1,11 @@
 import json
 import pathlib
 import sys
-import types
 
 import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-DATA_DIR = ROOT / "guildwars2"
-
-# The cog is written to live at cogs/guildwars2 inside Toothy and imports
-# itself as `cogs.guildwars2`. Point a synthetic `cogs` package at the repo
-# root so those imports resolve without a Toothy checkout.
-if "cogs" not in sys.modules:
-    cogs = types.ModuleType("cogs")
-    cogs.__path__ = [str(ROOT)]
-    sys.modules["cogs"] = cogs
+DATA_DIR = ROOT / "gw2bot" / "cogs" / "guildwars2"
 
 sys.path.insert(0, str(ROOT / "tests"))
 

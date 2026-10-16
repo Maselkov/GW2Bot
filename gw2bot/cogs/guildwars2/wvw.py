@@ -3,7 +3,7 @@ import io
 from discord import app_commands
 from discord.app_commands import Choice
 
-from cogs.guildwars2.utils.db import prepare_search
+from .utils.db import prepare_search
 try:
     import matplotlib
     matplotlib.use("agg")

@@ -3,7 +3,7 @@ import struct
 
 import discord
 from bs4 import BeautifulSoup
-from cogs.guildwars2.utils.db import prepare_search
+from .utils.db import prepare_search
 from discord import app_commands
 from discord.app_commands import Choice
 

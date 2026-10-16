@@ -1,6 +1,7 @@
 import datetime
 import json
 import logging
+import pathlib
 
 import discord
 from PIL import ImageFont
@@ -28,6 +29,8 @@ from .skills import SkillsMixin
 from .wallet import WalletMixin
 from .worldsync import WorldsyncMixin
 from .wvw import WvwMixin
+
+DATA_DIR = pathlib.Path(__file__).resolve().parent
 
 
 class GuildWars2(
@@ -58,11 +61,9 @@ class GuildWars2(
     def __init__(self, bot):
         self.bot = bot
         self.db = self.bot.database.db.gw2
-        with open("cogs/guildwars2/gamedata.json", encoding="utf-8", mode="r") as f:
+        with open(DATA_DIR / "gamedata.json", encoding="utf-8", mode="r") as f:
             self.gamedata = json.load(f)
-        with open(
-            "cogs/guildwars2/instabilities.json", encoding="utf-8", mode="r"
-        ) as f:
+        with open(DATA_DIR / "instabilities.json", encoding="utf-8", mode="r") as f:
             self.instabilities = json.load(f)
         self.session = bot.session
         self.httpx_client = httpx.AsyncClient()

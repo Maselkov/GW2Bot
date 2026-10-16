@@ -10,7 +10,6 @@ services:
       MONGO_HOST: mongo
       MONGO_PORT: 27017
     volumes:
-      - settings:/app/settings
       - logs:/app/logs
       - ./fonts:/app/fonts:ro
 
@@ -30,6 +29,5 @@ services:
       retries: 5
 
 volumes:
-  settings:
   logs:
   mongo-data:

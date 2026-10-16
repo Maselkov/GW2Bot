@@ -2,7 +2,7 @@
 import pytest
 
 import subject
-from cogs.guildwars2.exceptions import (
+from gw2bot.cogs.guildwars2.exceptions import (
     APIBadRequest,
     APIConnectionError,
     APIForbidden,
