@@ -23,7 +23,7 @@ class EmojiMixin:
         def get_emoji():
             search_str = emoji.lower().replace(" ", "_")
             # Remove illegal emoji characters
-            search_str = re.sub("[\.,\,,',\:,\;,!\?]", "", search_str)
+            search_str = re.sub(r"[\.,\,,',\:,\;,!\?]", "", search_str)
             emoji_id = self.emojis.get(search_str)
             if emoji_id:
                 emoji_obj = self.bot.get_emoji(emoji_id)

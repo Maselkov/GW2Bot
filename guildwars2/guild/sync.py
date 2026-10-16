@@ -854,7 +854,7 @@ class GuildSync:
             for target in targets:
                 member = target.member
                 membership_duration = (
-                    datetime.utcnow() - member.joined_at
+                    discord.utils.utcnow() - member.joined_at
                 ).total_seconds()
                 if not target.is_in_any_guild:
                     if len(member.roles) == 1 and membership_duration > 172800:

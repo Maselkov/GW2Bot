@@ -3,6 +3,6 @@ pillow
 requests
 tenacity
 matplotlib
-discord-py-interactions
+discord.py>=2.7.1
 httpx
 html2markdown

@@ -831,12 +831,12 @@ class CharactersMixin:
                             else:
                                 runes[upgrade] = 1
                         elif item_upgrade["details"]["type"] == "Sigil":
-                            pattern_percentage = re.compile("^\+\d{1,}% ")
+                            pattern_percentage = re.compile(r"^\+\d{1,}% ")
                             bonus = item_upgrade["details"]["infix_upgrade"][
                                 "buff"]["description"]
                             if pattern_percentage.match(bonus):
                                 modifier = re.sub(' .*$', '', bonus)
-                                modifier = re.sub('\+', '', modifier)
+                                modifier = re.sub(r'\+', '', modifier)
                                 modifier = re.sub('%', '', modifier)
                                 attribute_name = bonus.title()
                                 attribute_name = re.sub(
@@ -850,7 +850,7 @@ class CharactersMixin:
                                 attribute_name = re.sub(
                                     '^.* ', '', attribute_name)
                                 attribute_name = re.sub(
-                                    '\.', '', attribute_name)
+                                    r'\.', '', attribute_name)
                                 if attribute_name in attr_dict:
                                     attr_dict[attribute_name] += int(modifier)
             # Infusions
@@ -881,13 +881,13 @@ class CharactersMixin:
             count = 0
             for bonus in bonuses:
                 if count < runecount:
-                    pattern_single = re.compile("^\+\d{1,} ")
+                    pattern_single = re.compile(r"^\+\d{1,} ")
                     pattern_all_stats = re.compile(".* [s,S]tats$")
-                    pattern_percentage = re.compile("^\+\d{1,}% ")
+                    pattern_percentage = re.compile(r"^\+\d{1,}% ")
                     # Regex deciding if it's a stat
                     if pattern_all_stats.match(bonus):
                         modifier = re.sub(' .*$', '', bonus)
-                        modifier = re.sub('\+', '', modifier)
+                        modifier = re.sub(r'\+', '', modifier)
                         attr_dict["Power"] += int(modifier)
                         attr_dict["Vitality"] += int(modifier)
                         attr_dict["Toughness"] += int(modifier)
@@ -898,18 +898,18 @@ class CharactersMixin:
                     elif pattern_single.match(bonus):
                         # Regex deciding the attribute name + modifier
                         modifier = re.sub(' .*$', '', bonus)
-                        modifier = re.sub('\+', '', modifier)
+                        modifier = re.sub(r'\+', '', modifier)
                         attribute_name = re.sub(' Damage', 'Damage', bonus)
                         attribute_name = re.sub('Damage.*', 'Damage',
                                                 attribute_name)
-                        attribute_name = re.sub('\+\d{1,} ', '',
+                        attribute_name = re.sub(r'\+\d{1,} ', '',
                                                 attribute_name)
                         attribute_name = re.sub(';.*', '', attribute_name)
                         if attribute_name in attr_dict:
                             attr_dict[attribute_name] += int(modifier)
                     elif pattern_percentage.match(bonus):
                         modifier = re.sub(' .*$', '', bonus)
-                        modifier = re.sub('\+', '', modifier)
+                        modifier = re.sub(r'\+', '', modifier)
                         modifier = re.sub('%', '', modifier)
                         attribute_name = re.sub(' Duration', 'Duration', bonus)
                         attribute_name = re.sub('Duration.*', 'Duration',
