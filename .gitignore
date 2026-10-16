@@ -105,3 +105,7 @@ ENV/
 
 # Pycharm
 .idea/
+
+# Fonts are mounted into the Docker container, not committed
+fonts/*
+!fonts/.gitkeep

@@ -1,0 +1,31 @@
+services:
+  bot:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      MONGO_HOST: mongo
+      MONGO_PORT: 27017
+    volumes:
+      - settings:/app/settings
+      - logs:/app/logs
+      - ./fonts:/app/fonts:ro
+
+  mongo:
+    image: mongo:9
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  settings:
+  logs:
+  mongo-data:

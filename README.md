@@ -6,6 +6,25 @@ An extension to [Toothy](https://github.com/Maselkov/Toothy).
 
 ## How To Run
 
+### With Docker
+
+The Docker image bundles Toothy and GW2Bot, and `docker-compose.yml` runs it alongside MongoDB.
+
+```bash
+# Fill in DISCORD_TOKEN and OWNER_ID (see the Discord steps in the Toothy README)
+cp .env.example .env
+
+docker compose up -d --build
+```
+
+The GW2Bot extension is loaded automatically. Once the bot is online, send it `>sync` in a direct message to register the slash commands.
+
+The container generates `settings/config.json` from the environment variables in `.env`. Settings and logs persist in the `settings` and `logs` volumes, and MongoDB data in `mongo-data`. To pin a different Toothy version, build with `--build-arg TOOTHY_REF=<branch|tag|commit>`.
+
+To use the Guild Wars 2 font in generated images, place `GWTwoFont1p1.ttf` in the `fonts` directory. It is mounted into the container. Without it, the default font is used.
+
+### Manually
+
 First you must install Toothy by following the [Toothy setup instructions](https://github.com/Maselkov/Toothy/blob/master/README.md).
 
 Then clone GW2Bot into the `cogs` directory and install the dependencies:

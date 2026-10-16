@@ -1,0 +1,8 @@
+.git
+.venv
+.vscode
+.idea
+.env
+**/__pycache__
+**/*.py[cod]
+fonts
