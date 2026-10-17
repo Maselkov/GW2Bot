@@ -258,6 +258,7 @@ class EventsMixin:
             "pof": "PoF Event Timer",
             "day": "Day/Night cycle",
             "eod": "End of Dragons",
+            "soto": "Secrets of the Obscure",
             "ibs": "The Icebrood Saga"
         }.get(group)
         embed = discord.Embed(title=title,

@@ -29,7 +29,7 @@ def generate_population_graph(data):
     ax.step(*zip(*data), where="post", color="#c12d2b")
     ax.tick_params(axis="x", which="major", pad=0)
     ax.tick_params(axis="both", labelcolor="#ffa600", color="#c12d2b")
-    ax.grid(b=True,
+    ax.grid(visible=True,
             which="both",
             color="black",
             linestyle="-",
@@ -47,7 +47,7 @@ def generate_population_graph(data):
     ax.xaxis.set_major_locator(locator)
     ax.xaxis.set_major_formatter(formatter)
     for tick in ax.xaxis.get_major_ticks() + ax.yaxis.get_major_ticks():
-        tick.label.set_path_effects(path_effects)
+        tick.label1.set_path_effects(path_effects)
     buf = io.BytesIO()
     fig.savefig(buf,
                 format="png",

@@ -346,7 +346,7 @@
             0,
             20
           ],
-          "interval": 5,
+          "interval": 2,
           "waypoint": "[&BEwCAAA=], [&BOYBAAA=], [&BJEBAAA=]"
         }
       ],
@@ -983,6 +983,10 @@
           },
           {
             "name": "Canthan Dusk",
+            "duration": 5
+          },
+          {
+            "name": "Canthan Night",
             "duration": 20
           }
         ]

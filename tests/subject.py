@@ -449,3 +449,77 @@ async def account_ap(db, progress, account):
     harness = _Harness()
     harness.db = db
     return await harness.calculate_user_ap(progress, account)
+
+
+# --- Update notes from the forum -------------------------------------------
+
+class FakeCollection:
+    """The find_one/insert_one/update_one subset used on gw2.updates."""
+
+    def __init__(self):
+        self.docs = []
+
+    async def find_one(self, query):
+        return next((d for d in self.docs if all(d.get(k) == v for k, v in query.items())), None)
+
+    async def insert_one(self, doc):
+        self.docs.append(dict(doc))
+
+    async def update_one(self, query, update):
+        doc = await self.find_one(query)
+        doc.update(update["$set"])
+
+
+class FakePageSession:
+    """Serves {url: (status, text)}; anything else is a 404."""
+
+    def __init__(self, pages):
+        self.pages = pages
+
+    def get(self, url, timeout=None):
+        status, text = self.pages.get(url, (404, "Not found"))
+        response = MagicMock(status=status)
+
+        async def read_text():
+            return text
+
+        response.text = read_text
+        return _AsyncContext(response)
+
+
+class _AsyncContext:
+    def __init__(self, value):
+        self.value = value
+
+    async def __aenter__(self):
+        return self.value
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+class UpdateNotesChecker:
+    """Runs the update-notes check against a fake forum, keeping state
+    (sent counts, blocked flag) between checks like the running bot does."""
+
+    def __init__(self, pages):
+        # (sic) the class name has a doubled "i"
+        from gw2bot.cogs.guildwars2.notifiers import NotiifiersMixin
+
+        class Notifier(NotiifiersMixin):
+            pass
+
+        self.notifier = Notifier()
+        self.notifier.log = logging.getLogger("tests.update_notes")
+        self.notifier.bot = MagicMock()
+        self.updates = FakeCollection()
+        self.notifier.bot.database.db.gw2.updates = self.updates
+        self.pages = pages
+        self.notifier.session = FakePageSession(pages)
+
+    async def check(self):
+        """[(title, markdown, minor)] for the notes the bot would send."""
+        notes = await self.notifier.update_notification("12345") or []
+        return [
+            (embed.title, embed.fields[0].value, minor) for embed, text, minor in notes
+        ]

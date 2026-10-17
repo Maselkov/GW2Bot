@@ -50,17 +50,7 @@ def _timer_maps(gamedata):
 @pytest.mark.parametrize(
     "group_map",
     [
-        pytest.param(
-            (group, location["name"]),
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason="Canthan cycle is Night 55 / Dawn 5 / Day 55 / Dusk 5 per the "
-                "wiki; the data has a 20 min Dusk and no 5 min Dusk (115 min total)",
-            )
-            if location["name"] == "Canthan cycle"
-            else (),
-            id=f"{group}-{location['name']}",
-        )
+        pytest.param((group, location["name"]), id=f"{group}-{location['name']}")
         for group, location in _timer_maps(subject._GAMEDATA)
     ],
 )
@@ -77,12 +67,7 @@ def test_event_timer_maps_span_two_hours(gamedata, group_map):
         "pof",
         "ibs",
         "eod",
-        pytest.param(
-            "soto",
-            marks=pytest.mark.xfail(
-                strict=True, reason="timer_embed has no title for the soto group"
-            ),
-        ),
+        "soto",
         "day",
     ],
 )
@@ -90,17 +75,10 @@ def test_event_timer_groups_have_titles(group):
     assert subject.timer_titles()[group]
 
 
-LEY_LINE_XFAIL = pytest.mark.xfail(
-    strict=True,
-    reason="Ley-Line Anomaly spawns every 2 hours (at :20) per the wiki; the "
-    "data has a 5 hour interval",
-)
-
-
 @pytest.mark.parametrize(
     "name",
     [
-        pytest.param(b["name"], marks=LEY_LINE_XFAIL if b["name"] == "Ley-Line Anomaly" else ())
+        b["name"]
         for b in subject._GAMEDATA["event_timers"]["bosses"]["normal"]
     ],
 )
@@ -117,8 +95,8 @@ def test_hardcore_world_boss_times(gamedata):
             assert 0 <= hour < 24 and 0 <= minute < 60, boss["name"]
 
 
-@LEY_LINE_XFAIL
 def test_ley_line_anomaly_schedule():
+    # Every 2 hours at :20, per https://wiki.guildwars2.com/wiki/Ley-Line_Anomaly
     import datetime
 
     start = datetime.datetime(2024, 3, 1, 0, 0, tzinfo=datetime.timezone.utc)
