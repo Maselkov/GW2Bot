@@ -26,6 +26,7 @@ from .notifiers import NotiifiersMixin
 from .pvp import PvpMixin
 from .skills import SkillsMixin
 from .wallet import WalletMixin
+from .wizardsvault import WizardsVaultMixin
 from .wvw import WvwMixin
 
 DATA_DIR = pathlib.Path(__file__).resolve().parent
@@ -51,6 +52,7 @@ class GuildWars2(
     PvpMixin,
     SkillsMixin,
     WalletMixin,
+    WizardsVaultMixin,
     WvwMixin,
 ):
     """Guild Wars 2 commands"""

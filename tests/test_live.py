@@ -102,6 +102,26 @@ async def test_wallet(client):
     assert all({"id", "value"} <= entry.keys() for entry in wallet)
 
 
+OBJECTIVE_FIELDS = {"title", "track", "acclaim", "progress_current", "progress_complete", "claimed"}
+
+
+@needs_key
+@pytest.mark.parametrize("period", ["daily", "weekly"])
+async def test_wizards_vault(client, period):
+    data = await get(client, f"account/wizardsvault/{period}", authenticated=True)
+    assert {
+        "meta_progress_current", "meta_progress_complete", "meta_reward_astral",
+        "meta_reward_claimed", "objectives",
+    } <= data.keys()
+    assert all(OBJECTIVE_FIELDS <= o.keys() for o in data["objectives"])
+
+
+@needs_key
+async def test_wizards_vault_special(client):
+    data = await get(client, "account/wizardsvault/special", authenticated=True)
+    assert all(OBJECTIVE_FIELDS <= o.keys() for o in data["objectives"])
+
+
 async def test_bot_client_against_live_api(client):
     """The bot's own client, end to end (the tests above deliberately aren't)."""
     from gw2bot.gw2api import APINotFound, Client
