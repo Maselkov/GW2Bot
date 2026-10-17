@@ -35,6 +35,8 @@ jobs:
     uses: ./.github/workflows/_deploy.yml
     permissions:
       contents: read
+    # Environment secrets only reach a reusable workflow when inherited
+    secrets: inherit
     with:
       environment: prod
       image: ${{ needs.build.outputs.image }}
