@@ -12,6 +12,7 @@ from discord import app_commands
 from discord.app_commands import Choice
 from discord.ext import tasks
 
+from . import update_notes
 from .daily import DAILY_CATEGORIES
 from .exceptions import APIError
 from .utils.markdown import html_to_markdown
@@ -517,86 +518,72 @@ class NotiifiersMixin:
         await self.bot.wait_until_ready()
 
     async def update_notification(self, new_build):
-        def get_short_patchnotes(body, url):
-            if len(body) < 1000:
-                return body
-            return body[:1000] + " ..."
+        """[(embed, text, minor)] for update-notes posts not announced yet.
 
-        async def db_find_forum_post(title):
-            return await self.bot.database.db.gw2.updates.find_one({"title": title})
-
-        async def db_insert_forum_post(title):
-            await self.bot.database.db.gw2.updates.insert_one({"title": title, "count": 0})
-
-        async def db_update_forum_post(title, count):
-            await self.bot.database.db.gw2.updates.update_one({"title": title}, { "$set": {"title": title, "count": count} })
+        Posts come from the forum topic page. When that can't be read (the
+        forum answers some clients with a Cloudflare challenge), the RSS
+        feed's copy of the first post is used instead.
+        """
+        updates = self.bot.database.db.gw2.updates
 
         def build_embed(title, url, data):
+            if len(data) >= 1000:
+                data = data[:1000] + " ..."
             e = discord.Embed(title=title, color=discord.Color.dark_red())
             e.url = url
-            data = get_short_patchnotes(data, url)
             e.add_field(name="Update Notes", value=data)
             e.set_footer(text="Build: {}".format(new_build))
             return e
 
         async def fetch(url):
+            """(status, body) for a GET."""
             timeout = aiohttp.ClientTimeout(total=30)
             async with self.session.get(url, timeout=timeout) as response:
-                if response.status != 200:
-                    self.log.warning("Update notes: %s returned %s", url, response.status)
-                return await response.text()
+                return response.status, await response.text()
 
-        async def get_page(url):
-            return BeautifulSoup(await fetch(url), "html.parser")
+        status, feed = await fetch(update_notes.FEED_URL)
+        if status != 200:
+            self.log.warning("Update notes: feed returned %s", status)
+            return None
+        latest = update_notes.parse_feed(feed)
+        if not latest:
+            return None
+        title, link, first_post, published = latest
 
-        update_feed_url = (
-            "https://en-forum.guildwars2.com/forum/6-game-update-notes.xml"
-        )
+        doc = await updates.find_one({"title": title})
+        if not doc:
+            await updates.insert_one({"title": title, "count": 0})
+        sent = doc["count"] if doc else 0
+        if sent == 0 and update_notes.too_old_to_announce(published):
+            # Old thread whose first post was never announced: skip it, but
+            # still send later posts (hotfixes)
+            sent = 1
 
-        # Get latest forum post from RSS feed
-        feed = et.fromstring(await fetch(update_feed_url))
-        channel = feed.find("channel")
-        latest_post = channel.find("item")
+        status, page = await fetch(link)
+        posts = update_notes.parse_topic_posts(page) if status == 200 else []
+        blocked = not posts
+        if blocked != getattr(self, "update_notes_blocked", False):
+            # Logged on change only; this runs every minute
+            if blocked:
+                self.log.warning(
+                    "Update notes: can't read forum posts (HTTP %s), using the RSS feed's first post", status
+                )
+            else:
+                self.log.info("Update notes: forum posts readable again")
+            self.update_notes_blocked = blocked
+        if blocked and first_post:
+            posts = [first_post]
 
-        title = latest_post.find("title").text
-        link = latest_post.find("link").text
+        to_send = update_notes.notes_to_send(sent, posts)
+        if not to_send:
+            return None
+        await updates.update_one({"title": title}, {"$set": {"title": title, "count": len(posts)}})
+        text_version = "Guild Wars 2 has just updated!"
+        return [
+            (build_embed(title, link, html_to_markdown(post)), text_version, minor)
+            for post, minor in to_send
+        ]
 
-        # Search for the main post
-        post_is_in_db = await db_find_forum_post(title)
-
-        if not post_is_in_db:
-            # New forum post, insert with 0 messages sent
-            await db_insert_forum_post(title)
-            count = 0
-            minor = False
-        else:
-            # Retrieve amount of messages sent for this post
-            count = post_is_in_db['count']
-            minor = True
-
-        # Retrieve HTML source from forum
-        forum_post = await get_page(link)
-        if forum_post:
-            posts = forum_post.select('#elPostFeed')
-            comments = [element.find_all('article') for element in posts]
-            comments = [element.select('div[data-role="commentContent"]') for element in posts]
-            filtered_div_tags = [tag for sublist in comments for tag in sublist]
-
-            # Check for new posts
-            amount_comments_in_post = len(filtered_div_tags)
-
-            if count < amount_comments_in_post:
-                all_notes = []
-                for comment in filtered_div_tags[count:]:
-                    md_text = html_to_markdown(str(comment))
-                    e = build_embed(title, link, md_text)
-
-                    text_version = "Guild Wars 2 has just updated!"
-                    notes = (e, text_version, minor)
-                    all_notes.append(notes)
-                await db_update_forum_post(title, amount_comments_in_post)
-                return all_notes
-        
     async def check_news(self):
         doc = await self.bot.database.get_cog_config(self)
         if not doc:

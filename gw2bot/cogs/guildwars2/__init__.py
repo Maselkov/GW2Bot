@@ -77,9 +77,6 @@ class GuildWars2(
             self.font = ImageFont.truetype("GWTwoFont1p1.ttf", size=30)
         except IOError:
             self.font = ImageFont.load_default()
-        setup_tasks = [self.prepare_emojis, self.prepare_linkpreview_guild_cache]
-        for task in setup_tasks:
-            bot.loop.create_task(task())
         self.tasks = [
             self.game_update_checker,
             self.news_checker,
@@ -101,6 +98,9 @@ class GuildWars2(
             task.start()
 
     async def cog_load(self):
+        # Runs after setup() has created the cog's config document
+        await self.prepare_emojis()
+        await self.prepare_linkpreview_guild_cache()
         self.bot.add_view(EventTimerReminderUnsubscribeView(self))
         self.bot.add_view(GuildSyncPromptUserConfirmView(self))
 
@@ -114,7 +114,7 @@ class GuildWars2(
         if isinstance(error, APIKeyError):
             msg = str(error)
         elif isinstance(error, APIInactiveError):
-            msg = "The API is currently down. " "Try again later.".format
+            msg = "The API is currently down. Try again later."
         elif isinstance(error, APIInvalidKey):
             msg = "Your API key is invalid! Remove your " "key and add a new one"
         elif isinstance(error, APIError):

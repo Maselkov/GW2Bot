@@ -38,14 +38,9 @@ def decode_item_code(code):
         ((46762, 1, 3709, []), (1, 46762, {"skin": 3709})),
         ((46762, 1, None, [24575]), (1, 46762, {"upgrade1": 24575})),
         ((46762, 1, 3709, [24575]), (1, 46762, {"skin": 3709, "upgrade1": 24575})),
-        pytest.param(
+        (
             (46762, 1, 3709, [24575, 24615]),
             (1, 46762, {"skin": 3709, "upgrade1": 24575, "upgrade2": 24615}),
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason="generate_chat_code sets only the 0x20 flag for two "
-                "upgrades; the spec needs 0x40 | 0x20",
-            ),
         ),
     ],
 )
@@ -53,10 +48,6 @@ def test_chat_code_roundtrip(args, expected):
     assert decode_item_code(subject.chat_code(*args)) == expected
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="generate_chat_code appends a stray 0x00 byte after the last field",
-)
 @pytest.mark.parametrize(
     "args, code",
     [
@@ -371,14 +362,7 @@ def test_timer_state_merges_wrapped_phase():
         "ibs",
         "eod",
         "soto",
-        pytest.param(
-            "day",
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason="Canthan cycle data adds up to 115 minutes, so near the "
-                "end of the window the next phase lands in the past",
-            ),
-        ),
+        "day",
     ],
 )
 def test_timer_next_phase_is_always_in_future(group):
@@ -392,11 +376,6 @@ def test_timer_next_phase_is_always_in_future(group):
 # --- Error messages --------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="cog_error_handler assigns str.format instead of the message for "
-    "APIInactiveError",
-)
 def test_api_inactive_error_message():
     from gw2bot.cogs.guildwars2.exceptions import APIInactiveError
 
@@ -412,4 +391,21 @@ def test_api_error_messages():
     assert "invalid" in subject.api_error_message(APIInvalidKey())
     assert subject.api_error_message(APIError("boom")) == (
         "API has responded with the following error: `boom`"
+    )
+
+
+def test_canthan_cycle():
+    # Night 55 / Dawn 5 / Day 55 / Dusk 5 per the wiki; night spans the
+    # end and start of each 2 hour window
+    state = subject.timer_state("day", datetime.datetime(2024, 3, 1, 1, 58, tzinfo=UTC))
+    assert state["Canthan cycle"] == (
+        "Canthan Night",
+        "Canthan Dawn",
+        datetime.datetime(2024, 3, 1, 2, 35, tzinfo=UTC),
+    )
+    state = subject.timer_state("day", datetime.datetime(2024, 3, 1, 1, 36, tzinfo=UTC))
+    assert state["Canthan cycle"] == (
+        "Canthan Dusk",
+        "Canthan Night",
+        datetime.datetime(2024, 3, 1, 1, 40, tzinfo=UTC),
     )

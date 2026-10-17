@@ -180,16 +180,15 @@ class MiscMixin:
             return [int(x) for x in struct.pack("<i", _id)]
 
         def upgrade_flag():
-            skin = 0
-            first = 0
-            second = 0
+            # https://wiki.guildwars2.com/wiki/Chat_link_format
+            flag = 0
             if skin_id:
-                skin = 128
-            if len(upgrades) == 1:
-                first = 64
-            if len(upgrades) == 2:
-                second = 32
-            return skin | first | second
+                flag |= 0x80
+            if len(upgrades) >= 1:
+                flag |= 0x40
+            if len(upgrades) >= 2:
+                flag |= 0x20
+            return flag
 
         link = [2, count]
         link.extend(little_endian(item_id))
@@ -197,6 +196,5 @@ class MiscMixin:
         link.append(upgrade_flag())
         for x in filter(None, (skin_id, *upgrades)):
             link.extend(little_endian(x))
-        link.append(0)
         output = codecs.encode(bytes(link), 'base64').decode('utf-8')
         return "[&{}]".format(output.strip())
