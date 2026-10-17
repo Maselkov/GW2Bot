@@ -20,6 +20,7 @@ from gw2bot.cogs.guildwars2.api import ApiMixin
 from gw2bot.cogs.guildwars2.characters import CharactersMixin
 from gw2bot.cogs.guildwars2.commerce import CommerceMixin
 from gw2bot.cogs.guildwars2.daily import DailyMixin
+from gw2bot.cogs.guildwars2.database import DatabaseMixin
 from gw2bot.cogs.guildwars2.events import EventsMixin
 from gw2bot.cogs.guildwars2.misc import MiscMixin
 from gw2bot.cogs.guildwars2.skills import SkillsMixin
@@ -45,6 +46,7 @@ class _Harness(
     CharactersMixin,
     CommerceMixin,
     DailyMixin,
+    DatabaseMixin,
     EventsMixin,
     MiscMixin,
     SkillsMixin,
@@ -60,15 +62,13 @@ class _Harness(
         self.log = logging.getLogger("tests")
         self.bot = MagicMock()
         self.session = session
+        self.api = _client(session) if session is not None else None
 
     def get_emoji(self, ctx, emoji, *, fallback=False, fallback_fmt="{}", **kwargs):
         return fallback_fmt.format(emoji) if fallback else ""
 
     async def get_embed_color(self, ctx):
         return self.embed_color
-
-    async def cache_result(self, *args, **kwargs):
-        pass
 
 
 def _at(when):
@@ -246,10 +246,22 @@ def timer_state(group, now):
 
 # --- GW2 API ---------------------------------------------------------------
 
+def _client(session):
+    """A Client whose retry waits are recorded in session.delays, not slept."""
+    from gw2bot.gw2api import Client
+
+    async def sleep(delay):
+        session.delays.append(delay)
+
+    return Client(session, sleep=sleep)
+
+
 class FakeResponse:
-    def __init__(self, status, body):
+    def __init__(self, session, status, body, headers):
+        self.session = session
         self.status = status
         self._body = body
+        self.headers = headers
 
     async def json(self):
         import aiohttp
@@ -259,37 +271,98 @@ class FakeResponse:
         return self._body
 
     async def __aenter__(self):
+        self.session.in_flight += 1
+        self.session.max_in_flight = max(self.session.max_in_flight, self.session.in_flight)
+        # Let other requests start, so concurrency limits are observable
+        for _ in range(3):
+            await asyncio.sleep(0)
         return self
+
+    async def __aexit__(self, *exc):
+        self.session.in_flight -= 1
+        return False
+
+
+class FakeFailure:
+    """Raised when the request is made: a timeout or network error."""
+
+    def __init__(self, error):
+        self.error = error
+
+    async def __aenter__(self):
+        raise self.error
 
     async def __aexit__(self, *exc):
         return False
 
 
 class FakeSession:
-    """Serves queued (status, body) responses; a str body is a non-JSON page.
+    """Serves queued responses to the GW2 API client.
 
-    The last response repeats once the queue is exhausted. Requests are
-    recorded as (url, dict of query params).
+    Each response is (status, body), (status, body, headers) or an
+    exception to raise; a str body is a non-JSON page. The last response
+    repeats once the queue is exhausted. Records requests as (url, query
+    params, headers) and retry waits in `delays`.
     """
 
     def __init__(self, *responses):
         self.responses = list(responses)
         self.requests = []
+        self.delays = []
+        self.in_flight = 0
+        self.max_in_flight = 0
 
-    def get(self, url, headers=None, params=None):
-        self.requests.append((url, dict(params or [])))
-        status, body = self.responses.pop(0) if len(self.responses) > 1 else self.responses[0]
-        return FakeResponse(status, body)
+    def get(self, url, headers=None, params=None, timeout=None):
+        self.requests.append((url, dict(params or []), dict(headers or {})))
+        response = self.responses.pop(0) if len(self.responses) > 1 else self.responses[0]
+        if isinstance(response, BaseException):
+            return FakeFailure(response)
+        status, body, *rest = response
+        return FakeResponse(self, status, body, rest[0] if rest else {})
 
 
-async def api_get(session, endpoint, key=None):
-    """Call the GW2 API through the bot's client, using `session` for HTTP."""
-    from unittest.mock import patch
+async def api_get(session, endpoint, key=None, schema=None):
+    """GET through the bot's GW2 API client, using `session` for HTTP."""
+    return await _client(session).get(endpoint, key=key, schema=schema)
 
-    from tenacity import wait_none
 
-    with patch.object(ApiMixin.call_api.retry, "wait", wait_none()):
-        return await _Harness(session).call_api(endpoint, key=key)
+async def api_get_many(session, endpoints, key=None):
+    return await _client(session).get_many(endpoints, key=key)
+
+
+class FakeUserDatabase:
+    """The bot.database calls behind fetch_key and the rename check."""
+
+    def __init__(self, doc):
+        self.doc = doc
+        self.writes = []
+
+    async def get_user(self, user, cog=None):
+        return self.doc
+
+    async def get(self, user, cog=None):
+        return self.doc
+
+    async def set(self, user, settings, cog=None, *, operator="set"):
+        self.writes.append((operator, settings))
+
+
+async def fetch_account(session, stored, user_id=1):
+    """Call /account as a user whose stored settings are `stored`.
+
+    Returns (account data, database writes, DMs sent to the user), after
+    any background work the call started has finished.
+    """
+    from unittest.mock import AsyncMock
+
+    harness = _Harness(session)
+    harness.bot.database = FakeUserDatabase(stored)
+    user = MagicMock(id=user_id)
+    user.send = AsyncMock()
+    data = await harness.call_api("account", user)
+    await asyncio.gather(*getattr(harness, "background_tasks", ()), return_exceptions=True)
+    sent = [call.args[0] for call in user.send.await_args_list]
+    return data, harness.bot.database.writes, sent
 
 
 def api_error_message(error):

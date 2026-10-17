@@ -17,7 +17,6 @@ dependencies = [
     # 4.13 is the first release with the async API generally available
     "pymongo>=4.13",
     "pillow",
-    "tenacity",
 ]
 
 [project.optional-dependencies]
