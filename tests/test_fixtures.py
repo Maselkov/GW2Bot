@@ -112,3 +112,21 @@ def test_recorder_jitters_wallet_and_pvp(scrubber):
 def test_recorder_refuses_to_write_leaks(recorder, scrubber):
     with pytest.raises(recorder.LeakError):
         scrubber.check("characters", json.dumps({"note": "bound to Other Name"}))
+
+
+def test_recorded_wvw_match_summary():
+    match = load("wvw__matches__world-11001.json")
+    summary = subject.wvw_match_summary(match, 11001)
+    assert summary["color"] == "green"
+    assert summary["score"] == match["scores"]["green"]
+    assert summary["kills"] == match["kills"]["green"]
+    assert 0 < summary["points_per_tick"]
+    # Only the teams, not the world ids from before the restructuring
+    assert summary["teams"] == {"red": [11011], "blue": [11007], "green": [11001]}
+
+
+def test_recorded_wvw_match_without_the_team():
+    match = load("wvw__matches__world-11001.json")
+    assert subject.wvw_match_summary(match, 11002) is None
+    # A legacy world id isn't a team
+    assert subject.wvw_match_summary(match, 1) is None
