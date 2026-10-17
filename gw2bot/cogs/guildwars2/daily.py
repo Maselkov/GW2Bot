@@ -10,30 +10,69 @@ from .utils.chat import en_space, tab
 
 DAILY_CATEGORIES = [
     {
-        "value": "pve",
-        "name": "PvE"
-    },
-    {
-        "value": "pvp",
-        "name": "PvP"
-    },
-    {
-        "value": "wvw",
-        "name": "WvW"
+        "value": "psna",
+        "name": "PSNA - Pact Supply Network Agent"
     },
     {
         "value": "fractals",
         "name": "Fractals"
     },
     {
-        "value": "psna",
-        "name": "PSNA - Pact Supply Network Agent"
+        "value": "raids",
+        "name": "Raid Bounties"
     },
     {
-        "value": "strikes",
-        "name": "Strikes"
+        "value": "lw",
+        "name": "Living World Seasons 3 & 4"
     },
 ]
+# Categories servers saved before the Wizard's Vault replaced daily
+# achievements. Strikes are raid encounters now, and the Living World dailies
+# used to be listed under PvE.
+LEGACY_CATEGORIES = {"strikes": "raids", "pve": "lw"}
+# Achievement categories that list the day's rotation in `achievements` and
+# the next day's in `tomorrow`
+ACHIEVEMENT_CATEGORIES = {
+    "fractals": 88,
+    "raids": 475,
+    "lws3": 238,
+    "lws4": 243,
+}
+# First schema with the `tomorrow` list
+CATEGORY_SCHEMA = "2022-03-23T19:00:00.000Z"
+PSNA_RESET = datetime.timedelta(hours=8)
+
+
+def normalize_categories(categories):
+    """Saved categories in display order, legacy ones mapped or dropped."""
+    known = [cat["value"] for cat in DAILY_CATEGORIES]
+    wanted = {LEGACY_CATEGORIES.get(cat, cat) for cat in categories or []}
+    return [cat for cat in known if cat in wanted] or known
+
+
+def daily_rotation(categories, names):
+    """{"today": {key: [names]}, "tomorrow": {...}} for ACHIEVEMENT_CATEGORIES.
+
+    categories: /v2/achievements/categories response (CATEGORY_SCHEMA).
+    names: {achievement id: name}.
+    """
+    by_id = {category["id"]: category for category in categories}
+    rotation = {"today": {}, "tomorrow": {}}
+    for key, category_id in ACHIEVEMENT_CATEGORIES.items():
+        category = by_id.get(category_id, {})
+        for day, field in (("today", "achievements"), ("tomorrow", "tomorrow")):
+            day_names = [
+                names[entry["id"]] for entry in category.get(field) or []
+                if entry["id"] in names
+            ]
+            if key == "fractals":
+                # Only the top tier, like the old daily list
+                day_names = [
+                    name for name in day_names if name.startswith(
+                        ("Daily Tier 4 ", "Daily Recommended Fractal"))
+                ]
+            rotation[day][key] = sorted(day_names)
+    return rotation
 
 
 class DailyMixin:
@@ -55,7 +94,7 @@ class DailyMixin:
         await interaction.response.defer()
         tomorrow = bool(tomorrow)
         if category == "all":
-            category = ["psna", "pve", "pvp", "wvw", "fractals", "strikes"]
+            category = [cat["value"] for cat in DAILY_CATEGORIES]
         else:
             category = [category]
         try:
@@ -63,15 +102,9 @@ class DailyMixin:
                                            interaction=interaction,
                                            tomorrow=tomorrow)
         except ValueError:
-            if tomorrow:
-                return await interaction.followup.send(
-                    "Due to current GW2 API issues, tomorrow "
-                    "dailies will not be avaialble for one hour after reset.",
-                    ephemeral=True)
-            else:
-                return await interaction.followup.send(
-                    "Dailies are current unavailable. Try again in a bit",
-                    ephemeral=True)
+            return await interaction.followup.send(
+                "Dailies are currently unavailable. Try again in a bit",
+                ephemeral=True)
         await interaction.followup.send(embed=embed)
 
     def get_year_day(self, tomorrow=True):
@@ -89,8 +122,6 @@ class DailyMixin:
                           doc=None,
                           interaction=None,
                           tomorrow=False):
-        # All of this mess needs a rewrite at this point tbh, but I just keep
-        # adding more on top of it. Oh well, it works.. for now
         if not doc:
             doc = await self.bot.database.get_cog_config(self)
         if interaction:
@@ -101,60 +132,51 @@ class DailyMixin:
         if tomorrow:
             embed.title += " tomorrow"
         key = "dailies" if not tomorrow else "dailies_tomorrow"
-        dailies = doc["cache"][key]
-        if not dailies:
+        dailies = doc["cache"].get(key)
+        if not dailies or "raids" not in dailies:
+            # Not cached yet, or still in the format from before the
+            # Wizard's Vault
             raise ValueError
+        categories = normalize_categories(categories)
         for category in categories:
-            no_upper = False
             if category == "psna":
-                if datetime.datetime.utcnow().hour >= 8 and not tomorrow:
-                    value = "\n".join(dailies["psna_later"])
-                else:
-                    value = "\n".join(dailies["psna"])
+                self.add_psna_fields(embed, interaction, tomorrow=tomorrow)
             elif category == "fractals":
                 fractals = self.get_fractals(dailies["fractals"],
                                              interaction,
                                              tomorrow=tomorrow)
-                value = "\n".join(fractals[0])
-            elif category == "strikes":
-                category = "Priority Strikes"
-                strikes = self.get_strike(interaction, tomorrow=tomorrow)
-                value = strikes
-            else:
-                lines = []
-                for i, d in enumerate(dailies[category]):
-                    # HACK handling for emojis for lws dailies. Needs rewrite
-                    emoji = self.get_emoji(interaction, f"daily {category}")
-                    if category == "pve":
-                        if i == 5:
-                            emoji = self.get_emoji(interaction, "daily lws3")
-                        elif i == 6:
-                            emoji = self.get_emoji(interaction, "daily lws4")
-                    lines.append(emoji + d)
-                value = "\n".join(lines)
-            if category == "psna_later":
-                no_upper = True
-                now = datetime.datetime.now(
-                    datetime.timezone.utc) + datetime.timedelta(days=1)
-                now = now.replace(minute=0, second=0, microsecond=0, hour=8)
-                category = f"PSNA <t:{int(now.timestamp())}:R>"
-            value = re.sub(r"(?:Daily|Tier 4|PvP|WvW) ", "", value)
-            if category.startswith("psna"):
-                category = self.get_emoji(interaction, "daily psna") + category
-            if category == "fractals":
-                embed.add_field(name="> Daily Fractals",
-                                value="\n".join(fractals[0]))
+                if fractals[0]:
+                    embed.add_field(name="> Daily Fractals",
+                                    value="\n".join(fractals[0]))
                 embed.add_field(name="> CM Instabilities", value=fractals[2])
-                embed.add_field(
-                    name="> Recommended Fractals",
-                    value="\n".join(fractals[1]),
-                    inline=False,
-                )
-
-            else:
-                if not no_upper:
-                    category = category.upper()
-                embed.add_field(name=category, value=value, inline=False)
+                if fractals[1]:
+                    embed.add_field(
+                        name="> Recommended Fractals",
+                        value="\n".join(fractals[1]),
+                        inline=False,
+                    )
+            elif category == "raids":
+                emoji = self.get_emoji(interaction, "daily strike")
+                lines = [
+                    emoji + name.removeprefix("Raid Bounty: ")
+                    for name in dailies["raids"]
+                ]
+                if lines:
+                    embed.add_field(name="RAID BOUNTIES",
+                                    value="\n".join(lines),
+                                    inline=False)
+            elif category == "lw":
+                for season in "3", "4":
+                    emoji = self.get_emoji(interaction, f"daily lws{season}")
+                    lines = [
+                        emoji + name.removeprefix("Daily ")
+                        for name in dailies[f"lws{season}"]
+                    ]
+                    if lines:
+                        embed.add_field(
+                            name=f"LIVING WORLD SEASON {season}",
+                            value="\n".join(lines),
+                            inline=False)
         if "fractals" in categories:
             embed.set_footer(
                 text=self.bot.user.name +
@@ -167,29 +189,24 @@ class DailyMixin:
         embed.timestamp = datetime.datetime.utcnow()
         return embed
 
-    def get_lw_dailies(self, tomorrow=False):
-        LWS3_MAPS = [
-            "Bloodstone Fen",
-            "Ember Bay",
-            "Bitterfrost Frontier",
-            "Lake Doric",
-            "Draconis Mons",
-            "Siren's Landing",
-        ]
-        LWS4_MAPS = [
-            "Domain of Istan",
-            "Sandswept Isles",
-            "Domain of Kourna",
-            "Jahai Bluffs",
-            "Thunderhead Peaks",
-            "Dragonfall",
-        ]
-        day = self.get_year_day(tomorrow=tomorrow)
-        index = day % (len(LWS3_MAPS))
-        lines = []
-        lines.append(f"Daily Living World Season 3 - {LWS3_MAPS[index]}")
-        lines.append(f"Daily Living World Season 4 - {LWS4_MAPS[index]}")
-        return lines
+    def add_psna_fields(self, embed, ctx, *, tomorrow=False):
+        """The agents at the start of the day and after their next reset."""
+        now = datetime.datetime.now(datetime.timezone.utc)
+        start = now
+        if tomorrow:
+            start = (now + datetime.timedelta(days=1)).replace(
+                hour=0, minute=0, second=0, microsecond=0)
+        day = start.replace(hour=0, minute=0, second=0, microsecond=0)
+        next_reset = day + PSNA_RESET
+        if next_reset <= start:
+            next_reset += datetime.timedelta(days=1)
+        emoji = self.get_emoji(ctx, "daily psna")
+        embed.add_field(name=emoji + "PSNA",
+                        value=self.get_psna(start),
+                        inline=False)
+        embed.add_field(name=f"{emoji}PSNA <t:{int(next_reset.timestamp())}:R>",
+                        value=self.get_psna(next_reset),
+                        inline=False)
 
     def get_fractals(self, fractals, ctx, tomorrow=False):
         recommended_fractals = []
@@ -226,23 +243,11 @@ class DailyMixin:
             self.get_cm_instabilities(ctx=ctx, tomorrow=tomorrow),
         )
 
-    def get_psna(self, *, offset_days=0):
-        offset = datetime.timedelta(hours=-8)
-        tzone = datetime.timezone(offset)
-        day = datetime.datetime.now(tzone).weekday()
-        day = (day + offset_days) % 7
-        return self.gamedata["pact_supply"][day]
-
-    def get_strike(self, ctx, tomorrow=False):
-        day = self.get_year_day(tomorrow=tomorrow)
-        ibs_strikes = self.gamedata["strike_missions"]
-        eod_strikes = self.gamedata["eod_strike_missions"]
-        ibs_index = day % len(ibs_strikes)
-        eod_index = day % len(eod_strikes)
-        strike_emoji = self.get_emoji(ctx, "daily strike")
-        ibs_daily = strike_emoji + ibs_strikes[ibs_index]
-        eod_daily = strike_emoji + eod_strikes[eod_index]
-        return "\n".join([ibs_daily, eod_daily])
+    def get_psna(self, when=None):
+        """The Pact Supply Network Agents at `when` (default: now)."""
+        if when is None:
+            when = datetime.datetime.now(datetime.timezone.utc)
+        return self.gamedata["pact_supply"][(when - PSNA_RESET).weekday()]
 
     def get_instabilities(self, fractal_level, *, tomorrow=False, ctx=None):
         fractal_level = str(fractal_level)

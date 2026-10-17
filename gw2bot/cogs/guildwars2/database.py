@@ -1,6 +1,5 @@
 import asyncio
 import collections
-import datetime
 import re
 import time
 
@@ -11,6 +10,7 @@ from pymongo import ReplaceOne
 from pymongo.errors import BulkWriteError
 from discord.ext import tasks
 
+from .daily import ACHIEVEMENT_CATEGORIES, CATEGORY_SCHEMA, daily_rotation
 from .exceptions import APIError, APIKeyError
 from .utils.db import prepare_search
 
@@ -174,53 +174,25 @@ class DatabaseMixin:
                     "checked".format(user, missing))
         return doc["key"]
 
-    async def cache_dailies(self, *, tomorrow=False, real_tomorrow=False):
-        if not tomorrow:
-            try:
-                await self.cache_endpoint("achievements")
-            except Exception:
-                pass
-        try:
-            ep = "achievements/daily"
-            if tomorrow:
-                ep += "/tomorrow"
-            results = await self.call_api(
-                ep, schema_string="2021-07-15T13:00:00.000Z")
-            doc = {}
-            for category, dailies in results.items():
-                daily_list = []
-                for daily in dailies:
-                    if not daily["level"]["max"] == 80:
-                        continue
-                    required_access = daily.get("required_access", {})
-                    if required_access.get("condition", "") == "NoAccess":
-                        continue
-                    daily_doc = await self.db.achievements.find_one(
-                        {"_id": daily["id"]})
-                    if not daily_doc:
-                        continue
-                    name = daily_doc["name"]
-                    if category == "fractals":
-                        if name.startswith(
-                                "Daily Tier"
-                        ) and not name.startswith("Daily Tier 4"):
-                            continue
-                    daily_list.append(name)
-                daily_list.sort()
-                if category == "pve":
-                    daily_list.extend(self.get_lw_dailies(tomorrow=tomorrow))
-                doc[category] = daily_list
-            offset = 0
-            if real_tomorrow:
-                offset = 1
-            doc["psna"] = [self.get_psna(offset_days=offset)]
-            doc["psna_later"] = [self.get_psna(offset_days=1 + offset)]
-            key = "cache.dailies"
-            if tomorrow:
-                key += "_tomorrow"
-            await self.bot.database.set_cog_config(self, {key: doc})
-        except Exception as e:
-            self.log.exception("Exception caching dailies: ", exc_info=e)
+    async def cache_dailies(self):
+        """Cache today's and tomorrow's dailies from achievement categories."""
+        ids = ",".join(str(i) for i in ACHIEVEMENT_CATEGORIES.values())
+        categories = await self.call_api(f"achievements/categories?ids={ids}",
+                                         schema_string=CATEGORY_SCHEMA)
+        achievement_ids = {
+            entry["id"]
+            for category in categories
+            for entry in category["achievements"] + (category.get("tomorrow") or [])
+        }
+        achievements = await self.call_api(
+            "achievements?ids=" + ",".join(str(i) for i in sorted(achievement_ids)))
+        names = {achievement["id"]: achievement["name"] for achievement in achievements}
+        rotation = daily_rotation(categories, names)
+        await self.bot.database.set_cog_config(
+            self, {
+                "cache.dailies": rotation["today"],
+                "cache.dailies_tomorrow": rotation["tomorrow"]
+            })
 
     async def cache_raids(self):
         raids = []
@@ -370,26 +342,17 @@ class DatabaseMixin:
             for it in items
         ]
 
-    @tasks.loop(
-        time=[datetime.time(hour=0, minute=0, tzinfo=datetime.timezone.utc)])
-    async def swap_daily_tomorrow_and_today(self):
-        current_doc = await self.bot.database.get_cog_config(self)
-        new_doc = {"cache.dailies_tomorrow": {}}
-        new_doc["cache.dailies"] = current_doc["cache"]["dailies_tomorrow"]
-        await self.bot.database.set_cog_config(self, new_doc)
+    @tasks.loop(minutes=15)
+    async def refresh_dailies(self):
+        # Often enough to pick up the new rotation soon after reset
+        try:
+            await self.cache_dailies()
+        except APIError as e:
+            self.log.warning("Couldn't cache dailies: %s", e)
+        except Exception:
+            # An escaping exception would stop the loop for good
+            self.log.exception("Exception caching dailies")
 
-    @swap_daily_tomorrow_and_today.error
-    async def swap_daily_tomorrow_and_today_error(self, error):
-        self.log.exception("Error while swapping dailies", exc_info=error)
-        self.swap_daily_tomorrow_and_today.restart()
-
-    @tasks.loop(
-        time=[datetime.time(hour=1, minute=1, tzinfo=datetime.timezone.utc)])
-    async def cache_dailies_tomorrow(self):
-        await self.cache_dailies(tomorrow=True, real_tomorrow=True)
-
-    @cache_dailies_tomorrow.error
-    async def cache_dailies_tomorrow_error(self, error):
-        self.log.exception("Error while caching tomorrow dailies",
-                           exc_info=error)
-        self.cache_dailies_tomorrow.restart()
+    @refresh_dailies.before_loop
+    async def before_refresh_dailies(self):
+        await self.bot.wait_until_ready()

@@ -84,21 +84,6 @@
     "[&BH8HAAA=][&BLkCAAA=][&BBEDAAA=][&BJIBAAA=][&BEICAAA=][&BBABAAA=]",
     "[&BIkHAAA=][&BDoBAAA=][&BO4CAAA=][&BC0AAAA=][&BIUCAAA=][&BCECAAA=]"
   ],
-  "strike_missions": [
-    "Cold War",
-    "Fraenir of Jormag",
-    "Shiverpeaks Pass",
-    "Voice of the Fallen and Claw of the Fallen",
-    "Whisper of Jormag",
-    "Boneskinner"
-  ],
-  "eod_strike_missions": [
-    "Aetherblade Hideout",
-    "Xunlai Jade Junkyard",
-    "Kaening Overlook",
-    "Harvest Temple",
-    "Old Lion's Court"
-  ],
   "fractals": {
     "Aetherblade": [
       14,

@@ -34,11 +34,6 @@ def test_pact_supply_has_a_list_per_weekday(gamedata):
     assert len(gamedata["pact_supply"]) == 7
 
 
-def test_strike_rotations_are_not_empty(gamedata):
-    assert gamedata["strike_missions"]
-    assert gamedata["eod_strike_missions"]
-
-
 def _timer_maps(gamedata):
     for group, maps in gamedata["event_timers"].items():
         if group == "bosses":

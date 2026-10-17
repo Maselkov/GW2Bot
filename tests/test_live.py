@@ -9,6 +9,8 @@ import os
 import aiohttp
 import pytest
 
+from gw2bot.cogs.guildwars2.daily import ACHIEVEMENT_CATEGORIES, CATEGORY_SCHEMA
+
 pytestmark = pytest.mark.live
 
 API = "https://api.guildwars2.com/v2/"
@@ -80,6 +82,18 @@ async def test_skill_fact_types_are_known(client):
         if fact["type"] not in KNOWN_FACT_TYPES
     }
     assert not unknown
+
+
+async def test_daily_achievement_categories(client):
+    ids = ",".join(str(i) for i in ACHIEVEMENT_CATEGORIES.values())
+    categories = await get(client, f"achievements/categories?ids={ids}&v={CATEGORY_SCHEMA}")
+    assert {c["id"] for c in categories} == set(ACHIEVEMENT_CATEGORIES.values())
+    for category in categories:
+        assert category["achievements"], category["id"]
+        assert category["tomorrow"], category["id"]
+        achievement_ids = [a["id"] for a in category["achievements"] + category["tomorrow"]]
+        achievements = await get(client, "achievements?ids=" + ",".join(map(str, achievement_ids)))
+        assert all(a["name"] for a in achievements)
 
 
 @needs_key
