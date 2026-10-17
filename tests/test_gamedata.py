@@ -30,6 +30,13 @@ def test_fractal_scales_are_unique(gamedata):
     assert len(scales) == len(set(scales))
 
 
+def test_wvw_team_ids_are_na_or_eu(gamedata):
+    assert gamedata["wvw_teams"]
+    for team_id, name in gamedata["wvw_teams"].items():
+        assert team_id[:2] in ("11", "12") and len(team_id) == 5, team_id
+        assert name
+
+
 def test_pact_supply_has_a_list_per_weekday(gamedata):
     assert len(gamedata["pact_supply"]) == 7
 

@@ -43,11 +43,20 @@ async def test_build(client):
     assert isinstance((await get(client, "build"))["id"], int)
 
 
-async def test_worlds(client):
-    worlds = await get(client, "worlds?ids=all")
-    assert worlds
-    for world in worlds:
-        assert {"id", "name", "population"} <= world.keys()
+async def test_wvw_matches(client, gamedata):
+    matches = await get(client, "wvw/matches?ids=all")
+    assert matches
+    for match in matches:
+        for key in "scores", "victory_points", "kills", "deaths", "all_worlds":
+            assert {"red", "blue", "green"} <= match[key].keys(), key
+        for m in match["maps"]:
+            for objective in m["objectives"]:
+                assert {"owner", "points_tick"} <= objective.keys()
+        # Team names aren't in the API; gamedata copies the wiki's list
+        teams = [i for ids in match["all_worlds"].values() for i in ids if i >= 10000]
+        assert teams, match["id"]
+        for team in teams:
+            assert str(team) in gamedata["wvw_teams"], team
 
 
 async def test_item(client):
