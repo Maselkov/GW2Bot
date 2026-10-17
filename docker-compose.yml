@@ -1,6 +1,8 @@
 services:
   bot:
     build: .
+    # CD sets this to the GHCR tag being deployed; local builds use gw2bot:local
+    image: ${GW2BOT_IMAGE:-gw2bot:local}
     restart: unless-stopped
     depends_on:
       mongo:

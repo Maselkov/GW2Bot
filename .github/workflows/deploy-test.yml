@@ -1,0 +1,128 @@
+name: Deploy test bot
+
+# Builds the image on GitHub-hosted runners and pushes it to GHCR, then the
+# self-hosted runner restarts the test bot over SSH. Secrets live in the
+# "test-bot" environment.
+on:
+  push:
+    branches: [deploy/test]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-test
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.15"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: pip install -e ".[dev]"
+      - run: pytest -v
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.name.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # GHCR rejects uppercase in image names
+      - name: Image name
+        id: name
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "image=ghcr.io/$owner/gw2bot:$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          echo "image_test=ghcr.io/$owner/gw2bot:test" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.name.outputs.image }}
+            ${{ steps.name.outputs.image_test }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Only needs ssh/scp: the image is pulled on the test-bot host
+  deploy:
+    needs: build
+    runs-on: self-hosted
+    environment: test-bot
+    permissions:
+      contents: read
+    env:
+      IMAGE: ${{ needs.build.outputs.image }}
+      SSH_HOST: ${{ secrets.TEST_BOT_SSH_HOST }}
+      SSH_USER: ${{ secrets.TEST_BOT_SSH_USER }}
+      DEPLOY_DIR: ${{ secrets.TEST_BOT_DEPLOY_DIR }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up SSH
+        env:
+          SSH_KEY: ${{ secrets.TEST_BOT_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.TEST_BOT_SSH_KNOWN_HOSTS }}
+        run: |
+          dir="$RUNNER_TEMP/ssh"
+          mkdir -p "$dir" && chmod 700 "$dir"
+          printf '%s\n' "$SSH_KEY" > "$dir/key"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$dir/known_hosts"
+          chmod 600 "$dir/key"
+          cat > "$dir/config" <<EOF
+          Host test-bot
+            HostName $SSH_HOST
+            User $SSH_USER
+            IdentityFile $dir/key
+            UserKnownHostsFile $dir/known_hosts
+            StrictHostKeyChecking yes
+            BatchMode yes
+          EOF
+          echo "SSH_CONFIG=$dir/config" >> "$GITHUB_ENV"
+
+      - name: Copy compose file
+        run: scp -F "$SSH_CONFIG" docker-compose.yml "test-bot:$DEPLOY_DIR/docker-compose.yml"
+
+      - name: Deploy
+        run: |
+          ssh -F "$SSH_CONFIG" test-bot bash -s -- "$DEPLOY_DIR" "$IMAGE" <<'EOF'
+          set -euo pipefail
+          cd "${1/#\~/$HOME}"
+          echo "GW2BOT_IMAGE=$2" > deploy.env
+          docker compose --env-file deploy.env pull bot
+          docker compose --env-file deploy.env up -d --no-build --remove-orphans
+          docker image prune -f
+          EOF
+
+      - name: Smoke check
+        run: |
+          ssh -F "$SSH_CONFIG" test-bot bash -s -- "$DEPLOY_DIR" <<'EOF'
+          set -euo pipefail
+          cd "${1/#\~/$HOME}"
+          sleep 30
+          id="$(docker compose --env-file deploy.env ps -q bot)"
+          docker compose --env-file deploy.env logs --tail 50 bot
+          status="$(docker inspect -f '{{.State.Status}} {{.RestartCount}}' "$id")"
+          echo "bot: $status"
+          [ "$status" = "running 0" ]
+          EOF
+
+      - name: Clean up SSH key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/ssh"
