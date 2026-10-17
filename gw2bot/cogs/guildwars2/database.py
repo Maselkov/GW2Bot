@@ -1,7 +1,6 @@
 import asyncio
 import collections
 import datetime
-import re
 import time
 
 import discord
@@ -122,25 +121,6 @@ class DatabaseMixin:
         except (KeyError, TypeError):
             return ""
         return title
-
-    async def get_world_name(self, wid):
-        try:
-            doc = await self.db.worlds.find_one({"_id": wid})
-            name = doc["name"]
-        except KeyError:
-            name = None
-        return name
-
-    async def get_world_id(self, world):
-        world = re.escape(world)
-        world = "^" + world + "$"
-        search = re.compile(world, re.IGNORECASE)
-        if world is None:
-            return None
-        doc = await self.db.worlds.find_one({"name": search})
-        if not doc:
-            return None
-        return doc["_id"]
 
     async def fetch_statname(self, item):
         statset = await self.db.itemstats.find_one({"_id": item})
@@ -310,7 +290,7 @@ class DatabaseMixin:
                      ["titles", True], ["recipes"], ["skins"],
                      ["currencies", True], ["skills", True],
                      ["specializations", True], ["traits", True],
-                     ["worlds", True], ["minis", True], ["pvp/amulets", True],
+                     ["minis", True], ["pvp/amulets", True],
                      ["professions", True], ["legends", True], ["pets", True],
                      ["outfits", True], ["colors", True]]
         for e in endpoints:
@@ -328,7 +308,6 @@ class DatabaseMixin:
         await self.db.skins.create_index("name")
         await self.db.currencies.create_index("name")
         await self.db.skills.create_index("name")
-        await self.db.worlds.create_index("name")
         await self.cache_raids()
         await self.cache_pois()
         end = time.time()

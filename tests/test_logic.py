@@ -401,3 +401,17 @@ def test_canthan_cycle():
         "Canthan Night",
         datetime.datetime(2024, 3, 1, 1, 40, tzinfo=UTC),
     )
+
+
+@pytest.mark.parametrize(
+    "team, expected",
+    [("11001", 11001), ("Moogooloo", 11001), (" kormir's library ", 12013), ("Anvil Rock", None)],
+)
+def test_find_wvw_team(team, expected):
+    assert subject.find_wvw_team(team) == expected
+
+
+def test_wvw_team_autocomplete():
+    assert subject.wvw_team_choices("moo") == [("Moogooloo (NA)", "11001")]
+    assert subject.wvw_team_choices("aviary") == [("Great House Aviary (EU)", "12014")]
+    assert len(subject.wvw_team_choices("")) == 25

@@ -25,7 +25,7 @@ from gw2bot.cogs.guildwars2.events import EventsMixin
 from gw2bot.cogs.guildwars2.misc import MiscMixin
 from gw2bot.cogs.guildwars2.skills import SkillsMixin
 from gw2bot.cogs.guildwars2.utils import chat, db
-from gw2bot.cogs.guildwars2.wvw import WvwMixin
+from gw2bot.cogs.guildwars2.wvw import WvwMixin, match_summary
 
 DATA_DIR = pathlib.Path(__file__).resolve().parent.parent / "gw2bot" / "cogs" / "guildwars2"
 UTC = datetime.timezone.utc
@@ -180,6 +180,22 @@ def cm_instabilities(date):
         else:
             result[current].append(line)
     return result
+
+
+# --- WvW --------------------------------------------------------------------
+
+def wvw_match_summary(match, team_id):
+    return match_summary(match, team_id)
+
+
+def find_wvw_team(team):
+    return _Harness().find_team(team)
+
+
+def wvw_team_choices(current):
+    """[(name, value)] offered by the team autocomplete."""
+    choices = asyncio.run(_Harness().team_autocomplete(None, current))
+    return [(c.name, c.value) for c in choices]
 
 
 # --- Event timers ----------------------------------------------------------
