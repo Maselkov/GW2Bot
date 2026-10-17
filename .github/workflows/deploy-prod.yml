@@ -1,0 +1,40 @@
+name: Deploy production
+
+# Pushing a v* tag on a master commit deploys it to production after approval
+# on the "prod" environment. Only the bot's container is recreated; the
+# compose file on the host (mongo, sister bots) is managed there.
+on:
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Tag must be on master
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/master
+
+  build:
+    needs: verify
+    uses: ./.github/workflows/_build.yml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      tags: ${{ github.ref_name }}
+
+  deploy:
+    needs: build
+    uses: ./.github/workflows/_deploy.yml
+    permissions:
+      contents: read
+    with:
+      environment: prod
+      image: ${{ needs.build.outputs.image }}
