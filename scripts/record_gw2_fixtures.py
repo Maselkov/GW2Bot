@@ -41,6 +41,7 @@ PUBLIC = [
     "traits/1510",
     "pvp/ranks/1",
     "commerce/prices/19721",
+    "wvw/matches?world=11001",
 ]
 AUTHENTICATED = [
     "account",

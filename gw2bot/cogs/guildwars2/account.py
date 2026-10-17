@@ -13,6 +13,7 @@ from discord.app_commands import Choice
 from .exceptions import APIError, APINotFound
 from .utils.chat import embed_list_lines
 from .utils.db import prepare_search
+from .wvw import WVW_ACCOUNT_SCHEMA
 
 
 class AccountMixin:
@@ -26,16 +27,18 @@ class AccountMixin:
         await interaction.response.defer()
         user = interaction.user
         doc = await self.fetch_key(user, ["account"])
-        results = await self.call_api("account", user)
+        results = await self.call_api("account",
+                                      user,
+                                      schema_string=WVW_ACCOUNT_SCHEMA)
         accountname = doc["account_name"]
         created = results["created"].split("T", 1)[0]
         hascommander = "Yes" if results["commander"] else "No"
         embed = discord.Embed(colour=await self.get_embed_color(interaction))
         embed.add_field(name="Created account on", value=created)
-        # Add world name to account info
-        wid = results["world"]
-        world = await self.get_world_name(wid)
-        embed.add_field(name="WvW Server", value=world)
+        wvw = results.get("wvw", {})
+        if wvw.get("team_id"):
+            embed.add_field(name="WvW team",
+                            value=self.get_team_name(wvw["team_id"]))
         if "progression" in doc["permissions"]:
             endpoints = ["account/achievements", "account"]
             achievements, account = await self.call_multiple(
@@ -50,9 +53,8 @@ class AccountMixin:
         if "fractal_level" in results:
             fractallevel = results["fractal_level"]
             embed.add_field(name="Fractal level", value=fractallevel)
-        if "wvw_rank" in results:
-            wvwrank = results["wvw_rank"]
-            embed.add_field(name="WvW rank", value=wvwrank)
+        if "rank" in wvw:
+            embed.add_field(name="WvW rank", value=wvw["rank"])
         if "pvp" in doc["permissions"]:
             pvp = await self.call_api("pvp/stats", user)
             pvprank = pvp["pvp_rank"] + pvp["pvp_rank_rollovers"]
