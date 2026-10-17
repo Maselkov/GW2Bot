@@ -1,0 +1,24 @@
+name: Dependency audit
+
+# Checks the locked dependencies against known vulnerabilities. Runs daily
+# because advisories appear without the lockfile changing. Stands in for
+# Dependabot's pip alerts until it supports Python 3.15.
+on:
+  push:
+    paths: ["requirements*.txt"]
+  pull_request:
+    paths: ["requirements*.txt"]
+  schedule:
+    - cron: "41 5 * * *"
+  workflow_dispatch:
+
+jobs:
+  pip-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.15"
+      - run: pip install pip-audit
+      - run: pip-audit --require-hashes --disable-pip -r requirements.txt -r requirements-dev.txt

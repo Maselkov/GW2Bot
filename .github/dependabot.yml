@@ -16,7 +16,9 @@ updates:
       interval: weekly
 
   # Dependabot can't run pip updates yet: it supports Python up to 3.14 and
-  # pyproject.toml requires >=3.15. Enable this once it supports 3.15.
+  # pyproject.toml requires >=3.15. Enable this once it supports 3.15; it
+  # updates the pip-compile lockfiles. Until then, run scripts/lock.sh
+  # --upgrade, and the audit workflow checks the locks for vulnerabilities.
   # - package-ecosystem: pip
   #   directory: /
   #   schedule:

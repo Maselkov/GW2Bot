@@ -52,7 +52,8 @@ Requires Python 3.15.
 git clone https://github.com/Maselkov/GW2Bot.git
 cd GW2Bot
 python -m venv .venv
-.venv/bin/pip install .
+.venv/bin/pip install --require-hashes -r requirements.txt
+.venv/bin/pip install --no-deps .
 
 DISCORD_TOKEN=... OWNER_ID=... .venv/bin/gw2bot
 ```
@@ -63,11 +64,26 @@ To use the Guild Wars 2 font, place `GWTwoFont1p1.ttf` in the directory you run 
 
 GW2Bot used to run as an extension of [Toothy](https://github.com/Maselkov/Toothy). It now runs on its own, and reads the same MongoDB data. Point it at the database Toothy used: set `MONGO_DB` to the `DATABASE.name` from Toothy's `config.json` (`toothy` unless you changed it).
 
+## Dependencies
+
+`pyproject.toml` lists the dependencies; `requirements.txt` (runtime) and `requirements-dev.txt` (runtime plus test tools) pin them with hashes. The Docker image, CI and the commands above install from the pins, so every build gets the same versions.
+
+After changing dependencies in `pyproject.toml`, or to upgrade, regenerate the pins (needs Docker):
+
+```bash
+scripts/lock.sh                            # re-lock, keeping current versions
+scripts/lock.sh --upgrade                  # upgrade everything
+scripts/lock.sh --upgrade-package pillow   # upgrade one package
+```
+
+Commit both files. The Dependency audit workflow checks the pins for known vulnerabilities daily.
+
 ## Running Tests
 
 ```bash
 python -m venv .venv-test
-.venv-test/bin/pip install -e ".[dev]"
+.venv-test/bin/pip install --require-hashes -r requirements-dev.txt
+.venv-test/bin/pip install --no-deps -e .
 .venv-test/bin/pytest
 ```
 
