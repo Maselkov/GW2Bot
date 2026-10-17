@@ -10,6 +10,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from .db.legacy import MongoController
+from .gw2api import Client
 
 log = logging.getLogger(__name__)
 
@@ -55,12 +56,14 @@ class GW2Bot(commands.AutoShardedBot):
         self.state = self.database.db.gw2bot_state
         self.available = True
         self.session = None
+        self.gw2api = None
         self.test_guild = settings.test_guild
         self.uptime = datetime.datetime.now(datetime.timezone.utc)
         self.tree.on_error = self.on_app_command_error
 
     async def setup_hook(self):
         self.session = aiohttp.ClientSession()
+        self.gw2api = Client(self.session)
         for extension in EXTENSIONS:
             await self.load_extension(extension)
         if self.settings.auto_sync:

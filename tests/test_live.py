@@ -100,3 +100,15 @@ async def test_pvp_stats(client):
 async def test_wallet(client):
     wallet = await get(client, "account/wallet", authenticated=True)
     assert all({"id", "value"} <= entry.keys() for entry in wallet)
+
+
+async def test_bot_client_against_live_api(client):
+    """The bot's own client, end to end (the tests above deliberately aren't)."""
+    from gw2bot.gw2api import APINotFound, Client
+
+    api = Client(client)
+    build, worlds = await api.get_many(["build", "worlds?ids=all"])
+    assert isinstance(build["id"], int)
+    assert worlds
+    with pytest.raises(APINotFound):
+        await api.get("items/999999999")

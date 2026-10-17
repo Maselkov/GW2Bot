@@ -65,6 +65,7 @@ class GuildWars2(
         with open(DATA_DIR / "instabilities.json", encoding="utf-8", mode="r") as f:
             self.instabilities = json.load(f)
         self.session = bot.session
+        self.api = bot.gw2api
         self.boss_schedule = self.generate_schedule()
         self.embed_color = 0xC12D2B
         self.log = logging.getLogger(__name__)

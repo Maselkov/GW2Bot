@@ -1350,12 +1350,6 @@ soupsieve==3.0.3 \
     # via
     #   -c requirements.txt
     #   beautifulsoup4
-tenacity==9.2.1 \
-    --hash=sha256:9e56f17539296baab7beabb08b92f6ee3d7be92d8be72d763360677c2ad6580e \
-    --hash=sha256:a606b5c808d0cded4a359d5b9932d867ff2a6a6b64d37350260fd01bbdf83839
-    # via
-    #   -c requirements.txt
-    #   gw2bot (pyproject.toml)
 time-machine==3.5.1 \
     --hash=sha256:03ae7e486fbeda7750b4490cde8101a1b0e3f7073e9e502aeda863cbc250eb68 \
     --hash=sha256:075cc8ff3bf229d96bc7adb8b26be6b1021ee0a5213efe4f57898cda3a3bd766 \
