@@ -19,7 +19,7 @@ EXTENSIONS = ["gw2bot.owner", "gw2bot.cogs.guildwars2"]
 
 def intents():
     intents = discord.Intents.default()
-    # Guild sync and worldsync react to members joining and edit their roles
+    # Guild sync reacts to members joining and edit their roles
     intents.members = True
     # Chat code previews and EVTC uploads read message content
     intents.message_content = True

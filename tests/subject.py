@@ -25,7 +25,7 @@ from gw2bot.cogs.guildwars2.events import EventsMixin
 from gw2bot.cogs.guildwars2.misc import MiscMixin
 from gw2bot.cogs.guildwars2.skills import SkillsMixin
 from gw2bot.cogs.guildwars2.utils import chat, db
-from gw2bot.cogs.guildwars2.wvw import WvwMixin, generate_population_graph
+from gw2bot.cogs.guildwars2.wvw import WvwMixin
 
 DATA_DIR = pathlib.Path(__file__).resolve().parent.parent / "gw2bot" / "cogs" / "guildwars2"
 UTC = datetime.timezone.utc
@@ -100,15 +100,6 @@ def readable_attribute(name):
 
 def format_timedelta(td):
     return _Harness().format_timedelta(td)
-
-
-def population_to_int(population):
-    return _Harness().population_to_int(population)
-
-
-def population_graph(points):
-    """PNG bytes for a list of (datetime, population level 0-4)."""
-    return generate_population_graph(points).getvalue()
 
 
 def embed_list_lines(lines, field_name="Field", **kwargs):

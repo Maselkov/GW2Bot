@@ -27,11 +27,6 @@ def test_recorded_item_rarities_are_known(gamedata):
         assert item["rarity"] in gamedata["items"]["rarity_colors"]
 
 
-def test_recorded_world_populations_are_known():
-    for world in load("worlds__ids-all.json"):
-        assert 0 <= subject.population_to_int(world["population"]) <= 4
-
-
 @pytest.fixture
 def recorder():
     path = ROOT / "scripts" / "record_gw2_fixtures.py"
