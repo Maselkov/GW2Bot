@@ -85,8 +85,7 @@ class GuildWars2(
             self.event_reminder_task,
             self.post_evtc_notifications,
             self.key_sync_task,
-            self.cache_dailies_tomorrow,
-            self.swap_daily_tomorrow_and_today,
+            self.refresh_dailies,
             self.send_daily_notifs,
         ]
         for task in self.tasks:

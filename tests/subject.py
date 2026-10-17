@@ -19,6 +19,7 @@ from gw2bot.cogs.guildwars2.achievements import AchievementsMixin
 from gw2bot.cogs.guildwars2.api import ApiMixin
 from gw2bot.cogs.guildwars2.characters import CharactersMixin
 from gw2bot.cogs.guildwars2.commerce import CommerceMixin
+from gw2bot.cogs.guildwars2 import daily
 from gw2bot.cogs.guildwars2.daily import DailyMixin
 from gw2bot.cogs.guildwars2.database import DatabaseMixin
 from gw2bot.cogs.guildwars2.events import EventsMixin
@@ -146,14 +147,22 @@ def year_day(date):
         return _Harness().get_year_day(tomorrow=False)
 
 
-def living_world_dailies(date):
-    with _at(date):
-        return _Harness().get_lw_dailies(tomorrow=False)
+def daily_rotation(categories, names):
+    return daily.daily_rotation(categories, names)
 
 
-def strikes(date):
-    with _at(date):
-        return _Harness().get_strike(None, tomorrow=False).split("\n")
+def daily_categories(saved):
+    return daily.normalize_categories(saved)
+
+
+def daily_fields(categories, cache, now, tomorrow=False):
+    """[(name, value)] of the daily embed, given the cached rotation."""
+    harness = _Harness()
+    harness.bot.user.name = "GW2Bot"
+    doc = {"cache": {"dailies": cache, "dailies_tomorrow": cache}}
+    with _at(now):
+        embed = asyncio.run(harness.daily_embed(categories, doc=doc, tomorrow=tomorrow))
+    return [(f.name, f.value) for f in embed.fields]
 
 
 def pact_supply_agents(date):

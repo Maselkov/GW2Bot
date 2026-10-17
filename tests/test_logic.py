@@ -252,20 +252,118 @@ def test_year_day(date, expected):
     assert subject.year_day(date) == expected
 
 
-def test_living_world_dailies():
-    assert subject.living_world_dailies(D(2024, 3, 1)) == [
-        "Daily Living World Season 3 - Bloodstone Fen",
-        "Daily Living World Season 4 - Domain of Istan",
+DAILY_NAMES = {
+    2238: "Daily Recommended Fractal—Scale 15",
+    2896: "Daily Tier 1 Urban Battleground",
+    2903: "Daily Tier 4 Molten Furnace",
+    2941: "Daily Tier 4 Urban Battleground",
+    3038: "Daily Tier 4 Chaos",
+    3184: "Daily Recommended Fractal—Scale 66",
+    3346: "Daily Lake Doric Bosses",
+    4367: "Daily Jahai Bluffs Rift Event",
+    9126: "Raid Bounty: Vale Guardian",
+    9168: "Raid Bounty: Harvest Temple",
+}
+# Shaped like /v2/achievements/categories with schema 2022-03-23
+DAILY_ACHIEVEMENT_CATEGORIES = [
+    {
+        "id": 88,
+        "achievements": [{"id": 2941}, {"id": 2238}, {"id": 2896}, {"id": 3038}],
+        "tomorrow": [{"id": 3184}, {"id": 2903}],
+    },
+    {"id": 475, "achievements": [{"id": 9168}], "tomorrow": [{"id": 9126}]},
+    {"id": 238, "achievements": [{"id": 3346}], "tomorrow": []},
+    # No tomorrow list, and an achievement whose name couldn't be fetched
+    {"id": 243, "achievements": [{"id": 4367}, {"id": 99999}]},
+]
+ALL_DAILY_CATEGORIES = ["psna", "fractals", "raids", "lw"]
+
+
+def test_daily_rotation():
+    rotation = subject.daily_rotation(DAILY_ACHIEVEMENT_CATEGORIES, DAILY_NAMES)
+    assert rotation["today"] == {
+        # Only tier 4 and the recommended fractals
+        "fractals": [
+            "Daily Recommended Fractal—Scale 15",
+            "Daily Tier 4 Chaos",
+            "Daily Tier 4 Urban Battleground",
+        ],
+        "raids": ["Raid Bounty: Harvest Temple"],
+        "lws3": ["Daily Lake Doric Bosses"],
+        "lws4": ["Daily Jahai Bluffs Rift Event"],
+    }
+    assert rotation["tomorrow"] == {
+        "fractals": ["Daily Recommended Fractal—Scale 66", "Daily Tier 4 Molten Furnace"],
+        "raids": ["Raid Bounty: Vale Guardian"],
+        "lws3": [],
+        "lws4": [],
+    }
+
+
+def test_daily_rotation_without_categories():
+    rotation = subject.daily_rotation([], DAILY_NAMES)
+    assert rotation["today"] == {"fractals": [], "raids": [], "lws3": [], "lws4": []}
+
+
+@pytest.mark.parametrize(
+    "saved, expected",
+    [
+        (None, ALL_DAILY_CATEGORIES),
+        (["fractals", "psna"], ["psna", "fractals"]),
+        # The notifier's default before the Wizard's Vault
+        (["psna", "psna_later", "pve", "pvp", "wvw", "fractals", "strikes"], ALL_DAILY_CATEGORIES),
+        (["strikes"], ["raids"]),
+        (["pvp", "wvw"], ALL_DAILY_CATEGORIES),
+    ],
+)
+def test_daily_categories(saved, expected):
+    assert subject.daily_categories(saved) == expected
+
+
+def _today_rotation():
+    return subject.daily_rotation(DAILY_ACHIEVEMENT_CATEGORIES, DAILY_NAMES)["today"]
+
+
+def test_daily_embed_raids_and_living_world():
+    fields = subject.daily_fields(["lw", "raids"], _today_rotation(), D(2024, 3, 1))
+    assert fields == [
+        ("RAID BOUNTIES", "Harvest Temple"),
+        ("LIVING WORLD SEASON 3", "Lake Doric Bosses"),
+        ("LIVING WORLD SEASON 4", "Jahai Bluffs Rift Event"),
     ]
 
 
-def test_living_world_dailies_rotate_daily():
-    seen = {tuple(subject.living_world_dailies(D(2024, 3, day))) for day in range(1, 7)}
-    assert len(seen) == 6
+def test_daily_embed_fractals():
+    fields = dict(subject.daily_fields(["fractals"], _today_rotation(), D(2024, 3, 1)))
+    assert list(fields) == ["> Daily Fractals", "> CM Instabilities", "> Recommended Fractals"]
+    assert fields["> Daily Fractals"].startswith("Chaos\n")
+    assert fields["> Recommended Fractals"] == "15 Thaumanova Reactor"
 
 
-def test_strikes():
-    assert subject.strikes(D(2024, 3, 1)) == ["Cold War", "Aetherblade Hideout"]
+def test_daily_embed_psna(gamedata):
+    # Monday 06:00 UTC: Sunday's agents until the 08:00 reset
+    now = datetime.datetime(2024, 3, 4, 6, tzinfo=UTC)
+    reset = int(datetime.datetime(2024, 3, 4, 8, tzinfo=UTC).timestamp())
+    assert subject.daily_fields(["psna"], _today_rotation(), now) == [
+        ("PSNA", gamedata["pact_supply"][6]),
+        (f"PSNA <t:{reset}:R>", gamedata["pact_supply"][0]),
+    ]
+
+
+def test_daily_embed_psna_tomorrow(gamedata):
+    # The notifier posts Monday's dailies on Sunday evening
+    now = datetime.datetime(2024, 3, 3, 23, 40, tzinfo=UTC)
+    reset = int(datetime.datetime(2024, 3, 4, 8, tzinfo=UTC).timestamp())
+    assert subject.daily_fields(["psna"], _today_rotation(), now, tomorrow=True) == [
+        ("PSNA", gamedata["pact_supply"][6]),
+        (f"PSNA <t:{reset}:R>", gamedata["pact_supply"][0]),
+    ]
+
+
+def test_daily_embed_rejects_the_old_cache():
+    old_cache = {"pve": ["Daily Mystic Forger"], "fractals": [], "psna": ["..."]}
+    with pytest.raises(ValueError):
+        subject.daily_fields(["psna"], old_cache, D(2024, 3, 1))
 
 
 def test_pact_supply_agents_follow_weekday(gamedata):

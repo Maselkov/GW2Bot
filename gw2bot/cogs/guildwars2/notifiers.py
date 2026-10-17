@@ -27,7 +27,9 @@ class DailyCategoriesDropdown(discord.ui.Select):
         self.channel = channel
         self.selected_values = []
         for category in DAILY_CATEGORIES:
-            emoji = cog.get_emoji(interaction, f"daily_{category}", return_obj=True)
+            emoji = cog.get_emoji(
+                interaction, f"daily {category['value']}", return_obj=True
+            )
             options.append(
                 discord.SelectOption(
                     label=category["name"], value=category["value"], emoji=emoji or None
@@ -44,7 +46,10 @@ class DailyCategoriesDropdown(discord.ui.Select):
         self.view.selected_options = self.values
         await interaction.response.defer(ephemeral=True)
         categories = self.values
-        embed = await self.cog.daily_embed(categories, interaction=interaction)
+        try:
+            embed = await self.cog.daily_embed(categories, interaction=interaction)
+        except ValueError:
+            embed = None
         autodelete = False
         autoedit = False
         if self.behavior == "autodelete":
@@ -60,12 +65,11 @@ class DailyCategoriesDropdown(discord.ui.Select):
             "daily.categories": categories,
         }
         await self.cog.bot.database.set(interaction.guild, settings, self.cog)
+        content = f"I will now send dailies to {self.channel.mention}."
+        if embed:
+            content += " Here's an example notification:"
         await interaction.edit_original_response(
-            content="I will now send "
-            f"dailies to {self.channel.mention}. Here's an example "
-            "notification:",
-            embed=embed,
-            view=None,
+            content=content, embed=embed, view=None
         )
         self.view.stop()
 
@@ -496,22 +500,6 @@ class NotiifiersMixin:
         )
         return data
 
-    async def check_day(self):
-        current = datetime.datetime.utcnow().weekday()
-        doc = await self.bot.database.get_cog_config(self)
-        if not doc:
-            return False
-        cache = doc["cache"]
-        day = cache.get("day")
-        dailies = cache.get("dailies")
-        if not dailies:
-            await self.cache_dailies()
-        if day != current:
-            await self.bot.database.set_cog_config(self, {"cache.day": current})
-            return True
-        else:
-            return False
-
     async def game_build_changed(self):
         doc = await self.bot.database.get_cog_config(self)
         if not doc:
@@ -530,7 +518,11 @@ class NotiifiersMixin:
 
     @tasks.loop(time=[datetime.time(hour=23, minute=40, tzinfo=datetime.timezone.utc)])
     async def send_daily_notifs(self):
-        await self.cache_dailies(tomorrow=True)
+        try:
+            await self.cache_dailies()
+        except Exception:
+            # Post from the cache the refresh loop keeps
+            self.log.exception("Exception caching dailies before posting them")
         cursor = self.bot.database.iter(
             "guilds",
             {"daily.on": True, "daily.channel": {"$ne": None}},
@@ -541,18 +533,6 @@ class NotiifiersMixin:
 
         async def notify_guild(doc):
             categories = doc.get("categories")
-            if not categories:
-                categories = [
-                    "psna",
-                    "psna_later",
-                    "pve",
-                    "pvp",
-                    "wvw",
-                    "fractals",
-                    "strikes",
-                ]
-            if "psna" in categories and "psna_later" not in categories:
-                categories.insert(categories.index("psna") + 1, "psna_later")
             channel = self.bot.get_channel(doc["channel"])
 
             if not channel:
@@ -571,9 +551,12 @@ class NotiifiersMixin:
                     "to send daily "
                     "notifs!"
                 )
-            embed = await self.daily_embed(
-                categories, doc=daily_doc, interaction=channel, tomorrow=True
-            )
+            try:
+                embed = await self.daily_embed(
+                    categories, doc=daily_doc, interaction=channel, tomorrow=True
+                )
+            except ValueError:
+                return
             embed.title = "Dailies"
             tomorrow = datetime.datetime.now(
                 datetime.timezone.utc
