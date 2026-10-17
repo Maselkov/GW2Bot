@@ -26,7 +26,6 @@ from .notifiers import NotiifiersMixin
 from .pvp import PvpMixin
 from .skills import SkillsMixin
 from .wallet import WalletMixin
-from .worldsync import WorldsyncMixin
 from .wvw import WvwMixin
 
 DATA_DIR = pathlib.Path(__file__).resolve().parent
@@ -52,7 +51,6 @@ class GuildWars2(
     PvpMixin,
     SkillsMixin,
     WalletMixin,
-    WorldsyncMixin,
     WvwMixin,
 ):
     """Guild Wars 2 commands"""
@@ -81,14 +79,11 @@ class GuildWars2(
             self.game_update_checker,
             self.news_checker,
             self.gem_tracker,
-            self.world_population_checker,
             self.guild_synchronizer,
             self.boss_notifier,
             self.forced_account_names,
             self.event_reminder_task,
-            self.worldsync_task,
             self.post_evtc_notifications,
-            self.daily_mystic_forger_checker_task,
             self.key_sync_task,
             self.cache_dailies_tomorrow,
             self.swap_daily_tomorrow_and_today,

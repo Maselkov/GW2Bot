@@ -87,7 +87,6 @@ class KeyMixin:
         await interaction.followup.send(output)
         try:
             if interaction.guild:
-                await self.worldsync_on_member_join(interaction.user)
                 await self.guildsync_on_member_join(interaction.user)
                 await self.key_sync_user(interaction.user)
                 return
@@ -101,10 +100,6 @@ class KeyMixin:
             #         member = guild.get_member(interaction.user.id)
             #         await self.key_sync_user(member)
             #         doc = await self.bot.database.get(guild, self)
-            #         worldsync = doc.get("worldsync", {})
-            #         worldsync_enabled = worldsync.get("enabled", False)
-            #         if worldsync_enabled:
-            #             await self.worldsync_on_member_join(member)
             #         guildsync = doc.get("sync", {})
             #         if guildsync.get("on", False) and guildsync.get("setupdone", False):
             #             await self.guildsync_on_member_join(member)

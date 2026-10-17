@@ -87,10 +87,9 @@ class GuildManageMixin:
     @server_group.command(name="sync_now")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def sync_now(self, interaction: discord.Interaction):
-        """Force a sync for any Guildsyncs and Worldsyncs you have"""
+        """Force a sync for any Guildsyncs you have"""
         await interaction.response.send_message("Syncs scheduled!")
         await self.guildsync_now(interaction)
-        await self.worldsync_now(interaction)
 
     @server_group.command(name="api_key_role")
     @app_commands.checks.has_permissions(manage_roles=True)

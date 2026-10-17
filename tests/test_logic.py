@@ -120,14 +120,6 @@ def test_format_timedelta(td, expected):
     assert subject.format_timedelta(td) == expected
 
 
-@pytest.mark.parametrize(
-    "population, expected",
-    [("Low", 0), ("Medium", 1), ("High", 2), ("VeryHigh", 3), ("Very_High", 3), ("Full", 4)],
-)
-def test_population_to_int(population, expected):
-    assert subject.population_to_int(population) == expected
-
-
 def test_embed_list_lines_short_fits_one_field():
     assert subject.embed_list_lines(["a", "b"], "Name") == [("Name", "a\nb")]
 

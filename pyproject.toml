@@ -13,7 +13,6 @@ dependencies = [
     "aiohttp",
     "beautifulsoup4",
     "discord.py>=2.7.1",
-    "matplotlib",
     # 4.13 is the first release with the async API generally available
     "pymongo>=4.13",
     "pillow",
