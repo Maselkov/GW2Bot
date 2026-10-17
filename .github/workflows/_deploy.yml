@@ -1,0 +1,101 @@
+name: Deploy
+
+# Runs on the self-hosted runner, which only needs ssh/scp: it pins the image
+# in docker-compose.override.yml on the host and restarts the bot. The SSH_*
+# and DEPLOY_DIR secrets come from the environment passed in.
+on:
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        required: true
+      image:
+        type: string
+        required: true
+      service:
+        description: Compose service running GW2Bot
+        type: string
+        default: bot
+      sync_compose:
+        description: >-
+          Copy the repo's docker-compose.yml to the host and bring the whole
+          project up. Leave off for hosts whose compose file is managed there,
+          where only the bot's container is recreated.
+        type: boolean
+        default: false
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+    env:
+      IMAGE: ${{ inputs.image }}
+      SERVICE: ${{ inputs.service }}
+      SYNC_COMPOSE: ${{ inputs.sync_compose }}
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      DEPLOY_DIR: ${{ secrets.DEPLOY_DIR }}
+    steps:
+      - uses: actions/checkout@v4
+        if: inputs.sync_compose
+
+      - name: Set up SSH
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          dir="$RUNNER_TEMP/ssh"
+          mkdir -p "$dir" && chmod 700 "$dir"
+          printf '%s\n' "$SSH_KEY" > "$dir/key"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$dir/known_hosts"
+          chmod 600 "$dir/key"
+          cat > "$dir/config" <<EOF
+          Host target
+            HostName $SSH_HOST
+            User $SSH_USER
+            IdentityFile $dir/key
+            UserKnownHostsFile $dir/known_hosts
+            StrictHostKeyChecking yes
+            BatchMode yes
+          EOF
+          echo "SSH_CONFIG=$dir/config" >> "$GITHUB_ENV"
+
+      - name: Copy compose file
+        if: inputs.sync_compose
+        run: scp -F "$SSH_CONFIG" docker-compose.yml "target:$DEPLOY_DIR/docker-compose.yml"
+
+      - name: Deploy
+        run: |
+          ssh -F "$SSH_CONFIG" target bash -s -- "$DEPLOY_DIR" "$IMAGE" "$SERVICE" "$SYNC_COMPOSE" <<'EOF'
+          set -euo pipefail
+          cd "${1/#\~/$HOME}"
+          # Compose merges this over docker-compose.yml, so manual compose
+          # commands on the host use the deployed image too
+          printf 'services:\n  %s:\n    image: %s\n' "$3" "$2" > docker-compose.override.yml
+          docker compose pull "$3"
+          if [ "$4" = true ]; then
+            docker compose up -d --no-build --remove-orphans
+          else
+            docker compose up -d --no-build --no-deps "$3"
+          fi
+          docker image prune -f
+          EOF
+
+      - name: Smoke check
+        run: |
+          ssh -F "$SSH_CONFIG" target bash -s -- "$DEPLOY_DIR" "$SERVICE" <<'EOF'
+          set -euo pipefail
+          cd "${1/#\~/$HOME}"
+          sleep 30
+          id="$(docker compose ps -q "$2")"
+          docker compose logs --tail 50 "$2"
+          status="$(docker inspect -f '{{.State.Status}} {{.RestartCount}}' "$id")"
+          echo "$2: $status"
+          [ "$status" = "running 0" ]
+          EOF
+
+      - name: Clean up SSH key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/ssh"

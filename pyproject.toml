@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gw2bot"
+version = "0.1.0"
+description = "A Guild Wars 2 Discord bot"
+readme = "README.md"
+license = "GPL-3.0-or-later"
+requires-python = ">=3.15"
+dependencies = [
+    "aiohttp",
+    "beautifulsoup4",
+    "discord.py>=2.7.1",
+    "html2markdown",
+    "httpx",
+    "matplotlib",
+    # Deprecated in favour of PyMongo's async API; replaced with the data layer
+    "motor",
+    "pillow",
+    "requests",
+    "tenacity",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "time-machine",
+]
+
+[project.scripts]
+gw2bot = "gw2bot.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["gw2bot*"]
+
+[tool.setuptools.package-data]
+"gw2bot.cogs.guildwars2" = ["*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = '-m "not live"'
+markers = ["live: hits the real GW2 API (run with: pytest -m live)"]
+filterwarnings = ["ignore::DeprecationWarning:discord.*"]

@@ -1,0 +1,31 @@
+name: Deploy test bot
+
+# Pushes to deploy/test deploy that commit to the test bot. Secrets live in
+# the "test-bot" environment.
+on:
+  push:
+    branches: [deploy/test]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-test
+  cancel-in-progress: false
+
+jobs:
+  build:
+    uses: ./.github/workflows/_build.yml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      tags: test
+
+  deploy:
+    needs: build
+    uses: ./.github/workflows/_deploy.yml
+    permissions:
+      contents: read
+    with:
+      environment: test-bot
+      image: ${{ needs.build.outputs.image }}
+      sync_compose: true

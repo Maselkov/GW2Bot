@@ -1,6 +1,0 @@
--r requirements.txt
-# Supplied by Toothy at runtime; needed here so the cog can be imported
-pymongo
-pytest
-pytest-asyncio
-time-machine

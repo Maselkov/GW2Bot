@@ -7,7 +7,7 @@ from discord import app_commands
 from discord.app_commands import Choice
 from discord.ext import commands, tasks
 
-from cogs.guildwars2.utils.db import prepare_search
+from ..utils.db import prepare_search
 
 from ..exceptions import APIError, APIForbidden, APIInvalidKey, APIKeyError, APINotFound
 

@@ -4,7 +4,7 @@ import discord
 from discord.ext import commands, tasks
 from discord import app_commands
 
-from cogs.guildwars2.utils.db import prepare_search
+from .utils.db import prepare_search
 from .exceptions import APIBadRequest, APIError, APIInvalidKey
 import time
 from discord.app_commands import Choice

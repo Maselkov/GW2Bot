@@ -9,7 +9,7 @@ from discord import app_commands
 from discord.app_commands import Choice
 from discord.ext import commands
 
-from cogs.guildwars2 import guild
+from . import guild
 
 from .exceptions import APIError, APINotFound
 from .skills import Build
