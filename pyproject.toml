@@ -13,13 +13,10 @@ dependencies = [
     "aiohttp",
     "beautifulsoup4",
     "discord.py>=2.7.1",
-    "html2markdown",
-    "httpx",
     "matplotlib",
-    # Deprecated in favour of PyMongo's async API; replaced with the data layer
-    "motor",
+    # 4.13 is the first release with the async API generally available
+    "pymongo>=4.13",
     "pillow",
-    "requests",
     "tenacity",
 ]
 

@@ -5,14 +5,14 @@ Kept method-for-method so the cog's existing data access works unchanged
 against the existing document layout. To be replaced by repositories.
 """
 import discord
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import AsyncMongoClient
 
 
 class MongoController:
 
     def __init__(self, bot, uri, db_name="toothy"):
         self.bot = bot
-        self.client = AsyncIOMotorClient(uri)
+        self.client = AsyncMongoClient(uri)
         self.db = self.client[db_name]
         self.users = self.db.users
         self.guilds = self.db.guilds

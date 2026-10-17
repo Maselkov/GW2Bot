@@ -2,11 +2,11 @@
 
 Run with `pytest -m live`. They check that responses still contain the
 fields the bot reads. Authenticated tests need GW2_API_KEY and are skipped
-without it. They deliberately use plain httpx rather than the bot's client.
+without it. They deliberately use plain aiohttp rather than the bot's client.
 """
 import os
 
-import httpx
+import aiohttp
 import pytest
 
 pytestmark = pytest.mark.live
@@ -25,53 +25,54 @@ KNOWN_FACT_TYPES = {
 }
 
 
-@pytest.fixture(scope="module")
-def client():
-    with httpx.Client(base_url=API, timeout=30, headers={"User-Agent": "GW2Bot tests"}) as c:
+@pytest.fixture
+async def client():
+    timeout = aiohttp.ClientTimeout(total=30)
+    async with aiohttp.ClientSession(timeout=timeout, headers={"User-Agent": "GW2Bot tests"}) as c:
         yield c
 
 
-def get(client, endpoint, authenticated=False):
+async def get(client, endpoint, authenticated=False):
     params = {"access_token": KEY} if authenticated else None
-    r = client.get(endpoint, params=params)
-    assert r.status_code in (200, 206), (endpoint, r.status_code, r.text[:200])
-    return r.json()
+    async with client.get(API + endpoint, params=params) as r:
+        assert r.status in (200, 206), (endpoint, r.status, (await r.text())[:200])
+        return await r.json()
 
 
-def test_build(client):
-    assert isinstance(get(client, "build")["id"], int)
+async def test_build(client):
+    assert isinstance((await get(client, "build"))["id"], int)
 
 
-def test_worlds(client):
-    worlds = get(client, "worlds?ids=all")
+async def test_worlds(client):
+    worlds = await get(client, "worlds?ids=all")
     assert worlds
     for world in worlds:
         assert {"id", "name", "population"} <= world.keys()
 
 
-def test_item(client):
-    item = get(client, "items/46762")
+async def test_item(client):
+    item = await get(client, "items/46762")
     assert {"id", "name", "type", "rarity", "icon"} <= item.keys()
 
 
-def test_item_rarities_are_known(client, gamedata):
-    items = get(client, "items?ids=19721,24575,24615,46762")
+async def test_item_rarities_are_known(client, gamedata):
+    items = await get(client, "items?ids=19721,24575,24615,46762")
     for item in items:
         assert item["rarity"] in gamedata["items"]["rarity_colors"]
 
 
-def test_commerce_prices(client):
-    price = get(client, "commerce/prices/19721")
+async def test_commerce_prices(client):
+    price = await get(client, "commerce/prices/19721")
     assert isinstance(price["buys"]["unit_price"], int)
     assert isinstance(price["sells"]["unit_price"], int)
 
 
-def test_pvp_rank(client):
-    assert get(client, "pvp/ranks/1")["icon"]
+async def test_pvp_rank(client):
+    assert (await get(client, "pvp/ranks/1"))["icon"]
 
 
-def test_skill_fact_types_are_known(client):
-    skills = get(client, "skills?page=0&page_size=200")
+async def test_skill_fact_types_are_known(client):
+    skills = await get(client, "skills?page=0&page_size=200")
     unknown = {
         fact["type"]
         for skill in skills
@@ -82,20 +83,20 @@ def test_skill_fact_types_are_known(client):
 
 
 @needs_key
-def test_account(client):
-    account = get(client, "account", authenticated=True)
+async def test_account(client):
+    account = await get(client, "account", authenticated=True)
     assert {"id", "name", "world", "guilds", "created"} <= account.keys()
 
 
 @needs_key
-def test_pvp_stats(client):
-    stats = get(client, "pvp/stats", authenticated=True)
+async def test_pvp_stats(client):
+    stats = await get(client, "pvp/stats", authenticated=True)
     assert {"pvp_rank", "pvp_rank_rollovers"} <= stats.keys()
     assert {"wins", "byes"} <= stats["aggregate"].keys()
     assert {"wins", "byes"} <= stats["ladders"]["ranked"].keys()
 
 
 @needs_key
-def test_wallet(client):
-    wallet = get(client, "account/wallet", authenticated=True)
+async def test_wallet(client):
+    wallet = await get(client, "account/wallet", authenticated=True)
     assert all({"id", "value"} <= entry.keys() for entry in wallet)

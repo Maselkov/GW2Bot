@@ -84,7 +84,7 @@ def test_mongo_uri_override():
 async def bot():
     bot = GW2Bot(Settings(token="tok"))
     yield bot
-    bot.database.client.close()
+    await bot.database.client.close()
 
 
 def make_interaction(done=False, cog=None):
@@ -228,7 +228,7 @@ async def test_manual_sync_is_recorded(syncing_bot):
     syncing_bot.tree.sync.assert_not_awaited()
 
 
-def test_command_hash_ignores_registration_order():
+async def test_command_hash_ignores_registration_order():
     from gw2bot.bot import command_tree_hash
 
     first = GW2Bot(Settings(token="tok"))
@@ -238,3 +238,5 @@ def test_command_hash_ignores_registration_order():
     for name in ("b", "a"):
         add_command(second, name)
     assert command_tree_hash(first.tree) == command_tree_hash(second.tree)
+    for bot in (first, second):
+        await bot.database.client.close()
