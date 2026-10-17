@@ -3,8 +3,8 @@ import datetime
 import json
 import unicodedata
 import xml.etree.ElementTree as et
-import html2markdown
-import re
+
+import aiohttp
 
 import discord
 from bs4 import BeautifulSoup
@@ -14,6 +14,7 @@ from discord.ext import tasks
 
 from .daily import DAILY_CATEGORIES
 from .exceptions import APIError
+from .utils.markdown import html_to_markdown
 
 
 class DailyCategoriesDropdown(discord.ui.Select):
@@ -538,17 +539,22 @@ class NotiifiersMixin:
             e.set_footer(text="Build: {}".format(new_build))
             return e
 
+        async def fetch(url):
+            timeout = aiohttp.ClientTimeout(total=30)
+            async with self.session.get(url, timeout=timeout) as response:
+                if response.status != 200:
+                    self.log.warning("Update notes: %s returned %s", url, response.status)
+                return await response.text()
+
         async def get_page(url):
-            response = await self.httpx_client.get(url)
-            return BeautifulSoup(response.text, "html.parser")
+            return BeautifulSoup(await fetch(url), "html.parser")
 
         update_feed_url = (
             "https://en-forum.guildwars2.com/forum/6-game-update-notes.xml"
         )
 
         # Get latest forum post from RSS feed
-        response = await self.httpx_client.get(update_feed_url)
-        feed = et.fromstring(response.text)
+        feed = et.fromstring(await fetch(update_feed_url))
         channel = feed.find("channel")
         latest_post = channel.find("item")
 
@@ -582,32 +588,7 @@ class NotiifiersMixin:
             if count < amount_comments_in_post:
                 all_notes = []
                 for comment in filtered_div_tags[count:]:
-                    for tag in comment:
-                        tag.attrs = {}
-                    patch_notes = str(comment)
-
-                    # Sanitize HTML output
-                    # Remove tag parameters
-                    patch_notes = re.sub(r"<([a-z]{0,5}) (?!href).*?>", r"<\1>", patch_notes)
-                    # Keep refs
-                    patch_notes = re.sub(r"(<a href=\".*\") .*?>", r"\1>", patch_notes)
-                    # Remove closing tags
-                    patch_notes = patch_notes.replace("</span>", "")
-                    patch_notes = patch_notes.replace("<img>", "")
-                    patch_notes = patch_notes.replace("</div>", "")
-                    patch_notes = patch_notes.replace("<span>", "")
-                    patch_notes = patch_notes.replace("<div>", "")
-                    patch_notes = patch_notes.replace("&nbsp;", " ")
-
-                    md_text = html2markdown.convert(str(patch_notes))
-                    # Some more sanitizing
-                    md_text = md_text.replace("<li>", "")
-                    md_text = md_text.replace("</li>", "")
-                    md_text = md_text.replace("&nbsp;", " ")
-                    md_text = re.sub(r"^[\s]*$", r"", md_text)
-                    md_text = re.sub(r"^\n$", r"", md_text)
-                    md_text = re.sub(r"[#]{2,} (.*)", r"*\1*", md_text)
-                    md_text = re.sub(r"# (.*)", r"**\1**", md_text)
+                    md_text = html_to_markdown(str(comment))
                     e = build_embed(title, link, md_text)
 
                     text_version = "Guild Wars 2 has just updated!"

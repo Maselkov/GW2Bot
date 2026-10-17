@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import collections
 import io
@@ -6,8 +7,8 @@ import math
 import re
 import struct
 
+import aiohttp
 import discord
-import requests
 from discord.ext import commands
 from discord import app_commands
 from discord.app_commands import Choice
@@ -18,6 +19,21 @@ from .utils.db import prepare_search
 
 CHATCODE_REGEX = re.compile(r"\[\&(?=[^\s\[\]]*\])(.*?)\]")
 TILESERVICE_BASE_URL = "https://tiles.guildwars2.com/"
+# Concurrent downloads per build image
+IMAGE_DOWNLOADS = 10
+
+
+async def download_images(session, urls):
+    """Fetch image URLs concurrently. Returns {url: bytes}."""
+    semaphore = asyncio.Semaphore(IMAGE_DOWNLOADS)
+    timeout = aiohttp.ClientTimeout(total=30)
+
+    async def fetch(url):
+        async with semaphore, session.get(url, timeout=timeout) as response:
+            response.raise_for_status()
+            return url, await response.read()
+
+    return dict(await asyncio.gather(*(fetch(url) for url in set(urls))))
 
 
 class Build:
@@ -233,16 +249,22 @@ class Build:
 
         return cls(cog, profession, specs, skills, code)
 
-    def __render(self, filename):
-        if not self.skills and not self.specializations:
-            return None
-        session = requests.Session()
+    def image_urls(self):
+        urls = [skill["icon"] for skill in self.skills]
+        for d in self.specializations:
+            spec = d["spec_doc"]
+            urls.append(spec["background"])
+            for trait in spec["major_traits"] + spec["minor_traits"]:
+                urls.append(d["trait_docs"][trait]["icon"])
+        return urls
+
+    def __render(self, filename, images):
         image = None
         draw = None
         skills_size = 64 if self.skills else 0
         for index, d in enumerate(self.specializations):
             spec_image = self.render_specialization(
-                d["spec_doc"], d["active_traits"], d["trait_docs"], session
+                d["spec_doc"], d["active_traits"], d["trait_docs"], images
             )
             if not image:
                 image = Image.new(
@@ -265,9 +287,8 @@ class Build:
         if not image:
             image = Image.new("RGBA", (645, skills_size))
         for i, skill in enumerate(self.skills, start=0):
-            resp = session.get(skill["icon"])
-            skill_icon = Image.open(io.BytesIO(resp.content))
-            skill_icon = skill_icon.resize((64, 64), Image.ANTIALIAS)
+            skill_icon = Image.open(io.BytesIO(images[skill["icon"]]))
+            skill_icon = skill_icon.resize((64, 64), Image.Resampling.LANCZOS)
             skill_icon = skill_icon.crop(
                 (
                     crop_amount,
@@ -285,7 +306,6 @@ class Build:
         #   except Exception as e:
         #      self.cog.log.exception("Exception displayking skills: ",
         #                           exc_info=e)
-        session.close()
         output = io.BytesIO()
         image.save(output, "png")
         output.seek(0)
@@ -293,18 +313,19 @@ class Build:
         return file
 
     async def render(self, *, filename="specializations.png"):
-        return await self.cog.bot.loop.run_in_executor(None, self.__render, filename)
+        if not self.skills and not self.specializations:
+            return None
+        images = await download_images(self.cog.session, self.image_urls())
+        return await self.cog.bot.loop.run_in_executor(None, self.__render, filename, images)
 
     @staticmethod
-    def render_specialization(specialization, active_traits, trait_docs, session):
+    def render_specialization(specialization, active_traits, trait_docs, images):
         def get_trait_image(icon_url, size):
-            resp = session.get(icon_url)
-            image = Image.open(io.BytesIO(resp.content))
+            image = Image.open(io.BytesIO(images[icon_url]))
             image = image.crop((4, 4, image.width - 4, image.height - 4))
-            return image.resize((size, size), Image.ANTIALIAS)
+            return image.resize((size, size), Image.Resampling.LANCZOS)
 
-        resp = session.get(specialization["background"])
-        background = Image.open(io.BytesIO(resp.content))
+        background = Image.open(io.BytesIO(images[specialization["background"]]))
         background = background.crop((0, 121, 645, 256))
         draw = ImageDraw.ImageDraw(background)
         polygon_points = [120, 11, 167, 39, 167, 93, 120, 121, 73, 93, 73, 39, 120, 11]

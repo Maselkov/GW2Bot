@@ -6,7 +6,7 @@ A Guild Wars 2 Discord bot.
 
 ## How To Run
 
-GW2Bot needs a Discord bot token and a MongoDB server. In the [Discord Developer Portal](https://discord.com/developers/applications), enable the **Server Members** and **Message Content** privileged intents for your bot.
+GW2Bot needs a Discord bot token and a MongoDB server, version 4.4 or newer. In the [Discord Developer Portal](https://discord.com/developers/applications), enable the **Server Members** and **Message Content** privileged intents for your bot.
 
 Configuration is read from environment variables:
 
@@ -87,7 +87,12 @@ python -m venv .venv-test
 .venv-test/bin/pytest
 ```
 
-Tests don't need Discord or MongoDB.
+Tests don't need Discord. The tests in `tests/test_database.py` run against a real MongoDB, and are skipped unless `MONGO_TEST_URI` is set. Each test creates its own database and drops it afterwards. CI runs them with a MongoDB service.
+
+```bash
+docker run -d --rm -p 127.0.0.1:27017:27017 mongo:9
+MONGO_TEST_URI=mongodb://localhost:27017 .venv-test/bin/pytest
+```
 
 Tests only check inputs and outputs, so they survive a restructure of the code. They never call the cog's mixins directly. Instead they go through the plain functions in `tests/subject.py`. When logic moves, point the matching function in `subject.py` at its new home and the tests stay the same.
 

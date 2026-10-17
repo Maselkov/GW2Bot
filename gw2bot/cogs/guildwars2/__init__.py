@@ -5,7 +5,6 @@ import pathlib
 
 import discord
 from PIL import ImageFont
-import httpx
 
 from .account import AccountMixin
 from .achievements import AchievementsMixin
@@ -66,7 +65,6 @@ class GuildWars2(
         with open(DATA_DIR / "instabilities.json", encoding="utf-8", mode="r") as f:
             self.instabilities = json.load(f)
         self.session = bot.session
-        self.httpx_client = httpx.AsyncClient()
         self.boss_schedule = self.generate_schedule()
         self.embed_color = 0xC12D2B
         self.log = logging.getLogger(__name__)
@@ -108,7 +106,6 @@ class GuildWars2(
     async def cog_unload(self):
         for task in self.tasks:
             task.cancel()
-        await self.httpx_client.aclose()
 
     async def cog_error_handler(self, interaction, error):
         msg = ""

@@ -296,3 +296,83 @@ def api_error_message(error):
     """The message shown to the user for an exception from the API layer."""
     interaction = MagicMock()
     return asyncio.run(GuildWars2.cog_error_handler(None, interaction, error))
+
+
+# --- Update notes ----------------------------------------------------------
+
+def patch_notes_markdown(html):
+    """Discord markdown for a forum post's HTML."""
+    from gw2bot.cogs.guildwars2.utils.markdown import html_to_markdown
+
+    return html_to_markdown(html)
+
+
+# --- Build images ----------------------------------------------------------
+
+class FakeImageSession:
+    """Serves {url: image bytes}; any other URL is a 404. Records requests."""
+
+    def __init__(self, images):
+        self.images = images
+        self.requests = []
+
+    def get(self, url, timeout=None):
+        self.requests.append(url)
+        return _FakeImageResponse(self.images.get(url))
+
+
+class _FakeImageResponse:
+    def __init__(self, body):
+        self.body = body
+
+    def raise_for_status(self):
+        if self.body is None:
+            import aiohttp
+
+            raise aiohttp.ClientResponseError(MagicMock(), (), status=404)
+
+    async def read(self):
+        return self.body
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+async def render_build(session, specializations, skills):
+    """PNG bytes of a build image, or None when there's nothing to draw.
+
+    specializations: [{"spec_doc", "active_traits", "trait_docs"}] as stored
+    by the bot; skills: skill docs with an "icon" URL.
+    """
+    from types import SimpleNamespace
+
+    from PIL import ImageFont
+
+    from gw2bot.cogs.guildwars2.skills import Build
+
+    cog = SimpleNamespace(
+        session=session,
+        bot=SimpleNamespace(loop=asyncio.get_running_loop()),
+        font=ImageFont.load_default(),
+    )
+    file = await Build(cog, None, specializations, skills, "[&code]").render()
+    return file.fp.read() if file else None
+
+
+# --- Database-backed logic -------------------------------------------------
+
+async def total_possible_ap(db):
+    """Maximum achievement points, from the cached achievements in `db`."""
+    harness = _Harness()
+    harness.db = db
+    return await harness.total_possible_ap()
+
+
+async def account_ap(db, progress, account):
+    """A user's AP from /account/achievements progress and /account."""
+    harness = _Harness()
+    harness.db = db
+    return await harness.calculate_user_ap(progress, account)

@@ -17,6 +17,7 @@ Before a file is written, it is checked for the real account name, account
 id, guild ids, character names and the key; recording aborts if any remain.
 Review the diff before committing.
 """
+import asyncio
 import json
 import os
 import pathlib
@@ -24,7 +25,7 @@ import random
 import sys
 import urllib.parse
 
-import httpx
+import aiohttp
 
 API = "https://api.guildwars2.com/v2/"
 OUT_DIR = (
@@ -172,28 +173,31 @@ def fixture_name(endpoint):
     return path + ".json"
 
 
-def main():
+async def main():
     key = os.environ.get("GW2_API_KEY")
     if not key:
         print("Authenticated endpoints skipped: GW2_API_KEY not set", file=sys.stderr)
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     headers = {"User-Agent": "GW2Bot fixture recorder"}
-    with httpx.Client(base_url=API, headers=headers, timeout=30) as client:
+    timeout = aiohttp.ClientTimeout(total=30)
+    async with aiohttp.ClientSession(headers=headers, timeout=timeout) as client:
 
-        def get(endpoint, authenticated):
-            # httpx drops a URL's own query string when params is given, so
-            # pass the endpoint's query through params too
+        async def get(endpoint, authenticated):
+            # Send the endpoint's own query through params too, so it's
+            # combined with the key the same way whatever the client does
             path, _, query = endpoint.partition("?")
             params = dict(urllib.parse.parse_qsl(query))
             if authenticated:
                 params["access_token"] = key
-            r = client.get(path, params=params)
-            r.raise_for_status()
-            return r.json()
+            async with client.get(API + path, params=params) as r:
+                r.raise_for_status()
+                return await r.json()
 
-        world_ids = get("worlds", False)
+        world_ids = await get("worlds", False)
         if key:
-            scrubber = Scrubber(get("account", True), get("characters", True), world_ids)
+            scrubber = Scrubber(
+                await get("account", True), await get("characters", True), world_ids
+            )
             scrubber.secrets.add(key)
         else:
             scrubber = Scrubber(world_ids=world_ids)
@@ -202,7 +206,7 @@ def main():
         if key:
             endpoints += [(e, True) for e in AUTHENTICATED]
         for endpoint, authenticated in endpoints:
-            data = get(endpoint, authenticated)
+            data = await get(endpoint, authenticated)
             if endpoint in LIMITS:
                 data = data[: LIMITS[endpoint]]
             data = scrubber.scrub(endpoint, data)
@@ -215,6 +219,6 @@ def main():
 
 if __name__ == "__main__":
     try:
-        main()
+        asyncio.run(main())
     except LeakError as e:
         sys.exit(f"Aborted: {e}")
