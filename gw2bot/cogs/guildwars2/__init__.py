@@ -59,7 +59,7 @@ class GuildWars2(
 
     def __init__(self, bot):
         self.bot = bot
-        self.db = self.bot.database.db.gw2
+        self.db = self.bot.data.gw2
         with open(DATA_DIR / "gamedata.json", encoding="utf-8", mode="r") as f:
             self.gamedata = json.load(f)
         with open(DATA_DIR / "instabilities.json", encoding="utf-8", mode="r") as f:
@@ -125,13 +125,8 @@ class GuildWars2(
         return ctx.channel.permissions_for(ctx.me).embed_links
 
     async def get_embed_color(self, ctx):
-        if not hasattr(ctx, "author"):
-            return self.embed_color
-        doc = await self.bot.database.users.find_one(
-            {"_id": ctx.author.id}, {"embed_color": 1, "_id": 0}
-        )
-        if doc and doc["embed_color"]:
-            return int(doc["embed_color"], 16)
+        # Toothy's per-user embed_color only ever applied to text commands
+        # (contexts with .author), never to slash commands
         return self.embed_color
 
     def tell_off(
@@ -142,8 +137,7 @@ class GuildWars2(
 
 async def setup(bot):
     cog = GuildWars2(bot)
-    await bot.database.setup_cog(
-        cog,
+    await bot.data.config.ensure_defaults(
         {
             "cache": {
                 "day": datetime.datetime.utcnow().weekday(),

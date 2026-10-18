@@ -31,7 +31,7 @@ class DatabaseMixin:
         await self.rebuild_database()
 
     async def upgrade_legacy_guildsync(self, guild):
-        doc = await self.bot.database.get(guild, self)
+        doc = await self.bot.data.guilds.get(guild.id)
         sync = doc.get("sync")
         if not sync:
             return False
@@ -77,10 +77,10 @@ class DatabaseMixin:
         }
         if await self.can_add_sync(guild, gid):
             await self.db.guildsyncs.insert_one(sync_doc)
-            await self.bot.database.set(guild, {
+            await self.bot.data.guilds.update(guild.id, {
                 "guildsync.enabled": True,
                 "guildsync.purge": purge
-            }, self)
+            })
             return True
         return False
 
@@ -108,10 +108,7 @@ class DatabaseMixin:
     @database.command(name="statistics")
     async def db_stats(self, ctx):
         """Some statistics   """
-        result = await self.bot.database.users.count_documents(
-            {"cogs.GuildWars2.key": {
-                "$ne": None
-            }}, self)
+        result = await self.bot.data.users.count({"key": {"$ne": None}})
         await ctx.send("{} registered users".format(result))
 
     async def get_title(self, title_id):
@@ -134,7 +131,7 @@ class DatabaseMixin:
         return await self.db.items.find_one({"_id": item})
 
     async def fetch_key(self, user, scopes=None):
-        doc = await self.bot.database.get_user(user, self)
+        doc = await self.bot.data.users.get(user.id)
         if not doc or "key" not in doc or not doc["key"]:
             raise APIKeyError(
                 "No API key associated with your account. "
@@ -168,18 +165,17 @@ class DatabaseMixin:
             "achievements?ids=" + ",".join(str(i) for i in sorted(achievement_ids)))
         names = {achievement["id"]: achievement["name"] for achievement in achievements}
         rotation = daily_rotation(categories, names)
-        await self.bot.database.set_cog_config(
-            self, {
-                "cache.dailies": rotation["today"],
-                "cache.dailies_tomorrow": rotation["tomorrow"]
-            })
+        await self.bot.data.config.update({
+            "cache.dailies": rotation["today"],
+            "cache.dailies_tomorrow": rotation["tomorrow"]
+        })
 
     async def cache_raids(self):
         raids = []
         raids_index = await self.call_api("raids")
         for raid in raids_index:
             raids.append(await self.call_api("raids/" + raid))
-        await self.bot.database.set_cog_config(self, {"cache.raids": raids})
+        await self.bot.data.config.update({"cache.raids": raids})
 
     async def cache_pois(self):
 
@@ -212,7 +208,7 @@ class DatabaseMixin:
             print("Continents done")
 
     async def get_raids(self):
-        config = await self.bot.database.get_cog_config(self)
+        config = await self.bot.data.config.get()
         return config["cache"].get("raids")
 
     async def cache_endpoint(self, endpoint, all_at_once=False):

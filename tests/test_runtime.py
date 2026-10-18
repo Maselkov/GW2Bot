@@ -84,7 +84,7 @@ def test_mongo_uri_override():
 async def bot():
     bot = GW2Bot(Settings(token="tok"))
     yield bot
-    await bot.database.client.close()
+    await bot.data.close()
 
 
 def make_interaction(done=False, cog=None):
@@ -239,4 +239,4 @@ async def test_command_hash_ignores_registration_order():
         add_command(second, name)
     assert command_tree_hash(first.tree) == command_tree_hash(second.tree)
     for bot in (first, second):
-        await bot.database.client.close()
+        await bot.data.close()

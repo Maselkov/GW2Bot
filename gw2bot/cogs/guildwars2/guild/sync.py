@@ -308,7 +308,7 @@ class GuildSync:
         async def create(cls, cog, member) -> GuildSync.SyncTarget:
             self = cls()
             self.member = member
-            doc = await cog.bot.database.get(member, cog)
+            doc = await cog.bot.data.users.get(member.id)
             keys = doc.get("keys", [])
             if not keys:
                 key = doc.get("key")
@@ -425,7 +425,7 @@ class GuildSync:
         await gs.synchronize_roles()
         if user:
             await gs.fetch_members()
-            user_doc = await self.bot.database.get(user, self)
+            user_doc = await self.bot.data.users.get(user.id)
             keys = user_doc.get("keys", [])
             if not keys:
                 key = user_doc.get("key")
@@ -737,11 +737,11 @@ class GuildSync:
                 "one that already exists. See $guildsync edit."
             )
         await self.db.guildsyncs.insert_one(doc)
-        guild_doc = await self.bot.database.get(guild, self)
+        guild_doc = await self.bot.data.guilds.get(guild.id)
         sync_doc = guild_doc.get("guildsync", {})
         enabled = sync_doc.get("enabled", None)
         if enabled is None:
-            await self.bot.database.set(guild, {"guildsync.enabled": True}, self)
+            await self.bot.data.guilds.update(guild.id, {"guildsync.enabled": True})
         await destination.send("Guildsync succesfully added!")
         await self.run_guildsyncs(guild)
 
@@ -752,7 +752,7 @@ class GuildSync:
     async def sync_toggle(self, interaction: discord.Interaction, enabled: bool):
         """Global toggle for guildsync - does not wipe the settings"""
         guild = interaction.guild
-        await self.bot.database.set_guild(guild, {"guildsync.enabled": enabled}, self)
+        await self.bot.data.guilds.update(guild.id, {"guildsync.enabled": enabled})
         if enabled:
             msg = (
                 "Guildsync is now enabled. You may still need to "
@@ -797,13 +797,9 @@ class GuildSync:
                     content="Timed out.", view=None
                 )
             elif view.value:
-                await self.bot.database.set(
-                    interaction.guild, {"guildsync.purge": enabled}, self
-                )
+                await self.bot.data.guilds.update(interaction.guild.id, {"guildsync.purge": enabled})
         else:
-            await self.bot.database.set(
-                interaction.guild, {"guildsync.purge": enabled}, self
-            )
+            await self.bot.data.guilds.update(interaction.guild.id, {"guildsync.purge": enabled})
             await interaction.response.send_message("Disabled purge.")
 
     async def verify_leader_permissions(self, key, guild_id):
@@ -814,7 +810,7 @@ class GuildSync:
             return False
 
     async def run_guildsyncs(self, guild: discord.Guild, *, sync_for=None):
-        guild_doc = await self.bot.database.get(guild, self)
+        guild_doc = await self.bot.data.guilds.get(guild.id)
         guildsync_doc = guild_doc.get("guildsync", {})
         enabled = guildsync_doc.get("enabled", False)
         if not enabled:
@@ -879,13 +875,12 @@ class GuildSync:
 
     @tasks.loop(seconds=60)
     async def guild_synchronizer(self):
-        cursor = self.bot.database.iter(
-            "guilds", {"guildsync.enabled": True}, self, batch_size=10
-        )
+        cursor = self.bot.data.guilds.find({"guildsync.enabled": True}, batch_size=10)
         async for doc in cursor:
             try:
-                if doc["_obj"]:
-                    coro = self.run_guildsyncs(doc["_obj"])
+                guild = self.bot.get_guild(doc["_id"])
+                if guild:
+                    coro = self.run_guildsyncs(guild)
                     await asyncio.wait_for(coro, timeout=200)
             except asyncio.CancelledError:
                 return
@@ -906,7 +901,7 @@ class GuildSync:
         if member.bot:
             return
         guild = member.guild
-        doc = await self.bot.database.get(guild, self)
+        doc = await self.bot.data.guilds.get(guild.id)
         sync = doc.get("guildsync", {})
         enabled = sync.get("enabled", False)
         if enabled:

@@ -30,17 +30,17 @@ class GuildManageMixin:
     ):
         """Automatically change all server member nicknames to in-game names"""
         guild = interaction.guild
-        doc = await self.bot.database.get(guild, self)
-        if doc and enabled and doc.get("forced_account_names"):
+        doc = await self.bot.data.guilds.get(guild.id)
+        if doc and enabled and doc.get("force_account_names"):
             return await interaction.response.send_message(
                 "Forced account names are already enabled"
             )
         if not enabled:
-            await self.bot.database.set(guild, {"force_account_names": False}, self)
+            await self.bot.data.guilds.update(guild.id, {"force_account_names": False})
             return await interaction.response.send_message(
                 "Forced account names disabled"
             )
-        await self.bot.database.set(guild, {"force_account_names": True}, self)
+        await self.bot.data.guilds.update(guild.id, {"force_account_names": True})
         await self.force_guild_account_names(guild)
         await interaction.response.send_message(
             content="Automatic account names enabled. To disable, use "
@@ -54,7 +54,7 @@ class GuildManageMixin:
     async def previewchatlinks(self, interaction: discord.Interaction, enabled: bool):
         """Enable or disable automatic GW2 chat link preview"""
         guild = interaction.guild
-        doc = await self.bot.database.get(interaction.guild, self)
+        doc = await self.bot.data.guilds.get(interaction.guild.id)
         disabled = doc.get("link_preview_disabled", False)
         if disabled and not enabled:
             return await interaction.response.send_message(
@@ -65,17 +65,13 @@ class GuildManageMixin:
                 "Chat link preview is aleady enabled.", ephemeral=True
             )
         if not disabled and not enabled:
+            await self.bot.data.guilds.update(guild.id, {"link_preview_disabled": True})
             self.chatcode_preview_opted_out_guilds.add(guild.id)
             return await interaction.response.send_message(
                 "Chat link preview is now disabled.", ephemeral=True
             )
         if disabled and enabled:
-            await self.bot.database.set_guild(
-                guild, {"link_preview_disabled": not enabled}, self
-            )
-            await self.bot.database.set_guild(
-                guild, {"link_preview_disabled": not enabled}, self
-            )
+            await self.bot.data.guilds.update(guild.id, {"link_preview_disabled": not enabled})
             try:
                 self.chatcode_preview_opted_out_guilds.remove(guild.id)
             except KeyError:
@@ -110,9 +106,7 @@ class GuildManageMixin:
                 ephemeral=True,
             )
         guild = interaction.guild
-        await self.bot.database.set(
-            guild, {"key_sync.enabled": enabled, "key_sync.role": role.id}, self
-        )
+        await self.bot.data.guilds.update(guild.id, {"key_sync.enabled": enabled, "key_sync.role": role.id})
         if enabled:
             if not role:
                 return await interaction.response.send_message("Please specify a role.")
@@ -130,13 +124,7 @@ class GuildManageMixin:
         """Set your default guild for guild commands on this server."""
         await interaction.response.defer()
         results = await self.call_api(f"guild/{guild}")
-        await self.bot.database.set_guild(
-            interaction.guild,
-            {
-                "guild_ingame": guild,
-            },
-            self,
-        )
+        await self.bot.data.guilds.update(interaction.guild.id, {"guild_ingame": guild})
         await interaction.followup.send(
             f"Your default guild is now set to {results['name']} for this "
             "server. All commands from the `guild` command group "
@@ -147,10 +135,9 @@ class GuildManageMixin:
 
     @tasks.loop(minutes=5)
     async def key_sync_task(self):
-        cursor = self.bot.database.iter("guilds", {"key_sync.enabled": True}, self)
-        async for doc in cursor:
+        async for doc in self.bot.data.guilds.find({"key_sync.enabled": True}):
             try:
-                guild = doc["_obj"]
+                guild = self.bot.get_guild(doc["_id"])
                 role = guild.get_role(doc["key_sync"]["role"])
                 if not role:
                     continue
@@ -162,14 +149,14 @@ class GuildManageMixin:
 
     async def key_sync_guild(self, guild: discord.Guild, role=None):
         if not role:
-            doc = await self.bot.database.get(guild, self)
+            doc = await self.bot.data.guilds.get(guild.id)
             enabled = doc.get("key_sync", {}).get("enabled")
             if not enabled:
                 return
             role = guild.get_role(doc["key_sync"]["role"])
         if not role:
             return
-        doc = await self.bot.database.get(guild, self)
+        doc = await self.bot.data.guilds.get(guild.id)
         role = guild.get_role(doc["key_sync"]["role"])
         if not role:
             return
@@ -183,14 +170,14 @@ class GuildManageMixin:
         if not guild.me.guild_permissions.manage_roles:
             return
         if not role:
-            doc = await self.bot.database.get(guild, self)
+            doc = await self.bot.data.guilds.get(guild.id)
             enabled = doc.get("key_sync", {}).get("enabled")
             if not enabled:
                 return
             role = guild.get_role(doc["key_sync"]["role"])
         if not role:
             return
-        user_doc = await self.bot.database.get(member, self)
+        user_doc = await self.bot.data.users.get(member.id)
         has_key = False
         if user_doc.get("key", {}).get("key"):
             has_key = True

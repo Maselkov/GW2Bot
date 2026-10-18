@@ -17,7 +17,7 @@ class KeyMixin:
     async def key_add(self, interaction: discord.Interaction, token: str):
         """Adds a key and associates it with your discord account"""
         await interaction.response.defer(ephemeral=True)
-        doc = await self.bot.database.get(interaction.user, self)
+        doc = await self.bot.data.users.get(interaction.user.id)
         try:
             endpoints = ["tokeninfo", "account"]
             token_info, acc = await self.call_multiple(endpoints, key=token)
@@ -51,9 +51,7 @@ class KeyMixin:
                 "another"
             )
         keys.append(key_doc)
-        await self.bot.database.set(
-            interaction.user, {"key": key_doc, "keys": keys}, self
-        )
+        await self.bot.data.users.update(interaction.user.id, {"key": key_doc, "keys": keys})
         if len(keys) > 1:
             output = (
                 "Your key was verified and "
@@ -99,7 +97,7 @@ class KeyMixin:
             #             continue
             #         member = guild.get_member(interaction.user.id)
             #         await self.key_sync_user(member)
-            #         doc = await self.bot.database.get(guild, self)
+            #         doc = await self.bot.data.guilds.get(guild.id)
             #         guildsync = doc.get("sync", {})
             #         if guildsync.get("on", False) and guildsync.get("setupdone", False):
             #             await self.guildsync_on_member_join(member)
@@ -109,7 +107,7 @@ class KeyMixin:
             pass
 
     async def key_autocomplete(self, interaction: discord.Interaction, current: str):
-        doc = await self.bot.database.get(interaction.user, self)
+        doc = await self.bot.data.users.get(interaction.user.id)
         current = current.lower()
         choices = []
         keys = doc.get("keys", [])
@@ -127,7 +125,7 @@ class KeyMixin:
     async def key_remove(self, interaction: discord.Interaction, token: str):
         """Remove selected keys from the bot"""
         await interaction.response.defer(ephemeral=True)
-        doc = await self.bot.database.get(interaction.user, self)
+        doc = await self.bot.data.users.get(interaction.user.id)
         keys = doc.get("keys", [])
         key = doc.get("key", {})
         to_keep = []
@@ -140,15 +138,13 @@ class KeyMixin:
             return await interaction.followup.send(
                 "No keys were removed. Invalid token"
             )
-        await self.bot.database.set(
-            interaction.user, {"key": key, "keys": to_keep}, self
-        )
+        await self.bot.data.users.update(interaction.user.id, {"key": key, "keys": to_keep})
         await interaction.followup.send("Key removed.")
 
     @key_group.command(name="info")
     async def key_info(self, interaction: discord.Interaction):
         """Information about your api keys"""
-        doc = await self.bot.database.get(interaction.user, self)
+        doc = await self.bot.data.users.get(interaction.user.id)
         await interaction.response.defer(ephemeral=True)
         keys = doc.get("keys", [])
         key = doc.get("key", {})
@@ -165,7 +161,7 @@ class KeyMixin:
     @app_commands.autocomplete(token=key_autocomplete)
     async def key_switch(self, interaction: discord.Interaction, token: str):
         """Swaps between multiple stored API keys."""
-        doc = await self.bot.database.get(interaction.user, self)
+        doc = await self.bot.data.users.get(interaction.user.id)
         keys = doc.get("keys", [])
         key = doc.get("key", {})
         if not keys:
@@ -184,7 +180,7 @@ class KeyMixin:
             return await interaction.response.send_message(
                 "That key is not in your account.", ephemeral=True
             )
-        await self.bot.database.set(interaction.user, {"key": k}, self)
+        await self.bot.data.users.update(interaction.user.id, {"key": k})
         msg = "Swapped to selected key."
         if key["name"]:
             msg += " Name : `{}`".format(k["name"])

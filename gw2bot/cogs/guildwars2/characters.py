@@ -188,7 +188,7 @@ class CharactersMixin:
 
     async def character_autocomplete(self, interaction: discord.Interaction,
                                      current: str):
-        doc = await self.bot.database.get(interaction.user, self)
+        doc = await self.bot.data.users.get(interaction.user.id)
         key = doc.get("key", {})
         if not key:
             return []
@@ -206,9 +206,9 @@ class CharactersMixin:
                 "last_update": datetime.datetime.utcnow(),
                 "characters": character_list
             }
-            await self.bot.database.set(interaction.user,
-                                        {f"character_cache.{account_key}": c},
-                                        self)
+            await self.bot.data.users.update(
+                interaction.user.id, {f"character_cache.{account_key}": c}
+            )
             return c
 
         cache = doc.get("character_cache", {}).get(account_key, {})
@@ -550,7 +550,7 @@ class CharactersMixin:
                 self.get_emoji(interaction,
                                f"active_build_{i}",
                                return_obj=True))
-        cog_doc = await self.bot.database.get_cog_config(self)
+        cog_doc = await self.bot.data.config.get()
         if not cog_doc:
             return await interaction.followup.send("Eror reading configuration"
                                                    )
@@ -1112,8 +1112,7 @@ class CharactersMixin:
     @commands.is_owner()
     async def set_image_channel(self, ctx, channel: discord.TextChannel):
         """Set image channel for build template switcher"""
-        await self.bot.database.set_cog_config(self,
-                                               {"image_channel": channel.id})
+        await self.bot.data.config.update({"image_channel": channel.id})
         await ctx.send("Succesfully set")
 
     async def get_all_characters(self, user, scopes=None):

@@ -123,7 +123,7 @@ class DailyMixin:
                           interaction=None,
                           tomorrow=False):
         if not doc:
-            doc = await self.bot.database.get_cog_config(self)
+            doc = await self.bot.data.config.get()
         if interaction:
             color = await self.get_embed_color(interaction)
         else:
