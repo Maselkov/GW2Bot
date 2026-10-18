@@ -63,6 +63,9 @@ async def seed(db):
     await db["statistics.gw2"].insert_one({"_id": "link_previews", "item": 7})
     await db["gw2bot_state"].insert_one({"_id": "command_tree", "hash": "abc"})
     await db["music.queue"].insert_one({"_id": 1})
+    # Leftovers of removed features
+    await db["gw2.bosskills"].insert_one({"_id": 1, "week": 1})
+    await db["gw2.worldpopulation"].insert_one({"_id": 1})
 
 
 async def dump(db):
@@ -126,6 +129,18 @@ async def test_copies_indexes_including_ttl(mongo):
     assert items["name_1"] == ({"name": 1}, None)
     prompts = await index_specs(client[target].guildsync_prompts)
     assert prompts["created_at_1"] == ({"created_at": 1}, PROMPTS_TTL)
+
+
+async def test_leftover_collections_stay_behind(mongo):
+    from gw2bot.db.migrate import NOT_COPIED
+
+    client, source, target = mongo
+    await seed(client[source])
+    report = await migrate(client, source, target)
+    copied = set(await client[target].list_collection_names())
+    assert not copied & {name.removeprefix("gw2.") for name in NOT_COPIED}
+    assert "bosskills" not in report.counts
+    assert await client[source]["gw2.bosskills"].count_documents({}) == 1
 
 
 async def test_source_is_left_untouched(mongo):

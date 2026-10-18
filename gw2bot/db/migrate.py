@@ -7,7 +7,9 @@ GW2Bot's database with plain names:
 
     users/guilds/channels.cogs.GuildWars2 -> users/guilds/channels
     configs {cog_name: "GuildWars2"}      -> config {_id: "GuildWars2"}
-    gw2.<name>                            -> <name> (with its indexes)
+    gw2.<name>                            -> <name> (with its indexes),
+                                             except leftovers of removed
+                                             features (NOT_COPIED)
     statistics.gw2                        -> statistics
     gw2bot_state                          -> state
 
@@ -40,6 +42,13 @@ SCHEMA_VERSION = 1
 BATCH_SIZE = 1000
 SAMPLE_SIZE = 50
 INDEX_OPTIONS = ("name", "unique", "sparse", "expireAfterSeconds", "partialFilterExpression")
+# gw2.* collections no code uses any more; they stay in the source database
+NOT_COPIED = {
+    "gw2.bosskills",  # weekly raid kills per account (1M+ documents in production)
+    "gw2.maps",
+    "gw2.worldpopulation",  # WvW population tracking, removed in #172
+    "gw2.worlds",  # WvW worlds, replaced by teams in #174
+}
 
 
 class MigrationError(Exception):
@@ -66,6 +75,8 @@ class Report:
 
 def target_name(source_collection):
     """Where a source collection is copied to, or None if it isn't."""
+    if source_collection in NOT_COPIED:
+        return None
     if source_collection.startswith("gw2."):
         return source_collection[len("gw2."):]
     return {"gw2": "gw2", "statistics.gw2": "statistics", "gw2bot_state": "state"}.get(source_collection)

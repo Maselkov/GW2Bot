@@ -65,7 +65,7 @@ To use the Guild Wars 2 font, place `GWTwoFont1p1.ttf` in the directory you run 
 
 GW2Bot used to run as an extension of [Toothy](https://github.com/Maselkov/Toothy), and stored its data in Toothy's database: settings inside Toothy's shared `users`/`guilds`/`channels` documents, and its own collections under a `gw2.` prefix.
 
-It now has a database of its own. On its first start, the bot copies everything it uses from the Toothy database (`MIGRATE_FROM_DB`, `toothy` unless you changed `DATABASE.name` in Toothy's `config.json`) into `MONGO_DB`, with plain collection names: `users`, `guilds`, `channels`, `config`, `items`, `guildsyncs`, and so on. Indexes are copied too. The copy is recorded in the new database's `state` collection, so it happens once. A failed copy stops the bot from starting, and the next start tries again.
+It now has a database of its own. On its first start, the bot copies everything it uses from the Toothy database (`MIGRATE_FROM_DB`, `toothy` unless you changed `DATABASE.name` in Toothy's `config.json`) into `MONGO_DB`, with plain collection names: `users`, `guilds`, `channels`, `config`, `items`, `guildsyncs`, and so on. Indexes are copied too. Collections left over from removed features (boss kills, WvW worlds and population) stay in the old database. The copy is recorded in the new database's `state` collection, so it happens once. A failed copy stops the bot from starting, and the next start tries again.
 
 The Toothy database is only ever read. To roll back, run the previous version, which still uses it. Anything changed since the copy is lost from the rollback's point of view. If you then upgrade again, re-copy so the new database isn't stale:
 
