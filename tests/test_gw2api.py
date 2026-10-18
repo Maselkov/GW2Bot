@@ -151,7 +151,17 @@ def stored_account(name="Example.1234", key="KEY"):
 
 
 def account_fixture():
-    return json.loads((FIXTURES / "account.json").read_text(encoding="utf-8"))
+    """A synthetic /v2/account response (never commit real account data)."""
+    return {
+        "id": "00000000-0000-0000-0000-000000000000",
+        "name": "Example.1234",
+        "age": 1000000,
+        "world": 2001,
+        "guilds": [],
+        "created": "2015-01-01T00:00:00Z",
+        "access": ["GuildWars2", "HeartOfThorns", "PathOfFire"],
+        "commander": False,
+    }
 
 
 async def test_account_lookup_uses_the_stored_key():

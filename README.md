@@ -104,18 +104,13 @@ Known bugs are marked `xfail(strict=True)`. Fixing one makes its test report XPA
 
 ### Recorded API responses
 
-`tests/fixtures/gw2api/` holds real API responses. To refresh them, including the authenticated endpoints:
+`tests/fixtures/gw2api/` holds real responses from public endpoints (items, skills, prices, WvW matches, ...). To refresh them:
 
 ```bash
-GW2_API_KEY=... .venv-test/bin/python scripts/record_gw2_fixtures.py
+.venv-test/bin/python scripts/record_gw2_fixtures.py
 ```
 
-The key is never written to disk. Scrubbing:
-- Account names, ids, guild ids and character names (including soulbound items' `bound_to`) are replaced with placeholders.
-- Creation dates are replaced with a fixed date, and the home world with another world in the same region.
-- Wallet values, PvP stats, AP, ranks, ages and death counts are randomly changed by up to 30%.
-
-The recorder aborts if any real name, id or the key would still be written. Check `git diff tests/fixtures` before committing.
+The repository is public, so data from a real account is never committed, not even scrubbed. Tests that need account-shaped data (account, wallet, characters, ...) build synthetic data in the test. `tests/test_fixtures.py` fails if a fixture doesn't come from one of the recorder's public endpoints.
 
 ## Feature List
 
