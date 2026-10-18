@@ -32,7 +32,7 @@ class ApiMixin:
 
     async def check_account_rename(self, user, used_key, account):
         """Update the stored account name if the account was renamed."""
-        doc = await self.bot.database.get(user, self)
+        doc = await self.bot.data.users.get(user.id)
         key = doc["key"]
         keys = doc["keys"]
         if key["account_name"] == account["name"] or used_key != key["key"]:
@@ -43,17 +43,16 @@ class ApiMixin:
         for alt_key in keys:
             if alt_key["account_name"] == old_name:
                 alt_key["account_name"] = new_name
-        await self.bot.database.set(user, {"key": key, "keys": keys}, self)
+        await self.bot.data.users.update(user.id, {"key": key, "keys": keys})
         await user.send(
             "Your account name seems to have "
             "changed! I went ahead and updated it, "
             "from `{}` to `{}`.".format(old_name, new_name)
         )
-        await self.bot.database.set(
-            user,
+        await self.bot.data.users.update(
+            user.id,
             {"name_changes": [old_name, new_name]},
-            self,
-            operator="push",
+            op="push",
         )
 
     def run_in_background(self, coro):

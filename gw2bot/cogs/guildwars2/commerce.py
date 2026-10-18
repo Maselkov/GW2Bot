@@ -260,5 +260,4 @@ class CommerceMixin:
             "You will be notified when price of 400 gems "
             f"drops below {gold} gold",
             ephemeral=True)
-        await self.bot.database.set(interaction.user, {"gemtrack": price},
-                                    self)
+        await self.bot.data.users.update(interaction.user.id, {"gemtrack": price})

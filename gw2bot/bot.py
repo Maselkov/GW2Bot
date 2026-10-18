@@ -9,7 +9,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from .db.legacy import MongoController
+from .db import Data
 from .gw2api import Client
 
 log = logging.getLogger(__name__)
@@ -52,8 +52,8 @@ class GW2Bot(commands.AutoShardedBot):
             intents=intents(),
         )
         self.settings = settings
-        self.database = MongoController(self, settings.mongo_uri, settings.mongo_db)
-        self.state = self.database.db.gw2bot_state
+        self.data = Data(settings.mongo_uri, settings.mongo_db)
+        self.state = self.data.state
         self.available = True
         self.session = None
         self.gw2api = None
@@ -112,7 +112,7 @@ class GW2Bot(commands.AutoShardedBot):
         await super().close()
         if self.session:
             await self.session.close()
-        await self.database.client.close()
+        await self.data.close()
 
     async def on_app_command_error(
         self, interaction: discord.Interaction, error: app_commands.AppCommandError

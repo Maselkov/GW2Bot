@@ -733,8 +733,7 @@ class SkillsMixin:
         return fields
 
     async def prepare_linkpreview_guild_cache(self):
-        cursor = self.bot.database.iter("guilds", {"link_preview_disabled": True}, self)
-        async for doc in cursor:
+        async for doc in self.bot.data.guilds.find({"link_preview_disabled": True}):
             self.chatcode_preview_opted_out_guilds.add(doc["_id"])
 
     async def get_wiki_url(self, name):
@@ -1008,6 +1007,6 @@ class SkillsMixin:
             pass
         finally:
             field_id = link_type.replace(" ", "_").lower()
-            await self.bot.database.db.statistics.gw2.update_one(
+            await self.bot.data.db["statistics.gw2"].update_one(
                 {"_id": "link_previews"}, {"$inc": {field_id: 1}}, upsert=True
             )

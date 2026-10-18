@@ -64,7 +64,7 @@ class DailyCategoriesDropdown(discord.ui.Select):
             "daily.autoedit": autoedit,
             "daily.categories": categories,
         }
-        await self.cog.bot.database.set(interaction.guild, settings, self.cog)
+        await self.cog.bot.data.guilds.update(interaction.guild.id, settings)
         content = f"I will now send dailies to {self.channel.mention}."
         if embed:
             content += " Here's an example notification:"
@@ -121,7 +121,7 @@ class NotiifiersMixin:
         behavior: str = None,
     ):
         """Send daily achievements to a channel every day"""
-        doc = await self.bot.database.get(interaction.guild, self)
+        doc = await self.bot.data.guilds.get(interaction.guild.id)
         already_enabled = doc.get("daily", {}).get("on", False)
         if enabled and not channel:
             await interaction.response.send_message(
@@ -137,7 +137,7 @@ class NotiifiersMixin:
                 ephemeral=True,
             )
         if not enabled:
-            await self.bot.database.set(interaction.guild, {"daily.on": False}, self)
+            await self.bot.data.guilds.update(interaction.guild.id, {"daily.on": False})
             return await interaction.response.send_message("Daily notifier disabled.")
         if not channel.permissions_for(interaction.guild.me).send_messages:
             return await interaction.response.send_message(
@@ -179,7 +179,7 @@ class NotiifiersMixin:
             return await interaction.response.send_message(
                 "You must specify a channel.", ephemeral=True
             )
-        doc = await self.bot.database.get(interaction.guild, self)
+        doc = await self.bot.data.guilds.get(interaction.guild.id)
         already_enabled = doc.get("news", {}).get("on", False)
         if not already_enabled and not channel:
             return await interaction.response.send_message(
@@ -189,7 +189,7 @@ class NotiifiersMixin:
                 ephemeral=True,
             )
         if already_enabled and not channel:
-            await self.bot.database.set(interaction.guild, {"news.on": False}, self)
+            await self.bot.data.guilds.update(interaction.guild.id, {"news.on": False})
             return await interaction.response.send_message(
                 "News notifier disabled.", ephemeral=True
             )
@@ -205,7 +205,7 @@ class NotiifiersMixin:
             )
         role_id = mention.id if mention else None
         settings = {"news.on": True, "news.channel": channel.id, "news.role": role_id}
-        await self.bot.database.set(interaction.guild, settings, self)
+        await self.bot.data.guilds.update(interaction.guild.id, settings)
         await interaction.response.send_message(
             f"I will now send news to {channel.mention}."
         )
@@ -236,7 +236,7 @@ class NotiifiersMixin:
             return await interaction.response.send_message(
                 "This command can only be used in servers at the time.", ephemeral=True
             )
-        doc = await self.bot.database.get(interaction.guild, self)
+        doc = await self.bot.data.guilds.get(interaction.guild.id)
         already_enabled = doc.get("updates", {}).get("on", False)
         if not already_enabled and not enabled:
             return await interaction.response.send_message(
@@ -246,7 +246,7 @@ class NotiifiersMixin:
                 ephemeral=True,
             )
         if not enabled:
-            await self.bot.database.set(interaction.guild, {"updates.on": False}, self)
+            await self.bot.data.guilds.update(interaction.guild.id, {"updates.on": False})
             return await interaction.response.send_message("Update notifier disabled.")
         mention_string = ""
         if mention:
@@ -256,7 +256,7 @@ class NotiifiersMixin:
             "updates.channel": channel.id,
             "updates.mention": mention_string,
         }
-        await self.bot.database.set(interaction.guild, settings, self)
+        await self.bot.data.guilds.update(interaction.guild.id, settings)
         await interaction.response.send_message(
             f"I will now send update notifications to {channel.mention}."
         )
@@ -298,7 +298,7 @@ class NotiifiersMixin:
         if enabled and not channel:
             return await interaction.followup.send("You must specify a channel.")
         key = "bossnotifs"
-        doc = await self.bot.database.get(interaction.guild, self)
+        doc = await self.bot.data.guilds.get(interaction.guild.id)
         enabled = doc.get(key, {}).get("on", False)
         if not enabled and not channel:
             return await interaction.followup.send(
@@ -307,14 +307,14 @@ class NotiifiersMixin:
                 "the `channel` argument."
             )
         if enabled and not channel:
-            await self.bot.database.set(interaction.guild, {f"{key}.on": False}, self)
+            await self.bot.data.guilds.update(interaction.guild.id, {f"{key}.on": False})
             return await interaction.followup.send("Boss notifier disabled.")
         settings = {
             f"{key}.on": True,
             f"{key}.channel": channel.id,
             f"{key}.edit": edit,
         }
-        await self.bot.database.set(interaction.guild, settings, self)
+        await self.bot.data.guilds.update(interaction.guild.id, settings)
         await interaction.followup.send(
             f"I will now send boss notifications to {channel.mention}."
         )
@@ -388,12 +388,20 @@ class NotiifiersMixin:
                 "No event found matching that name", ephemeral=True
             )
         reminder["time"] = minutes_before_event * 60
-        await self.bot.database.set(
-            interaction.user, {"event_reminders": reminder}, self, operator="push"
+        await self.bot.data.users.update(
+            interaction.user.id, {"event_reminders": reminder}, op="push"
         )
         await interaction.response.send_message(
             "Reminder set succesfully", ephemeral=True
         )
+
+    async def guild_subdocs(self, field, query):
+        """Each matching guild's `field` settings, with the guild's _id and
+        the discord.Guild (or None) as _obj."""
+        async for doc in self.bot.data.guilds.find(query):
+            settings = doc.get(field)
+            if isinstance(settings, dict):
+                yield {**settings, "_id": doc["_id"], "_obj": self.bot.get_guild(doc["_id"])}
 
     async def update_notification(self, new_build):
         """[(embed, text, minor)] for update-notes posts not announced yet.
@@ -402,7 +410,7 @@ class NotiifiersMixin:
         forum answers some clients with a Cloudflare challenge), the RSS
         feed's copy of the first post is used instead.
         """
-        updates = self.bot.database.db.gw2.updates
+        updates = self.bot.data.gw2.updates
 
         def build_embed(title, url, data):
             if len(data) >= 1000:
@@ -463,7 +471,7 @@ class NotiifiersMixin:
         ]
 
     async def check_news(self):
-        doc = await self.bot.database.get_cog_config(self)
+        doc = await self.bot.data.config.get()
         if not doc:
             return []
         last_news = doc["cache"]["news"]
@@ -487,7 +495,7 @@ class NotiifiersMixin:
                 except Exception:
                     pass
         last_news = [x.find("title").text for x in feed.findall("item")]
-        await self.bot.database.set_cog_config(self, {"cache.news": last_news})
+        await self.bot.data.config.update({"cache.news": last_news})
         return to_post
 
     def news_embed(self, item):
@@ -501,7 +509,7 @@ class NotiifiersMixin:
         return data
 
     async def game_build_changed(self):
-        doc = await self.bot.database.get_cog_config(self)
+        doc = await self.bot.data.config.get()
         if not doc:
             return False
         current_build = doc["cache"]["build"]
@@ -511,7 +519,7 @@ class NotiifiersMixin:
         some_weird_numbers = some_weird_numbers.split()
         build = some_weird_numbers[0]
         if current_build != build:
-            await self.bot.database.set_cog_config(self, {"cache.build": build})
+            await self.bot.data.config.update({"cache.build": build})
             return True
         else:
             return False
@@ -523,13 +531,8 @@ class NotiifiersMixin:
         except Exception:
             # Post from the cache the refresh loop keeps
             self.log.exception("Exception caching dailies before posting them")
-        cursor = self.bot.database.iter(
-            "guilds",
-            {"daily.on": True, "daily.channel": {"$ne": None}},
-            self,
-            subdocs=["daily"],
-        )
-        daily_doc = await self.bot.database.get_cog_config(self)
+        cursor = self.guild_subdocs("daily", {"daily.on": True, "daily.channel": {"$ne": None}})
+        daily_doc = await self.bot.data.config.get()
 
         async def notify_guild(doc):
             categories = doc.get("categories")
@@ -591,9 +594,7 @@ class NotiifiersMixin:
                 except discord.HTTPException:
                     pass
             if not edited:
-                await self.bot.database.set_guild(
-                    channel.guild, {"daily.message": message.id}, self
-                )
+                await self.bot.data.guilds.update(channel.guild.id, {"daily.message": message.id})
             autopin = doc.get("autopin", False)
             if autopin:
                 message = old_message
@@ -631,12 +632,7 @@ class NotiifiersMixin:
         self.send_daily_notifs.restart()
 
     async def send_news(self, embeds):
-        cursor = self.bot.database.iter(
-            "guilds",
-            {"news.on": True, "news.channel": {"$ne": None}},
-            self,
-            subdocs=["news"],
-        )
+        cursor = self.guild_subdocs("news", {"news.on": True, "news.channel": {"$ne": None}})
         to_filter = ["the arenanet streaming schedule", "community showcase"]
         filtered = [
             embed.title
@@ -663,12 +659,12 @@ class NotiifiersMixin:
                             continue
                     await channel.send(content, embed=embed)
             except discord.Forbidden:
-                await self.bot.database.set(doc["_obj"], {"news.on": False}, self)
+                await self.bot.data.guilds.update(doc["_id"], {"news.on": False})
             except Exception as e:
                 self.log.exception(e)
 
     async def send_update_notifs(self):
-        doc = await self.bot.database.get_cog_config(self)
+        doc = await self.bot.data.config.get()
         build = doc["cache"]["build"]
         embed_available = False
         try:
@@ -677,12 +673,7 @@ class NotiifiersMixin:
                 return
             for embed, text, minor in result:
                 embed_available = True
-                cursor = self.bot.database.iter(
-                    "guilds",
-                    {"updates.on": True, "updates.channel": {"$ne": None}},
-                    self,
-                    subdocs=["updates"],
-                )
+                cursor = self.guild_subdocs("updates", {"updates.on": True, "updates.channel": {"$ne": None}})
                 sent = 0
                 async for doc in cursor:
                     try:
@@ -747,11 +738,10 @@ class NotiifiersMixin:
     async def gem_tracker(self):
         cost = await self.get_gem_price()
         cost_coins = self.gold_to_coins(None, cost)
-        cursor = self.bot.database.iter("users", {"gemtrack": {"$ne": None}}, self)
-        async for doc in cursor:
+        async for doc in self.bot.data.users.find({"gemtrack": {"$ne": None}}):
             try:
                 if cost < doc["gemtrack"]:
-                    user = doc["_obj"]
+                    user = self.bot.get_user(doc["_id"])
                     user_price = self.gold_to_coins(None, doc["gemtrack"])
                     msg = (
                         "Hey, {.mention}! You asked to be notified "
@@ -760,7 +750,7 @@ class NotiifiersMixin:
                         "{}!".format(user, user_price, cost_coins)
                     )
                     await user.send(msg)
-                    await self.bot.database.set(user, {"gemtrack": None}, self)
+                    await self.bot.data.users.update(user.id, {"gemtrack": None})
             except asyncio.CancelledError:
                 return
             except Exception:
@@ -772,15 +762,12 @@ class NotiifiersMixin:
 
     @tasks.loop(minutes=5)
     async def boss_notifier(self):
-        name = self.__class__.__name__
         boss = self.get_upcoming_bosses(1)[0]
         await asyncio.sleep(boss["diff"].total_seconds() + 1)
-        cursor = self.bot.database.get_guilds_cursor(
-            {"bossnotifs.on": True, "bossnotifs.channel": {"$ne": None}}, self
-        )
+        cursor = self.bot.data.guilds.find({"bossnotifs.on": True, "bossnotifs.channel": {"$ne": None}})
         async for doc in cursor:
             try:
-                doc = doc["cogs"][name]["bossnotifs"]
+                doc = doc["bossnotifs"]
                 edit = doc.get("edit", False)
                 channel = self.bot.get_channel(doc["channel"])
                 embed = self.schedule_embed(2)
@@ -806,9 +793,7 @@ class NotiifiersMixin:
                     )
                     continue
                 if not edited:
-                    await self.bot.database.set(
-                        channel.guild, {"bossnotifs.message": message.id}, self
-                    )
+                    await self.bot.data.guilds.update(channel.guild.id, {"bossnotifs.message": message.id})
                     old_message_id = doc.get("message")
                     if old_message_id:
                         to_delete = await channel.fetch_message(old_message_id)
@@ -825,9 +810,7 @@ class NotiifiersMixin:
 
     @tasks.loop(minutes=5)
     async def forced_account_names(self):
-        cursor = self.bot.database.get_guilds_cursor(
-            {"force_account_names": True}, self
-        )
+        cursor = self.bot.data.guilds.find({"force_account_names": True})
         async for doc in cursor:
             try:
                 guild = self.bot.get_guild(doc["_id"])

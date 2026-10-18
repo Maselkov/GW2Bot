@@ -14,7 +14,7 @@ async def guild_name_autocomplete(interaction: discord.Interaction,
                                   current: str):
     cog = interaction.command.binding
     bot = cog.bot
-    doc = await bot.database.get(interaction.user, cog)
+    doc = await bot.data.users.get(interaction.user.id)
     key = doc.get("key", {})
     if not key:
         return []
@@ -40,18 +40,17 @@ async def guild_name_autocomplete(interaction: discord.Interaction,
             "last_update": datetime.datetime.utcnow(),
             "guild_list": guild_list
         }
-        await bot.database.set(interaction.user,
-                               {f"guild_cache.{account_key}": c}, cog)
+        await bot.data.users.update(interaction.user.id, {f"guild_cache.{account_key}": c})
 
     choices = []
     current = current.lower()
     if interaction.guild:
-        doc = await bot.database.get(interaction.guild, cog)
+        doc = await bot.data.guilds.get(interaction.guild.id)
         guild_id = doc.get("guild_ingame")
         if guild_id:
             choices.append(
                 Choice(name="Server's default guild", value=guild_id))
-    doc = await bot.database.get(interaction.user, cog)
+    doc = await bot.data.users.get(interaction.user.id)
     if not key:
         return choices
     cache = doc.get("guild_cache", {}).get(account_key, {})
@@ -199,14 +198,12 @@ class GeneralGuild:
         async def get_guild_member_mention(account_name):
             if not interaction.guild:
                 return ""
-            cursor = self.bot.database.iter(
-                "users", {
-                    "$or": [{
-                        "cogs.GuildWars2.key.account_name": account_name
-                    }, {
-                        "cogs.GuildWars2.keys.account_name": account_name
-                    }]
-                })
+            cursor = self.bot.data.users.find({
+                "$or": [
+                    {"key.account_name": account_name},
+                    {"keys.account_name": account_name},
+                ]
+            })
             async for doc in cursor:
                 member = interaction.guild.get_member(doc["_id"])
                 if member:

@@ -6,7 +6,7 @@ from discord.ext import commands
 
 class EmojiMixin:
     async def prepare_emojis(self):
-        doc = await self.bot.database.get_cog_config(self)
+        doc = await self.bot.data.config.get()
         self.emojis = doc.get("emojis", {})
 
     def get_emoji(
@@ -103,9 +103,7 @@ class EmojiMixin:
         registered = []
         for emoji in ctx.guild.emojis:
             name = emoji.name
-            await self.bot.database.set_cog_config(
-                self, {"emojis." + name.lower(): emoji.id}
-            )
+            await self.bot.data.config.update({"emojis." + name.lower(): emoji.id})
             registered.append(emoji.name)
         if not registered:
             return await ctx.send("No emojis were registered")

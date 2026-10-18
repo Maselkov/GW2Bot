@@ -346,21 +346,18 @@ async def api_get_many(session, endpoints, key=None):
     return await _client(session).get_many(endpoints, key=key)
 
 
-class FakeUserDatabase:
-    """The bot.database calls behind fetch_key and the rename check."""
+class FakeUserRepo:
+    """bot.data.users, as used by fetch_key and the rename check."""
 
     def __init__(self, doc):
         self.doc = doc
         self.writes = []
 
-    async def get_user(self, user, cog=None):
+    async def get(self, user_id):
         return self.doc
 
-    async def get(self, user, cog=None):
-        return self.doc
-
-    async def set(self, user, settings, cog=None, *, operator="set"):
-        self.writes.append((operator, settings))
+    async def update(self, user_id, fields, op="set"):
+        self.writes.append((op, fields))
 
 
 async def fetch_account(session, stored, user_id=1):
@@ -372,13 +369,13 @@ async def fetch_account(session, stored, user_id=1):
     from unittest.mock import AsyncMock
 
     harness = _Harness(session)
-    harness.bot.database = FakeUserDatabase(stored)
+    harness.bot.data.users = FakeUserRepo(stored)
     user = MagicMock(id=user_id)
     user.send = AsyncMock()
     data = await harness.call_api("account", user)
     await asyncio.gather(*getattr(harness, "background_tasks", ()), return_exceptions=True)
     sent = [call.args[0] for call in user.send.await_args_list]
-    return data, harness.bot.database.writes, sent
+    return data, harness.bot.data.users.writes, sent
 
 
 def api_error_message(error):
@@ -529,7 +526,7 @@ class UpdateNotesChecker:
         self.notifier.log = logging.getLogger("tests.update_notes")
         self.notifier.bot = MagicMock()
         self.updates = FakeCollection()
-        self.notifier.bot.database.db.gw2.updates = self.updates
+        self.notifier.bot.data.gw2.updates = self.updates
         self.pages = pages
         self.notifier.session = FakePageSession(pages)
 

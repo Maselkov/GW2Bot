@@ -44,13 +44,12 @@ class EventTimerReminderUnsubscribeView(discord.ui.View):
                        custom_id="et:unsubscribe")
     async def unsubscribe(self, interaction: discord.Interaction,
                           button: discord.ui.Button):
-        update_result = await self.cog.bot.database.set(
-            interaction.user,
+        update_result = await self.cog.bot.data.users.update(
+            interaction.user.id,
             {"event_reminders": {
                 "last_message": interaction.message.id,
             }},
-            self.cog,
-            operator="pull",
+            op="pull",
         )
         if update_result.modified_count:
             try:
@@ -99,7 +98,7 @@ class EventsMixin:
                 "This works based off your Discord game status. Make sure to enable it",
             },
         ]
-        doc = await self.bot.database.get(user, self)
+        doc = await self.bot.data.users.get(user.id)
         doc = doc.get("et_reminder_settings", {})
         settings = [t["setting"] for t in embed_templates]
         settings = {s: doc.get(s, False) for s in settings}
@@ -152,9 +151,7 @@ class EventsMixin:
                             if t["setting"] == setting)
             embed = setting_embed(template)
             asyncio.create_task(reaction.message.edit(embed=embed))
-            await self.bot.database.set(user,
-                                        {"et_reminder_settings": settings},
-                                        self)
+            await self.bot.data.users.update(user.id, {"et_reminder_settings": settings})
         for message in to_cleanup:
             asyncio.create_task(message.delete())
 
@@ -302,7 +299,7 @@ class EventsMixin:
     async def get_timezone(self, guild):
         if not guild:
             return UTC_TZ
-        doc = await self.bot.database.get_guild(guild, self)
+        doc = await self.bot.data.guilds.get(guild.id)
         if not doc:
             return UTC_TZ
         tz = doc.get("timezone")
@@ -389,20 +386,14 @@ class EventsMixin:
                 return
             reminder["last_reminded"] = msg.created_at
             reminder["last_message"] = msg.id
-            await self.bot.database.set(user,
-                                        {f"event_reminders.{i}": reminder},
-                                        self)
+            await self.bot.data.users.update(user.id, {f"event_reminders.{i}": reminder})
 
     @tasks.loop(seconds=10)
     async def event_reminder_task(self):
-        cursor = self.bot.database.iter(
-            "users", {"event_reminders": {
-                "$exists": True,
-                "$ne": []
-            }}, self)
+        cursor = self.bot.data.users.find({"event_reminders": {"$exists": True, "$ne": []}})
         async for doc in cursor:
             try:
-                user = doc["_obj"]
+                user = self.bot.get_user(doc["_id"])
                 if not user:
                     continue
                 for i, reminder in enumerate(doc["event_reminders"]):
