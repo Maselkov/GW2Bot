@@ -686,7 +686,8 @@ class EvtcMixin:
         else:
             return
         autodelete = False
-        if not message.guild:
+        if message.guild:
+            # In servers, only channels set up with /evtc channel; DMs always
             doc = await self.bot.data.channels.get(message.channel.id)
             settings = doc.get("evtc", {})
             if not settings.get("enabled"):
@@ -695,7 +696,7 @@ class EvtcMixin:
         await self.process_evtc(message.attachments, message.author, message.channel)
         if autodelete:
             try:
-                if message.channel.permissions_for(message.channel.me).manage_messages:
+                if message.channel.permissions_for(message.guild.me).manage_messages:
                     await message.delete()
             except discord.Forbidden:
                 pass

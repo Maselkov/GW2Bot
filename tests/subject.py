@@ -616,3 +616,39 @@ class SettingsCommands:
         channel = MagicMock(id=channel_id, mention=f"<#{channel_id}>")
         channel.permissions_for.return_value.embed_links = True
         return channel
+
+
+class EvtcUploads:
+    """Feeds messages to the EVTC upload listener, with channel settings in
+    memory; records what was processed and deleted."""
+
+    def __init__(self):
+        from unittest.mock import AsyncMock
+
+        from gw2bot.cogs.guildwars2.evtc import EvtcMixin
+
+        class Cog(EvtcMixin):
+            pass
+
+        self.channels = MemorySettingsRepo()
+        self.cog = Cog()
+        self.cog.bot = MagicMock()
+        self.cog.bot.data.channels = self.channels
+        self.cog.process_evtc = AsyncMock()
+
+    async def post(self, filename, *, channel_id=500, in_guild=True, can_manage=True):
+        """Returns (processed, deleted) for a message with one attachment."""
+        from unittest.mock import AsyncMock
+
+        message = MagicMock()
+        message.attachments = [MagicMock(filename=filename)]
+        message.channel.id = channel_id
+        if in_guild:
+            message.guild.me = MagicMock(name="me")
+            message.channel.permissions_for.return_value.manage_messages = can_manage
+        else:
+            message.guild = None
+        message.delete = AsyncMock()
+        self.cog.process_evtc.reset_mock()
+        await type(self.cog).on_message(self.cog, message)
+        return self.cog.process_evtc.await_count == 1, message.delete.await_count == 1
