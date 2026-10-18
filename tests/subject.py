@@ -536,3 +536,83 @@ class UpdateNotesChecker:
         return [
             (embed.title, embed.fields[0].value, minor) for embed, text, minor in notes
         ]
+
+
+# --- Settings commands ------------------------------------------------------
+
+class MemorySettingsRepo:
+    """In-memory stand-in for a SettingsRepo (set, and equality queries)."""
+
+    def __init__(self):
+        self.docs = {}
+
+    async def get(self, entity_id):
+        doc = self.docs.get(entity_id)
+        return {**doc, "_id": entity_id} if doc else {}
+
+    async def update(self, entity_id, fields, op="set"):
+        assert op in ("set", "$set"), op
+        doc = self.docs.setdefault(entity_id, {})
+        for name, value in fields.items():
+            *parents, last = name.split(".")
+            target = doc
+            for part in parents:
+                target = target.setdefault(part, {})
+            target[last] = value
+
+    async def find(self, query=None, *, batch_size=100):
+        def value(doc, name):
+            for part in name.split("."):
+                doc = doc.get(part) if isinstance(doc, dict) else None
+            return doc
+
+        for entity_id, doc in list(self.docs.items()):
+            if all(value(doc, k) == v for k, v in (query or {}).items()):
+                yield {**doc, "_id": entity_id}
+
+
+class SettingsCommands:
+    """Runs server/channel settings commands against in-memory settings,
+    which survive a simulated restart."""
+
+    def __init__(self):
+        self.guilds = MemorySettingsRepo()
+        self.channels = MemorySettingsRepo()
+        self.start()
+
+    def start(self):
+        """(Re)create the cog, as after a restart: in-memory caches are lost."""
+        from unittest.mock import AsyncMock
+
+        from gw2bot.cogs.guildwars2.evtc import EvtcMixin
+        from gw2bot.cogs.guildwars2.guildmanage import GuildManageMixin
+        from gw2bot.cogs.guildwars2.skills import SkillsMixin
+
+        class Cog(GuildManageMixin, SkillsMixin, EvtcMixin):
+            pass
+
+        self.cog = Cog()
+        self.cog.bot = MagicMock()
+        self.cog.bot.data.guilds = self.guilds
+        self.cog.bot.data.channels = self.channels
+        self.cog.chatcode_preview_opted_out_guilds = set()
+        self.cog.force_guild_account_names = AsyncMock()
+
+    async def load(self):
+        await self.cog.prepare_linkpreview_guild_cache()
+
+    async def run(self, command, guild_id=10, **options):
+        """The reply to running `command` (a method name) in a guild."""
+        from unittest.mock import AsyncMock
+
+        interaction = MagicMock()
+        interaction.guild.id = guild_id
+        interaction.response.send_message = AsyncMock()
+        await getattr(type(self.cog), command).callback(self.cog, interaction, **options)
+        call = interaction.response.send_message.await_args
+        return call.args[0] if call.args else call.kwargs.get("content")
+
+    def channel(self, channel_id):
+        channel = MagicMock(id=channel_id, mention=f"<#{channel_id}>")
+        channel.permissions_for.return_value.embed_links = True
+        return channel

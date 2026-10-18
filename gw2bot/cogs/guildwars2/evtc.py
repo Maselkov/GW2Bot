@@ -414,8 +414,6 @@ class EvtcMixin:
     ):
         """Sets a channel to be automatically used to process EVTC logs
         posted within"""
-        doc = await self.bot.data.channels.get(channel.id)
-        enabled = not doc.get("evtc.enabled", False)
         await self.bot.data.channels.update(
             channel.id, {"evtc.enabled": enabled, "evtc.autodelete": autodelete}
         )
@@ -425,14 +423,14 @@ class EvtcMixin:
                 f"wish to be processed in {channel.mention}, while "
                 "@mentioning the bot in the same message.. Accepted "
                 f"formats: `{', '.join(ALLOWED_FORMATS)}`\nTo disable, use "
-                "this command again."
+                "this command with `enabled` set to False."
             )
             if not channel.permissions_for(interaction.guild.me).embed_links:
                 msg += (
                     "I won't be able to process logs without Embed " "Links permission."
                 )
         else:
-            msg = "Automatic EVTC processing diasbled"
+            msg = "Automatic EVTC processing disabled"
         await interaction.response.send_message(msg)
 
     def generate_evtc_api_key(self) -> None:
@@ -516,7 +514,7 @@ class EvtcMixin:
         )
         if interaction.guild:
             channel_doc = await self.bot.data.channels.get(channel.id)
-            if channel_doc.get("evtc.disabled", False):
+            if channel_doc.get("evtc", {}).get("disabled", False):
                 return await interaction.followup.send(
                     "This channel is disabled for EVTC processing."
                 )

@@ -31,7 +31,7 @@ class GuildManageMixin:
         """Automatically change all server member nicknames to in-game names"""
         guild = interaction.guild
         doc = await self.bot.data.guilds.get(guild.id)
-        if doc and enabled and doc.get("forced_account_names"):
+        if doc and enabled and doc.get("force_account_names"):
             return await interaction.response.send_message(
                 "Forced account names are already enabled"
             )
@@ -65,6 +65,7 @@ class GuildManageMixin:
                 "Chat link preview is aleady enabled.", ephemeral=True
             )
         if not disabled and not enabled:
+            await self.bot.data.guilds.update(guild.id, {"link_preview_disabled": True})
             self.chatcode_preview_opted_out_guilds.add(guild.id)
             return await interaction.response.send_message(
                 "Chat link preview is now disabled.", ephemeral=True
