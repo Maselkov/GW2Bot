@@ -42,3 +42,34 @@ async def test_evtc_channel_follows_the_enabled_option():
     reply = await commands.run("evtc_channel", enabled=False, channel=channel, autodelete=False)
     assert reply == "Automatic EVTC processing disabled"
     assert (await commands.channels.get(500))["evtc"]["enabled"] is False
+
+
+# --- EVTC uploads -------------------------------------------------------------
+
+
+async def test_evtc_uploads_need_an_enabled_channel_in_servers():
+    uploads = subject.EvtcUploads()
+    assert await uploads.post("log.zevtc") == (False, False)
+    await uploads.channels.update(500, {"evtc.enabled": True, "evtc.autodelete": False})
+    assert await uploads.post("log.zevtc") == (True, False)
+    assert await uploads.post("log.zevtc", channel_id=501) == (False, False)
+
+
+async def test_evtc_uploads_are_always_processed_in_dms():
+    uploads = subject.EvtcUploads()
+    assert await uploads.post("log.zevtc", in_guild=False) == (True, False)
+
+
+async def test_evtc_autodelete():
+    uploads = subject.EvtcUploads()
+    await uploads.channels.update(500, {"evtc.enabled": True, "evtc.autodelete": True})
+    assert await uploads.post("log.evtc") == (True, True)
+    # Without Manage Messages the upload is processed but kept
+    assert await uploads.post("log.evtc", can_manage=False) == (True, False)
+
+
+async def test_non_evtc_attachments_are_ignored():
+    uploads = subject.EvtcUploads()
+    await uploads.channels.update(500, {"evtc.enabled": True})
+    assert await uploads.post("screenshot.png") == (False, False)
+    assert await uploads.post("screenshot.png", in_guild=False) == (False, False)
