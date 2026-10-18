@@ -10,6 +10,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from .db import Data
+from .db.migrate import migrate
 from .gw2api import Client
 
 log = logging.getLogger(__name__)
@@ -64,6 +65,11 @@ class GW2Bot(commands.AutoShardedBot):
     async def setup_hook(self):
         self.session = aiohttp.ClientSession()
         self.gw2api = Client(self.session)
+        # Before any cog touches the data; a failure stops startup rather
+        # than running on a half-copied database
+        report = await migrate(self.data.client, self.settings.migrate_from_db, self.settings.mongo_db)
+        log.info(report.summary())
+        await self.data.ensure_indexes()
         for extension in EXTENSIONS:
             await self.load_extension(extension)
         if self.settings.auto_sync:

@@ -9,28 +9,18 @@ Each test gets its own database, dropped afterwards.
 """
 import os
 import uuid
-from types import SimpleNamespace
-from unittest.mock import MagicMock
-
-import discord
 import pytest
 from pymongo import ASCENDING, UpdateOne
 
 import subject
 from gw2bot.db import Data
-from gw2bot.db.legacy import MongoController
 
 URI = os.environ.get("MONGO_TEST_URI")
 pytestmark = pytest.mark.skipif(not URI, reason="MONGO_TEST_URI not set")
 
 
-# Storage layouts the repositories support; the same behaviour is expected
-# from each
-LAYOUTS = ["legacy"]
-
-
-@pytest.fixture(params=LAYOUTS)
-async def data(request):
+@pytest.fixture
+async def data():
     data = Data(URI, f"gw2bot_test_{uuid.uuid4().hex[:12]}")
     yield data
     await data.client.drop_database(data.db.name)
@@ -139,80 +129,22 @@ async def test_config_defaults_then_only_new_keys(data):
     assert config["new"] is True
 
 
-# --- Compatibility with documents written by Toothy's MongoController -------
+# --- Indexes --------------------------------------------------------------------
 
 
-class GuildWars2:
-    """Stands in for the cog: MongoController stores settings under its class name."""
+async def test_indexes_for_settings_lookups(data):
+    from gw2bot.db import INDEXES
+
+    await data.users.update(1, {"key": {"account_name": "A.1"}})
+    await data.guilds.update(10, {"updates": {"on": True}})
+    await data.ensure_indexes()
+    await data.ensure_indexes()  # idempotent
+    for collection, fields in INDEXES.items():
+        indexed = {next(iter(index["key"])) async for index in await data.db[collection].list_indexes()}
+        assert set(fields) <= indexed, collection
 
 
-def discord_object(spec, object_id):
-    obj = MagicMock(spec=spec)
-    obj.id = object_id
-    return obj
-
-
-@pytest.fixture
-async def legacy():
-    """A Data and a MongoController on the same, legacy-layout database."""
-    name = f"gw2bot_test_{uuid.uuid4().hex[:12]}"
-    bot = SimpleNamespace(get_user=lambda i: None, get_guild=lambda i: None)
-    controller = MongoController(bot, URI, name)
-    data = Data(URI, name)
-    yield controller, data
-    await data.client.drop_database(name)
-    await data.close()
-    await controller.client.close()
-
-
-async def test_reads_settings_written_by_toothy(legacy):
-    controller, data = legacy
-    cog = GuildWars2()
-    user = discord_object(discord.User, 1)
-    guild = discord_object(discord.Guild, 10)
-    await controller.set(user, {"key": {"key": "K", "account_name": "A.1"}, "keys": []}, cog)
-    await controller.set(guild, {"updates.on": True, "updates.channel": 100}, cog)
-    await controller.setup_cog(cog, {"cache": {"build": 5}, "emojis": {}})
-
-    assert await data.users.get(1) == await controller.get(user, cog)
-    assert await data.guilds.get(10) == {"_id": 10, "updates": {"on": True, "channel": 100}}
-    assert (await data.config.get())["cache"] == {"build": 5}
-    found = [doc async for doc in data.guilds.find({"updates.on": True})]
-    assert found == [{"_id": 10, "updates": {"on": True, "channel": 100}}]
-
-
-async def test_toothy_reads_settings_written_by_repositories(legacy):
-    controller, data = legacy
-    cog = GuildWars2()
-    await data.users.update(1, {"key": {"key": "K", "account_name": "A.1"}})
-    await data.users.update(1, {"name_changes": ["A.1", "B.2"]}, op="push")
-    await data.config.ensure_defaults({"emojis": {}})
-    await data.config.update({"emojis.gold": 42})
-
-    user = discord_object(discord.User, 1)
-    assert await controller.get(user, cog) == {
-        "_id": 1,
-        "key": {"key": "K", "account_name": "A.1"},
-        "name_changes": [["A.1", "B.2"]],
-    }
-    assert (await controller.get_cog_config(cog))["emojis"] == {"gold": 42}
-
-
-async def test_other_cogs_data_is_ignored_and_kept(legacy):
-    controller, data = legacy
-    raw = data.db.users
-    await raw.insert_one({"_id": 1, "cogs": {"Other": {"x": 1}}, "flags": ["beta"]})
-    assert await data.users.get(1) == {}
-    assert [doc async for doc in data.users.find()] == []
-    await data.users.update(1, {"key": "K"})
-    assert await raw.find_one({"_id": 1}) == {
-        "_id": 1,
-        "cogs": {"Other": {"x": 1}, "GuildWars2": {"key": "K"}},
-        "flags": ["beta"],
-    }
-
-
-# --- Query patterns the cog uses on its gw2.* collections --------------------
+# --- Query patterns the cog uses on its other collections ----------------------
 
 
 async def test_cache_queries(data):
