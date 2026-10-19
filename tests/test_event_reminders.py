@@ -29,3 +29,34 @@ def test_known_boss_still_found():
     done, seconds = finishes(subject.seconds_until_boss, "Shadow Behemoth", NOW)
     assert done
     assert 0 < seconds <= 2 * 3600
+
+
+# --- /reminder event --------------------------------------------------------------
+
+
+async def test_reminder_for_a_boss():
+    sent, writes = await subject.set_event_reminder(event_name="shadow behemoth", minutes_before_event=10)
+    assert sent == "Reminder set succesfully"
+    assert writes == [(1, "push", {"event_reminders": {"type": "boss", "name": "Shadow Behemoth", "time": 600}})]
+
+
+async def test_reminder_for_a_map_event():
+    sent, writes = await subject.set_event_reminder(event_name="Gerent Preparation")
+    assert sent == "Reminder set succesfully"
+    assert writes == [(1, "push", {"event_reminders": {
+        "type": "phase", "name": "Gerent Preparation", "group": "hot", "map_name": "Tangled Depths", "time": 300,
+    }})]
+
+
+async def test_reminder_for_a_secrets_of_the_obscure_event():
+    sent, writes = await subject.set_event_reminder(event_name="Fly by Night")
+    assert sent == "Reminder set succesfully"
+    assert writes == [(1, "push", {"event_reminders": {
+        "type": "phase", "name": "Fly by Night", "group": "soto", "map_name": "Wizard's Tower", "time": 300,
+    }})]
+
+
+async def test_reminder_for_an_unknown_event():
+    sent, writes = await subject.set_event_reminder(event_name="Nothing")
+    assert sent == "No event found matching that name"
+    assert writes == []

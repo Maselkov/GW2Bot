@@ -373,7 +373,9 @@ class NotiifiersMixin:
                 reminder["type"] = "boss"
                 reminder["name"] = boss["name"]
         if not reminder:
-            for group in "hot", "pof", "day", "ibs", "eod":
+            # Every map event group the timers have (all but world bosses)
+            groups = [g for g in self.gamedata["event_timers"] if g != "bosses"]
+            for group in groups:
                 maps = self.gamedata["event_timers"][group]
                 for location in maps:
                     for phase in location["phases"]:

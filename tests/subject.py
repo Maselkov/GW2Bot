@@ -1372,3 +1372,19 @@ async def run_guildsync(members, accounts, responses, *, syncs=1, purge=True):
     cog.bot.data.guilds.get = AsyncMock(return_value={"guildsync": {"enabled": True, "purge": purge}})
     await cog.run_guildsyncs(guild)
     return [call.kwargs["user"].id for call in guild.kick.await_args_list]
+async def set_event_reminder(**options):
+    """Run /reminder event. Returns (reply, users' settings writes)."""
+    from gw2bot.cogs.guildwars2.notifiers import NotiifiersMixin
+
+    users = MemoryUsers({1: {}})
+
+    def cog_for(session, _):
+        class Cog(NotiifiersMixin, _Harness):
+            pass
+
+        cog = Cog(session, users)
+        cog.boss_schedule = cog.generate_schedule()
+        return cog
+
+    sent, _ = await run_command(cog_for, NotiifiersMixin.reminder_event, [], permissions=(), users=users, **options)
+    return sent, users.writes
