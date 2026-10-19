@@ -1,8 +1,12 @@
 name: Deploy
 
 # Runs on the self-hosted runner, which only needs ssh/scp: it pins the image
-# in docker-compose.override.yml on the host and restarts the bot. The SSH_*
-# and DEPLOY_DIR secrets come from the environment passed in.
+# in docker-compose.bot.yml on the host and restarts the bot. Each deployed
+# service pins its image in its own docker-compose.<service>.yml (the site
+# uses docker-compose.site.yml), listed in COMPOSE_FILE in the host's .env, so
+# deploys never overwrite each other and docker-compose.override.yml stays free
+# for manual changes. The SSH_* and DEPLOY_DIR secrets come from the
+# environment passed in.
 on:
   workflow_call:
     inputs:
@@ -71,9 +75,15 @@ jobs:
           ssh -F "$SSH_CONFIG" target bash -s -- "$DEPLOY_DIR" "$IMAGE" "$SERVICE" "$SYNC_COMPOSE" <<'EOF'
           set -euo pipefail
           cd "${1/#\~/$HOME}"
-          # Compose merges this over docker-compose.yml, so manual compose
-          # commands on the host use the deployed image too
-          printf 'services:\n  %s:\n    image: %s\n' "$3" "$2" > docker-compose.override.yml
+          # COMPOSE_FILE in .env merges this over docker-compose.yml, so manual
+          # compose commands on the host use the deployed image too
+          printf 'services:\n  %s:\n    image: %s\n' "$3" "$2" > docker-compose.bot.yml
+          # Without docker-compose.bot.yml in COMPOSE_FILE, compose ignores
+          # the pin above and would run whatever image docker-compose.yml names
+          if ! docker compose config --images "$3" | grep -qxF "$2"; then
+            echo "::error::$3 doesn't resolve to $2; add docker-compose.bot.yml to COMPOSE_FILE in $1/.env" >&2
+            exit 1
+          fi
           docker compose pull "$3"
           if [ "$4" = true ]; then
             docker compose up -d --no-build --remove-orphans
