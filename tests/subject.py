@@ -1171,3 +1171,81 @@ async def character_choices(current, stored, responses=(), *, now):
         for _ in range(10):
             await asyncio.sleep(0)
     return [c.name for c in choices], users.writes, [(url, params) for url, params, _ in session.requests]
+
+
+# --- Guilds --------------------------------------------------------------------
+
+class MemoryUsers:
+    """Users' settings by Discord id (get/update), and find() by account
+    name as /guild members uses it."""
+
+    def __init__(self, docs):
+        self.docs = docs
+        self.writes = []
+
+    async def get(self, user_id):
+        return self.docs.get(user_id, {})
+
+    async def update(self, user_id, fields, op="set"):
+        self.writes.append((user_id, op, fields))
+
+    async def find(self, query):
+        names = {next(iter(condition.values())) for condition in query["$or"]}
+        for user_id, doc in self.docs.items():
+            accounts = [doc.get("key", {}).get("account_name")]
+            accounts += [k.get("account_name") for k in doc.get("keys", [])]
+            if names & set(accounts):
+                yield {**doc, "_id": user_id}
+
+
+async def guild_command(command, responses, *, permissions=("account", "guilds"), items=(), users=None,
+                        discord_members=None, **options):
+    """Run /guild <command>. `users` are other users' settings by Discord
+    id (the caller is id 1); `discord_members` the Discord server's members
+    by id, as {id: mention}, or None to run it in DMs."""
+    from gw2bot.cogs.guildwars2.guild.general import GeneralGuild
+
+    handler = getattr(GeneralGuild, "guild_" + command)
+    repo = MemoryUsers({1: stored_key(permissions), **(users or {})})
+
+    def cog_for(session, _):
+        class Cog(GeneralGuild, _Harness):
+            pass
+
+        cog = Cog(session, repo)
+        cog.db = gw2_db(items=items)
+        return cog
+
+    def in_server(interaction):
+        if discord_members is None:
+            interaction.guild = None
+            return
+        interaction.guild.get_member = (
+            lambda user_id: MagicMock(mention=discord_members[user_id]) if user_id in discord_members else None
+        )
+
+    return await run_command(cog_for, handler, responses, permissions=permissions, users=repo,
+                             on_interaction=in_server, **options)
+
+
+async def guild_choices(current, stored, responses=(), *, server_default=None, now):
+    """The guild name autocomplete for `current`. Returns (choices as
+    (name, value), database writes, API requests), after any background
+    refresh finished."""
+    from unittest.mock import AsyncMock
+
+    from gw2bot.cogs.guildwars2.guild.general import guild_name_autocomplete
+
+    session = FakeSession(*(responses or [(500, {})]))
+    users = FakeUserRepo(stored)
+    cog = _Harness(session, users)
+    interaction = MagicMock()
+    interaction.user.id = 1
+    interaction.command.binding = cog
+    cog.bot.data.guilds.get = AsyncMock(return_value={"guild_ingame": server_default} if server_default else {})
+    with _at(now):
+        choices = await guild_name_autocomplete(interaction, current)
+        for _ in range(10):
+            await asyncio.sleep(0)
+    return ([(c.name, c.value) for c in choices], users.writes,
+            [(url, params) for url, params, _ in session.requests])
