@@ -209,10 +209,9 @@ async def test_autocomplete_without_a_key():
     assert choices == writes == requests == []
 
 
-# --- Known bugs -------------------------------------------------------------------------------------
+# --- Fixes -----------------------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="replies with followup.send_message, which doesn't exist")
 @pytest.mark.parametrize("status, message", [
     (404, "Invalid guild name"),
     (403, "You don't have enough permissions in game to use this command"),
@@ -222,7 +221,6 @@ async def test_info_errors(status, message):
     assert sent == message
 
 
-@pytest.mark.xfail(strict=True, reason="the first lookup fills the cache but shows nothing")
 async def test_autocomplete_fills_the_cache():
     responses = [(200, {"name": "Example.1234", "guilds": [GUILD]}), (200, GUILDS[0])]
     choices, writes, _ = await subject.guild_choices(
@@ -232,7 +230,6 @@ async def test_autocomplete_fills_the_cache():
     assert writes == [("set", {"guild_cache.Example_1234": {"last_update": NOW, "guild_list": GUILDS[:1]}})]
 
 
-@pytest.mark.xfail(strict=True, reason="invites and rank changes show {placeholders}")
 async def test_members_log_invites_and_rank_changes():
     entries = [
         {"id": 3, "time": "2024-03-05T10:03:00.000Z", "type": "invited", "user": "New.6666",
@@ -250,7 +247,6 @@ async def test_members_log_invites_and_rank_changes():
     ])
 
 
-@pytest.mark.xfail(strict=True, reason="crashes on items that aren't cached")
 async def test_uncached_items():
     treasury = [{"item_id": 9, "count": 1, "needed_by": [{"upgrade_id": 1, "count": 2}]}]
     embed, _ = await subject.guild_command("treasury", [(200, BASE), (200, treasury)], guild=GUILD)

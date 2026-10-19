@@ -12,6 +12,11 @@ from ..gw2api.errors import APIError, APIForbidden, APINotFound
 from .base import GW2Cog
 
 
+def utcnow():
+    """The time in UTC, naive like the dates MongoDB returns."""
+    return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+
+
 async def guild_name_autocomplete(interaction: discord.Interaction,
                                   current: str):
     """The server's default guild, then the user's guilds matching
@@ -41,10 +46,11 @@ async def guild_name_autocomplete(interaction: discord.Interaction,
         for guild in guilds:
             guild_list.append({"name": guild["name"], "id": guild["id"]})
         c = {
-            "last_update": datetime.datetime.utcnow(),
+            "last_update": utcnow(),
             "guild_list": guild_list
         }
         await bot.data.users.update(interaction.user.id, {f"guild_cache.{account_key}": c})
+        return c
 
     choices = []
     current = current.lower()
@@ -63,8 +69,7 @@ async def guild_name_autocomplete(interaction: discord.Interaction,
             cache = await cache_guild()
         else:
             asyncio.create_task(cache_guild())
-    elif cache["last_update"] < datetime.datetime.utcnow(
-    ) - datetime.timedelta(days=7):
+    elif cache["last_update"] < utcnow() - datetime.timedelta(days=7):
         asyncio.create_task(cache_guild())
     if cache:
         choices += [
@@ -134,10 +139,10 @@ class Guild(GW2Cog):
             results = await self.call_api(endpoint, interaction.user,
                                           ["guilds"])
         except (IndexError, APINotFound):
-            return await interaction.followup.send_message(
+            return await interaction.followup.send(
                 "Invalid guild name", ephemeral=True)
         except APIForbidden:
-            return await interaction.followup.send_message(
+            return await interaction.followup.send(
                 "You don't have enough permissions in game to "
                 "use this command",
                 ephemeral=True)
@@ -284,7 +289,7 @@ class Guild(GW2Cog):
         itemlist = []
         for item in treasury:
             res = await self.fetch_item(item["item_id"])
-            itemlist.append(res)
+            itemlist.append(res or {"name": "Unknown item"})
         # Collect amounts
         if treasury:
             for item in treasury:
@@ -355,7 +360,7 @@ class Guild(GW2Cog):
                         multiplier = ""
                     else:
                         itemdoc = await self.fetch_item(entry["item_id"])
-                        item_name = itemdoc["name"]
+                        item_name = itemdoc["name"] if itemdoc else "Unknown item"
                         multiplier = "x"
                     if log_type == "stash":
                         if entry["operation"] == "withdraw":
@@ -381,7 +386,7 @@ class Guild(GW2Cog):
                     if entry["type"] == "invited":
                         invited_by = entry["invited_by"]
                         entry_string = (f"{invited_by} has "
-                                        "invited {user} to the guild.")
+                                        f"invited {user} to the guild.")
                     elif entry["type"] == "joined":
                         entry_string = f"{user} has joined the guild."
                     elif entry["type"] == "kick":
@@ -401,9 +406,10 @@ class Guild(GW2Cog):
                                 f"{changed_by} has changed "
                                 f"the role of {user} from {old_rank} "
                                 f"to {new_rank}.")
+                        else:
                             entry_string = (
-                                "{user} changed his "
-                                "role from {old_rank} to {new_rank}.")
+                                f"{user} changed their "
+                                f"role from {old_rank} to {new_rank}.")
                     line = "**{}**\n*{}*".format(timedate, entry_string)
                     if length_lines + len(line) < 5500:
                         length_lines += len(line)
