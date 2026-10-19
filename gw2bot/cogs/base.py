@@ -218,6 +218,14 @@ class GW2Cog(commands.Cog):
             return flattened
         return counts
 
+    async def guild_subdocs(self, field, query):
+        """Each matching guild's `field` settings, with the guild's _id and
+        the discord.Guild (or None) as _obj."""
+        async for doc in self.bot.data.guilds.find(query):
+            settings = doc.get(field)
+            if isinstance(settings, dict):
+                yield {**settings, "_id": doc["_id"], "_obj": self.bot.get_guild(doc["_id"])}
+
     async def get_embed_color(self, ctx):
         # Toothy's per-user embed_color only ever applied to text commands
         # (contexts with .author), never to slash commands

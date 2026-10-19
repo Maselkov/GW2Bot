@@ -9,7 +9,7 @@ import os
 import aiohttp
 import pytest
 
-from gw2bot.cogs.guildwars2.daily import ACHIEVEMENT_CATEGORIES, CATEGORY_SCHEMA
+from gw2bot.cogs.daily import ACHIEVEMENT_CATEGORIES, CATEGORY_SCHEMA
 
 pytestmark = pytest.mark.live
 

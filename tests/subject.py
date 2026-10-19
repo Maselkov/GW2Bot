@@ -16,8 +16,7 @@ from unittest.mock import MagicMock
 import time_machine
 
 from gw2bot.cogs.base import GW2Cog
-from gw2bot.cogs.guildwars2 import daily
-from gw2bot.cogs.guildwars2.daily import DailyMixin
+from gw2bot.cogs import daily
 from gw2bot.cogs.guildwars2.database import DatabaseMixin
 from gw2bot.cogs.guildwars2.events import EventsMixin
 from gw2bot.utils import chat, db
@@ -65,7 +64,6 @@ def _fake_bot(session=None, users=None):
 
 class _Harness(
     GW2Cog,
-    DailyMixin,
     DatabaseMixin,
     EventsMixin,
 ):
@@ -202,9 +200,13 @@ async def skill_search(command, text, *, skills=(), traits=()):
 
 # --- Dailies (all evaluated as of noon UTC on `date`) ----------------------
 
+def _daily():
+    return daily.Daily(_fake_bot())
+
+
 def year_day(date):
     with _at(date):
-        return _Harness().get_year_day(tomorrow=False)
+        return _daily().get_year_day(tomorrow=False)
 
 
 def daily_rotation(categories, names):
@@ -217,8 +219,7 @@ def daily_categories(saved):
 
 def daily_fields(categories, cache, now, tomorrow=False):
     """[(name, value)] of the daily embed, given the cached rotation."""
-    harness = _Harness()
-    harness.bot.user.name = "GW2Bot"
+    harness = _daily()
     doc = {"cache": {"dailies": cache, "dailies_tomorrow": cache}}
     with _at(now):
         embed = asyncio.run(harness.daily_embed(categories, doc=doc, tomorrow=tomorrow))
@@ -227,19 +228,19 @@ def daily_fields(categories, cache, now, tomorrow=False):
 
 def pact_supply_agents(date):
     with _at(date):
-        return _Harness().get_psna()
+        return _daily().get_psna()
 
 
 def instabilities(fractal_level, date):
     with _at(date):
-        names = _Harness().get_instabilities(fractal_level, tomorrow=False)
+        names = _daily().get_instabilities(fractal_level, tomorrow=False)
     return names.split("\n") if names is not None else None
 
 
 def cm_instabilities(date):
     """{CM fractal name: [instability names]}."""
     with _at(date):
-        text = _Harness().get_cm_instabilities(tomorrow=False)
+        text = _daily().get_cm_instabilities(tomorrow=False)
     result = {}
     current = None
     for line in text.split("\n"):
@@ -1599,7 +1600,7 @@ async def run_daily_notifier(settings, *, previous_message_exists=True, channel_
     channel.fetch_message = AsyncMock(side_effect=fetch_message)
     channel.history = history
 
-    cog = _notifier_cog()
+    cog = _daily()
     cog.cache_dailies = AsyncMock()
     cog.bot.data.config.get = AsyncMock(return_value={"cache": {"dailies_tomorrow": {"raids": [], "fractals": []}}})
     cog.bot.data.guilds = MemoryGuilds({10: {"daily": {"on": True, "channel": 5, "categories": ["psna"],
@@ -1688,7 +1689,7 @@ DAILY_CACHE = {
 def _daily_cog(session=None, users=None, cache=None):
     from unittest.mock import AsyncMock
 
-    cog = _Harness(session, users)
+    cog = daily.Daily(_fake_bot(session, users))
     config = {"cache": {"dailies": cache, "dailies_tomorrow": cache}} if cache is not None else {"cache": {}}
     cog.bot.data.config.get = AsyncMock(return_value=config)
     cog.bot.data.config.update = AsyncMock()
@@ -1697,9 +1698,7 @@ def _daily_cog(session=None, users=None, cache=None):
 
 async def daily_command(cache, **options):
     """Run /daily with `cache` as the cached rotation (None: not cached)."""
-    from gw2bot.cogs.guildwars2.daily import DailyMixin
-
-    sent, _ = await run_command(lambda session, users: _daily_cog(session, users, cache), DailyMixin.daily, [],
+    sent, _ = await run_command(lambda session, users: _daily_cog(session, users, cache), daily.Daily.daily, [],
                                 permissions=(), **options)
     return sent
 
@@ -1756,6 +1755,9 @@ async def notifier_daily(*, choose=None, enabled=True, already_enabled=False, **
         cog.bot.data.guilds = guilds
         config = {"cache": {"dailies": DAILY_CACHE, "dailies_tomorrow": DAILY_CACHE}}
         cog.bot.data.config.get = AsyncMock(return_value=config)
+        # The example notification comes from the Daily cog
+        daily_cog = daily.Daily(cog.bot)
+        cog.bot.get_cog = {"Daily": daily_cog}.get
         return cog
 
     def in_server(interaction):
