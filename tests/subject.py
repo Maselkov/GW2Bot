@@ -25,7 +25,6 @@ from gw2bot.cogs.guildwars2.events import EventsMixin
 from gw2bot.cogs.guildwars2.misc import MiscMixin
 from gw2bot.cogs.guildwars2.skills import SkillsMixin
 from gw2bot.cogs.guildwars2.utils import chat, db
-from gw2bot.cogs.guildwars2.wizardsvault import WizardsVaultMixin
 from gw2bot.cogs.guildwars2.wvw import WvwMixin, match_summary
 
 DATA_DIR = pathlib.Path(__file__).resolve().parent.parent / "gw2bot" / "data"
@@ -77,7 +76,6 @@ class _Harness(
     EventsMixin,
     MiscMixin,
     SkillsMixin,
-    WizardsVaultMixin,
     WvwMixin,
 ):
     """Just enough of the cog's state for its non-Discord logic to run."""
@@ -800,7 +798,10 @@ async def wizards_vault(daily, weekly, special, *, wallet=None, now, permissions
     responses = [(200, daily), (200, weekly), (200, special)]
     if "wallet" in permissions:
         responses.append((200, wallet or []))
+    from gw2bot.cogs.wizardsvault import WizardsVault
+
+    def cog_for(session, users):
+        return WizardsVault(_fake_bot(session, users))
+
     with _at(now):
-        return await run_command(
-            _Harness, WizardsVaultMixin.wizards_vault, responses, permissions=permissions
-        )
+        return await run_command(cog_for, WizardsVault.wizards_vault, responses, permissions=permissions)

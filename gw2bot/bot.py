@@ -19,7 +19,7 @@ from .keys import ApiKeys
 
 log = logging.getLogger(__name__)
 
-EXTENSIONS = ["gw2bot.owner", "gw2bot.cogs.guildwars2", "gw2bot.cogs.pvp"]
+EXTENSIONS = ["gw2bot.owner", "gw2bot.cogs.guildwars2", "gw2bot.cogs.pvp", "gw2bot.cogs.wizardsvault"]
 
 
 def intents():

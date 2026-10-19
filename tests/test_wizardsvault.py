@@ -2,7 +2,7 @@ import datetime
 
 import pytest
 
-from gw2bot.cogs.guildwars2.wizardsvault import (
+from gw2bot.cogs.wizardsvault import (
     next_daily_reset,
     next_weekly_reset,
     objective_line,
