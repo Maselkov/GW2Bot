@@ -739,7 +739,12 @@ class NotiifiersMixin:
 
     @tasks.loop(minutes=5)
     async def gem_tracker(self):
-        cost = await gem_price(self.api)
+        try:
+            cost = await gem_price(self.api)
+        except APIError as e:
+            # An escaping exception would stop the loop for good
+            self.log.warning("Couldn't check the gem price: %s", e)
+            return
         cost_coins = self.gold_to_coins(None, cost)
         async for doc in self.bot.data.users.find({"gemtrack": {"$ne": None}}):
             try:

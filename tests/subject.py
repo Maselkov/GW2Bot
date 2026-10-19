@@ -1193,11 +1193,23 @@ class MemoryUsers:
         self.writes.append((user_id, op, fields))
 
     async def find(self, query):
-        names = {next(iter(condition.values())) for condition in query["$or"]}
-        for user_id, doc in self.docs.items():
-            accounts = [doc.get("key", {}).get("account_name")]
-            accounts += [k.get("account_name") for k in doc.get("keys", [])]
-            if names & set(accounts):
+        """By account name ({"$or": [{"key.account_name": name}, ...]}), or
+        top-level fields equal to a value or {"$ne": value}."""
+        if "$or" in query:
+            names = {next(iter(condition.values())) for condition in query["$or"]}
+            for user_id, doc in self.docs.items():
+                accounts = [doc.get("key", {}).get("account_name")]
+                accounts += [k.get("account_name") for k in doc.get("keys", [])]
+                if names & set(accounts):
+                    yield {**doc, "_id": user_id}
+            return
+        for user_id, doc in list(self.docs.items()):
+            def matches(field, condition):
+                if isinstance(condition, dict):
+                    return doc.get(field) != condition["$ne"]
+                return doc.get(field) == condition
+
+            if all(matches(f, c) for f, c in query.items()):
                 yield {**doc, "_id": user_id}
 
 
@@ -1388,3 +1400,45 @@ async def set_event_reminder(**options):
 
     sent, _ = await run_command(cog_for, NotiifiersMixin.reminder_event, [], permissions=(), users=users, **options)
     return sent, users.writes
+
+
+
+def _notifier_cog(session=None, users=None):
+    from gw2bot.cogs.guildwars2.notifiers import NotiifiersMixin
+
+    class Cog(NotiifiersMixin, _Harness):
+        pass
+
+    return Cog(session, users)
+
+
+async def run_gem_tracker(responses, tracked):
+    """One run of the gem tracker. `tracked` is {user id: gemtrack copper};
+    users 9xx can't be DMed. Returns (DMs as (user id, text), settings
+    writes, anything the run raised)."""
+    from unittest.mock import AsyncMock
+
+    import discord
+
+    users = MemoryUsers({user_id: {"gemtrack": price} for user_id, price in tracked.items()})
+    cog = _notifier_cog(FakeSession(*responses), users)
+    sent = []
+
+    def get_user(user_id):
+        user = MagicMock(id=user_id, mention=f"<@{user_id}>")
+
+        async def send(text):
+            if user_id >= 900:
+                raise discord.Forbidden(MagicMock(status=403), "Cannot send messages to this user")
+            sent.append((user_id, text))
+
+        user.send = AsyncMock(side_effect=send)
+        return user
+
+    cog.bot.get_user = get_user
+    try:
+        await type(cog).gem_tracker.coro(cog)
+        error = None
+    except Exception as e:
+        error = e
+    return sent, users.writes, error
