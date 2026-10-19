@@ -662,26 +662,28 @@ class SettingsCommands:
         """(Re)create the cog, as after a restart: in-memory caches are lost."""
         from unittest.mock import AsyncMock
 
+        from gw2bot.cogs.chatlinks import ChatLinks
         from gw2bot.cogs.guildwars2.evtc import EvtcMixin
         from gw2bot.cogs.guildwars2.guildmanage import GuildManageMixin
-        from gw2bot.cogs.guildwars2.chatlinks import ChatLinksMixin
 
-        class Cog(GuildManageMixin, ChatLinksMixin, EvtcMixin):
+        class Cog(GuildManageMixin, EvtcMixin):
             pass
 
+        bot = MagicMock()
+        bot.data.guilds = self.guilds
+        bot.data.channels = self.channels
         self.cog = Cog()
-        self.cog.bot = MagicMock()
-        self.cog.bot.data.guilds = self.guilds
-        self.cog.bot.data.channels = self.channels
-        self.cog.chatcode_preview_opted_out_guilds = set()
+        self.cog.bot = bot
         self.cog.force_guild_account_names = AsyncMock()
+        self.previews = ChatLinks(bot)
+        bot.get_cog = {"ChatLinks": self.previews}.get
 
     async def load(self):
-        await self.cog.prepare_linkpreview_guild_cache()
+        await self.previews.cog_load()
 
     def previews_disabled(self):
         """Servers whose chat link previews are off, as the previews see it."""
-        return self.cog.chatcode_preview_opted_out_guilds
+        return self.previews.previews_disabled
 
     async def run(self, command, guild_id=10, **options):
         """The reply to running `command` (a method name) in a guild."""
@@ -1918,15 +1920,12 @@ async def post_chat_link(content, *, db=None, in_guild=True, opted_out=False, au
     (embed dict, replied to the message), link_previews counts added)."""
     from unittest.mock import AsyncMock
 
-    from gw2bot.cogs.guildwars2.chatlinks import ChatLinksMixin
-
-    class Cog(ChatLinksMixin, _Harness):
-        pass
+    from gw2bot.cogs.chatlinks import ChatLinks
 
     session = FakeSession((500, {}), pages=pages)
-    cog = Cog(session)
+    cog = ChatLinks(_fake_bot(session))
     cog.db = db or gw2_db()
-    cog.chatcode_preview_opted_out_guilds = {10} if opted_out else set()
+    cog.previews_disabled = {10} if opted_out else set()
     cog.bot.user.display_avatar.url = "https://cdn/bot.png"
     cog.bot.data.statistics.update_one = AsyncMock()
     message = MagicMock(content=content)

@@ -5,7 +5,6 @@ import discord
 
 from ...errors import error_message
 from ..base import GW2Cog
-from .chatlinks import ChatLinksMixin
 from .database import DatabaseMixin
 from .emojis import EmojiMixin
 from .evtc import EvtcMixin
@@ -17,7 +16,6 @@ from .notifiers import NotiifiersMixin
 
 class GuildWars2(
     GW2Cog,
-    ChatLinksMixin,
     DatabaseMixin,
     EmojiMixin,
     EvtcMixin,
@@ -34,7 +32,6 @@ class GuildWars2(
         self.log = logging.getLogger(__name__)
         self.tasks = []
         self.waiting_for = []
-        self.chatcode_preview_opted_out_guilds = set()
         self.tasks = [
             self.game_update_checker,
             self.news_checker,
@@ -48,7 +45,6 @@ class GuildWars2(
             task.start()
 
     async def cog_load(self):
-        await self.prepare_linkpreview_guild_cache()
         self.bot.add_view(GuildSyncPromptUserConfirmView(self))
 
     async def cog_unload(self):

@@ -1,5 +1,6 @@
-"""Chat link previews."""
+"""Chat link previews: posting a [&...] link shows what it is."""
 import base64
+import logging
 import re
 import struct
 
@@ -9,24 +10,38 @@ from discord.ext import commands
 from gw2bot.builds import Build
 from gw2bot.utils.wiki import page_url
 
-from ..skills import skill_embed
+from .base import GW2Cog
+from .skills import skill_embed
 
 CHATCODE_REGEX = re.compile(r"\[\&(?=[^\s\[\]]*\])(.*?)\]")
 TILESERVICE_BASE_URL = "https://tiles.guildwars2.com/"
 
 
-class ChatLinksMixin:
-    async def prepare_linkpreview_guild_cache(self):
+class ChatLinks(GW2Cog):
+
+    def __init__(self, bot):
+        super().__init__(bot)
+        self.log = logging.getLogger(__name__)
+        # Servers that turned previews off (/server preview_chat_links)
+        self.previews_disabled = set()
+
+    async def cog_load(self):
         async for doc in self.bot.data.guilds.find({"link_preview_disabled": True}):
-            self.chatcode_preview_opted_out_guilds.add(doc["_id"])
+            self.previews_disabled.add(doc["_id"])
+
+    def set_previews_enabled(self, guild_id, enabled):
+        if enabled:
+            self.previews_disabled.discard(guild_id)
+        else:
+            self.previews_disabled.add(guild_id)
 
     async def get_wiki_url(self, name):
-        return await page_url(self.session, name)
+        return await page_url(self.bot.session, name)
 
     @commands.Cog.listener("on_message")
     async def find_chatcodes(self, message: discord.Message):
         if message.guild:
-            if message.guild.id in self.chatcode_preview_opted_out_guilds:
+            if message.guild.id in self.previews_disabled:
                 return
         if not message.content:
             return
@@ -290,3 +305,7 @@ class ChatLinksMixin:
             await self.bot.data.statistics.update_one(
                 {"_id": "link_previews"}, {"$inc": {field_id: 1}}, upsert=True
             )
+
+
+async def setup(bot):
+    await bot.add_cog(ChatLinks(bot))
