@@ -12,10 +12,11 @@ from discord import app_commands
 from discord.app_commands import Choice
 from discord.ext import tasks
 
+from ..commerce import gem_price
 from . import update_notes
 from .daily import DAILY_CATEGORIES
 from .exceptions import APIError
-from .utils.markdown import html_to_markdown
+from gw2bot.utils.markdown import html_to_markdown
 
 
 class DailyCategoriesDropdown(discord.ui.Select):
@@ -736,7 +737,7 @@ class NotiifiersMixin:
 
     @tasks.loop(minutes=5)
     async def gem_tracker(self):
-        cost = await self.get_gem_price()
+        cost = await gem_price(self.api)
         cost_coins = self.gold_to_coins(None, cost)
         async for doc in self.bot.data.users.find({"gemtrack": {"$ne": None}}):
             try:

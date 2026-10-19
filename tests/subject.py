@@ -18,14 +18,13 @@ import time_machine
 from gw2bot.cogs.base import GW2Cog
 from gw2bot.cogs.guildwars2.achievements import AchievementsMixin
 from gw2bot.cogs.guildwars2.characters import CharactersMixin
-from gw2bot.cogs.guildwars2.commerce import CommerceMixin
 from gw2bot.cogs.guildwars2 import daily
 from gw2bot.cogs.guildwars2.daily import DailyMixin
 from gw2bot.cogs.guildwars2.database import DatabaseMixin
 from gw2bot.cogs.guildwars2.events import EventsMixin
 from gw2bot.cogs.guildwars2.misc import MiscMixin
 from gw2bot.cogs.guildwars2.skills import SkillsMixin
-from gw2bot.cogs.guildwars2.utils import chat, db
+from gw2bot.utils import chat, db
 from gw2bot.cogs.guildwars2.wvw import WvwMixin, match_summary
 
 DATA_DIR = pathlib.Path(__file__).resolve().parent.parent / "gw2bot" / "data"
@@ -71,7 +70,6 @@ class _Harness(
     GW2Cog,
     AchievementsMixin,
     CharactersMixin,
-    CommerceMixin,
     DailyMixin,
     DatabaseMixin,
     EventsMixin,
@@ -408,7 +406,7 @@ def api_error_message(error):
 
 def patch_notes_markdown(html):
     """Discord markdown for a forum post's HTML."""
-    from gw2bot.cogs.guildwars2.utils.markdown import html_to_markdown
+    from gw2bot.utils.markdown import html_to_markdown
 
     return html_to_markdown(html)
 
@@ -815,9 +813,9 @@ async def wizards_vault(daily, weekly, special, *, wallet=None, now, permissions
         return await run_command(cog_for, WizardsVault.wizards_vault, responses, permissions=permissions)
 
 
-class MemoryCollection:
-    """In-memory stand-in for a collection: find_one by _id, and find with
-    a regex on name plus an optional $nin on flags (the item searches)."""
+class MemoryItems:
+    """In-memory stand-in for the items cache: find_one by _id, and find
+    with a regex on name plus an optional $nin on flags (item searches)."""
 
     def __init__(self, docs=()):
         self.docs = {doc["_id"]: doc for doc in docs}
@@ -843,13 +841,13 @@ class MemoryCollection:
 
 async def commerce(command, responses, *, items=(), permissions=("account", "tradingpost"), users=None, **options):
     """Run a /tp or /gem command; `items` are the cached item documents."""
-    from gw2bot.cogs.guildwars2.commerce import CommerceMixin
+    from gw2bot.cogs.commerce import Commerce
 
-    handler = getattr(CommerceMixin, command)
+    handler = getattr(Commerce, command)
 
     def cog_for(session, users):
-        cog = _Harness(session, users)
-        cog.db = SimpleNamespace(items=MemoryCollection(items))
+        cog = Commerce(_fake_bot(session, users))
+        cog.db = SimpleNamespace(items=MemoryItems(items))
         return cog
 
     return await run_command(cog_for, handler, responses, permissions=permissions, users=users, **options)
@@ -857,9 +855,9 @@ async def commerce(command, responses, *, items=(), permissions=("account", "tra
 
 async def tp_item_search(text, items):
     """The /tp price autocomplete choices for `text`, as (name, value)."""
-    from gw2bot.cogs.guildwars2.commerce import CommerceMixin
+    from gw2bot.cogs.commerce import Commerce
 
-    cog = _Harness()
-    cog.db = SimpleNamespace(items=MemoryCollection(items))
-    choices = await CommerceMixin.tp_autocomplete(cog, MagicMock(), text)
+    cog = Commerce(_fake_bot())
+    cog.db = SimpleNamespace(items=MemoryItems(items))
+    choices = await Commerce.tp_autocomplete(cog, MagicMock(), text)
     return [(c.name, c.value) for c in choices]

@@ -11,8 +11,8 @@ from discord import app_commands
 from discord.app_commands import Choice
 
 from .exceptions import APIError, APINotFound
-from .utils.chat import embed_list_lines
-from .utils.db import prepare_search
+from gw2bot.utils.chat import embed_list_lines
+from gw2bot.utils.db import prepare_search
 from .wvw import WVW_ACCOUNT_SCHEMA
 
 

@@ -11,7 +11,7 @@ from discord.ext import tasks
 
 from .daily import ACHIEVEMENT_CATEGORIES, CATEGORY_SCHEMA, daily_rotation
 from .exceptions import APIError
-from .utils.db import prepare_search
+from gw2bot.utils.db import prepare_search
 
 
 class DatabaseMixin:
@@ -126,9 +126,6 @@ class DatabaseMixin:
         except KeyError:
             name = ""
         return name
-
-    async def fetch_item(self, item):
-        return await self.db.items.find_one({"_id": item})
 
     async def cache_dailies(self):
         """Cache today's and tomorrow's dailies from achievement categories."""

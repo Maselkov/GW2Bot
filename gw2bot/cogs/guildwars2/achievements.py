@@ -4,8 +4,8 @@ import discord
 from discord import app_commands
 
 from .exceptions import APIError, APINotFound
-from .utils.chat import cleanup_xml_tags
-from .utils.db import prepare_search
+from gw2bot.utils.chat import cleanup_xml_tags
+from gw2bot.utils.db import prepare_search
 
 
 class AchievementsMixin:

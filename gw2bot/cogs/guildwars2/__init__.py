@@ -9,7 +9,6 @@ from ..base import GW2Cog
 from .account import AccountMixin
 from .achievements import AchievementsMixin
 from .characters import CharactersMixin
-from .commerce import CommerceMixin
 from .daily import DailyMixin
 from .database import DatabaseMixin
 from .emojis import EmojiMixin
@@ -30,7 +29,6 @@ class GuildWars2(
     AccountMixin,
     AchievementsMixin,
     CharactersMixin,
-    CommerceMixin,
     DailyMixin,
     DatabaseMixin,
     EmojiMixin,
@@ -49,7 +47,6 @@ class GuildWars2(
 
     def __init__(self, bot):
         super().__init__(bot)
-        self.db = self.bot.data.gw2
         self.session = bot.session
         self.boss_schedule = self.generate_schedule()
         self.log = logging.getLogger(__name__)

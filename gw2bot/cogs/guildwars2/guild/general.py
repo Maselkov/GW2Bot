@@ -7,7 +7,7 @@ from discord import app_commands
 from discord.app_commands import Choice
 
 from ..exceptions import APIError, APIForbidden, APINotFound
-from ..utils.chat import embed_list_lines, zero_width_space
+from gw2bot.utils.chat import embed_list_lines, zero_width_space
 
 
 async def guild_name_autocomplete(interaction: discord.Interaction,

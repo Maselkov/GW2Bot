@@ -5,7 +5,7 @@ import discord
 from discord import app_commands
 
 from .base import GW2Cog
-from .guildwars2.utils.chat import embed_list_lines
+from ..utils.chat import embed_list_lines
 
 ASTRAL_ACCLAIM = 63
 WEEKLY_RESET = datetime.timedelta(hours=7, minutes=30)  # Mondays, UTC

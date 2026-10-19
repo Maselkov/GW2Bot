@@ -14,8 +14,8 @@ from discord import app_commands
 from discord.app_commands import Choice
 from PIL import Image, ImageDraw
 
-from .utils.chat import cleanup_xml_tags, embed_list_lines
-from .utils.db import prepare_search
+from gw2bot.utils.chat import cleanup_xml_tags, embed_list_lines
+from gw2bot.utils.db import prepare_search
 
 CHATCODE_REGEX = re.compile(r"\[\&(?=[^\s\[\]]*\])(.*?)\]")
 TILESERVICE_BASE_URL = "https://tiles.guildwars2.com/"

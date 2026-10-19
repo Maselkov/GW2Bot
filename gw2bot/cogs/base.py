@@ -12,6 +12,8 @@ class GW2Cog(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
+        # Game data caches, guild syncs, EVTC, ... (items, skins, ...)
+        self.db = bot.data.gw2
 
     @property
     def api(self):
@@ -71,6 +73,26 @@ class GW2Cog(commands.Cog):
     def emojis(self):
         """Registered emoji ids by name."""
         return self.bot.gw2_emojis.ids
+
+    def gold_to_coins(self, ctx, money):
+        """Copper as gold/silver/copper, with their emojis where usable."""
+        gold, remainder = divmod(money, 10000)
+        silver, copper = divmod(remainder, 100)
+        kwargs = {"fallback": True, "fallback_fmt": " {} "}
+        gold = "{}{}".format(gold, self.get_emoji(ctx, "gold", **
+                                                  kwargs)) if gold else ""
+        silver = "{}{}".format(silver, self.get_emoji(
+            ctx, "silver", **kwargs)) if silver else ""
+        copper = "{}{}".format(copper, self.get_emoji(
+            ctx, "copper", **kwargs)) if copper else ""
+        return "".join(filter(None, [gold, silver, copper]))
+
+    async def fetch_item(self, item):
+        """The cached item document."""
+        return await self.db.items.find_one({"_id": item})
+
+    def rarity_to_color(self, rarity):
+        return int(self.gamedata["items"]["rarity_colors"][rarity], 0)
 
     async def get_embed_color(self, ctx):
         # Toothy's per-user embed_color only ever applied to text commands
