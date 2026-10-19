@@ -59,7 +59,7 @@ async def test_item_with_skin_and_upgrade(gamedata):
 
 async def test_item_stack():
     embed, _ = await preview(subject.chat_code(19721, 250))
-    assert embed["title"] == "250 Glob of Ectoplasm "
+    assert embed["title"] == "250 Glob of Ectoplasm"
     assert embed["thumbnail"]["url"] == "https://render/ecto.png"
     assert "url" not in embed
 
@@ -123,16 +123,14 @@ async def test_uncached_items_and_skills_show_nothing():
         assert sent == []
 
 
-# --- Known bugs -----------------------------------------------------------------------------
+# --- Fixes ----------------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="an undecodable link raises UnboundLocalError from the finally block")
 @pytest.mark.parametrize("content", ["[&!!]", subject.link(30, 1)], ids=["undecodable", "unknown-type"])
 async def test_invalid_links(content):
     assert await subject.post_chat_link(content, db=cache()) == ([], [])
 
 
-@pytest.mark.xfail(strict=True, reason="an item with an uncached skin raises instead of showing it")
 async def test_item_with_an_uncached_skin():
     embed, _ = await preview(subject.chat_code(46762, 1, 1, []))
     assert embed["title"] == "Twilight"
@@ -140,7 +138,6 @@ async def test_item_with_an_uncached_skin():
     assert embed["thumbnail"]["url"] == "https://render/twilight.png"
 
 
-@pytest.mark.xfail(strict=True, reason="errors are logged with log.exception(exc_info=e), which itself raises")
 async def test_uncached_point_of_interest(caplog):
     sent, counted = await subject.post_chat_link(subject.link(4, 9999), db=cache())
     assert sent == []

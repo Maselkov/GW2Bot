@@ -14,6 +14,22 @@ from .base import GW2Cog
 from .skills import skill_embed
 
 CHATCODE_REGEX = re.compile(r"\[\&(?=[^\s\[\]]*\])(.*?)\]")
+# By the link's first byte, from 1
+LINK_TYPES = [
+    "Coin",
+    "Item",
+    "NPC text string",
+    "Map link",
+    "PvP Game",
+    "Skill",
+    "Trait",
+    "User",
+    "Recipe",
+    "Wardrobe",
+    "Outfit",
+    "WvW objective",
+    "Build template",
+]
 TILESERVICE_BASE_URL = "https://tiles.guildwars2.com/"
 
 
@@ -53,24 +69,13 @@ class ChatLinks(GW2Cog):
         chatcode = match.group()
         try:
             data = base64.b64decode(chatcode)
-            header = struct.unpack("B", data[:1])
-            header = header[0] - 1
-            types = [
-                "Coin",
-                "Item",
-                "NPC text string",
-                "Map link",
-                "PvP Game",
-                "Skill",
-                "Trait",
-                "User",
-                "Recipe",
-                "Wardrobe",
-                "Outfit",
-                "WvW objective",
-                "Build template",
-            ]
-            link_type = types[header]
+        except ValueError:
+            return
+        # Not a link the game makes
+        if not data or not 1 <= data[0] <= len(LINK_TYPES):
+            return
+        link_type = LINK_TYPES[data[0] - 1]
+        try:
             embed = discord.Embed(title=link_type, color=self.embed_color)
             embed.set_author(
                 name=message.author.display_name,
@@ -131,7 +136,7 @@ class ChatLinks(GW2Cog):
                                 name = "Unknown"
                             else:
                                 name = skin_doc["name"]
-                            embed.set_thumbnail(url=skin_doc["icon"])
+                                embed.set_thumbnail(url=skin_doc["icon"])
                             embed.add_field(name="Skin", value=name)
                             offset += 4
                         upgrades = []
@@ -156,7 +161,8 @@ class ChatLinks(GW2Cog):
                         if upgrades:
                             field_name = "Upgrades" if len(upgrades) > 1 else "Upgrade"
                             embed.add_field(name=field_name, value="\n".join(upgrades))
-                        embed.title = f"{embed.title} {suffix}"
+                        if suffix:
+                            embed.title = f"{embed.title} {suffix}"
                     if quantity > 1:
                         embed.title = f"{quantity} {embed.title}"
                     return await message.channel.send(
@@ -297,9 +303,8 @@ class ChatLinks(GW2Cog):
                         file=file,
                         mention_author=False,
                     )
-        except Exception as e:
-            self.log.exception(exc_info=e)
-            pass
+        except Exception:
+            self.log.exception("Exception previewing a chat link")
         finally:
             field_id = link_type.replace(" ", "_").lower()
             await self.bot.data.statistics.update_one(
