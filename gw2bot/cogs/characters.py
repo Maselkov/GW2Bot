@@ -1,3 +1,4 @@
+"""Character commands: the /character and /sab groups."""
 import asyncio
 import collections
 import copy
@@ -9,13 +10,12 @@ from discord import app_commands
 from discord.app_commands import Choice
 from discord.ext import commands
 
-from . import guild
-
-from .exceptions import APIError, APINotFound
+from gw2bot.builds import Build, profession_info
+from gw2bot.utils.chat import embed_list_lines, format_age, zero_width_space
 from gw2bot.utils.wiki import profession_icon_url
 
-from .chatlinks import Build
-from gw2bot.utils.chat import embed_list_lines, format_age, zero_width_space
+from ..gw2api.errors import APIError, APINotFound
+from .base import GW2Cog
 
 LETTERS = ["🇦", "🇧", "🇨", "🇩", "🇪", "🇫", "🇬", "🇭", "🇮", "🇯"]
 
@@ -136,8 +136,9 @@ class Character:
         self.color = discord.Color(
             int(self.cog.gamedata["professions"][self.profession]["color"],
                 16))
-        self.created = datetime.datetime.strptime(data["created"],
-                                                  "%Y-%m-%dT%H:%M:%Sz")
+        self.created = datetime.datetime.strptime(
+            data["created"],
+            "%Y-%m-%dT%H:%M:%Sz").replace(tzinfo=datetime.timezone.utc)
         self.age = data["age"]
         self.spec_cache = {}
 
@@ -166,7 +167,30 @@ class Character:
         return info
 
 
-class CharactersMixin:
+def utcnow():
+    """The time in UTC, naive like the dates MongoDB returns."""
+    return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+
+
+def precision_per_critical_chance(level):
+    """Precision for 1% critical chance at `level`: 1.1 at level 1, rising
+    by 0.1 a level to 20, 0.2 to 40, 0.3 to 60 and 0.4 to 80 (21)."""
+    steps = (0.1 if lvl <= 20 else 0.2 if lvl <= 40 else 0.3 if lvl <= 60
+             else 0.4 for lvl in range(1, level + 1))
+    return round(1 + sum(steps), 1)
+
+
+def readable_attribute(attribute_name):
+    """An API attribute name as the game shows it ("CritDamage" is
+    "Critical Damage")."""
+    attribute_sub = re.sub(r"(\w)([A-Z])", r"\1 \2", attribute_name)
+    attribute_sub = re.sub('Crit ', 'Critical ', attribute_sub)
+    attribute_sub = re.sub('Healing', 'Healing Power', attribute_sub)
+    attribute_sub = re.sub('defense', 'Armor', attribute_sub)
+    return attribute_sub
+
+
+class Characters(GW2Cog):
 
     character_group = app_commands.Group(
         name="character", description="Character related commands")
@@ -190,7 +214,7 @@ class CharactersMixin:
             except APIError:
                 return []
             c = {
-                "last_update": datetime.datetime.utcnow(),
+                "last_update": utcnow(),
                 "characters": character_list
             }
             await self.bot.data.users.update(
@@ -201,8 +225,7 @@ class CharactersMixin:
         cache = doc.get("character_cache", {}).get(account_key, {})
         if not cache:
             cache = await cache_characters()
-        elif cache["last_update"] < datetime.datetime.utcnow(
-        ) - datetime.timedelta(days=3):
+        elif cache["last_update"] < utcnow() - datetime.timedelta(days=3):
             asyncio.create_task(cache_characters())
         character_list = cache["characters"]
         current = current.lower()
@@ -256,7 +279,7 @@ class CharactersMixin:
                     gear[slot]["name"] = doc["name"]
                     continue
             doc = await self.db.items.find_one({"_id": item["id"]})
-            gear[slot]["name"] = doc["name"]
+            gear[slot]["name"] = doc["name"] if doc else "Unknown item"
 
         embed = discord.Embed(description="Fashion", colour=profession.color)
         for piece in pieces:
@@ -293,7 +316,8 @@ class CharactersMixin:
         age = format_age(results["age"])
         created = results["created"].split("T", 1)[0]
         deaths = results["deaths"]
-        deathsperhour = round(deaths / (results["age"] / 3600), 1)
+        hours = results["age"] / 3600
+        deathsperhour = round(deaths / hours, 1) if hours else 0.0
         if "title" in results:
             title = await self.get_title(results["title"])
         else:
@@ -344,8 +368,7 @@ class CharactersMixin:
             if info == "age":
                 return lambda k: (-k.age, k.name)
             if info == "created":
-                return lambda k: (-(datetime.datetime.utcnow() - k.created).
-                                  total_seconds(), k.name)
+                return lambda k: (k.created, k.name)
             return lambda k: k.name
 
         def extra_info(char):
@@ -389,12 +412,6 @@ class CharactersMixin:
                              character: str):
         """Displays the gear, attributes and build of given character"""
         await interaction.response.defer()
-        if not self.check_emoji_permission(interaction):
-            return await interaction.followup.send(
-                "The default role in this channel needs to "
-                "have `use external emojis` permission in order to use this command."
-            )
-            # TODO move this to a check
 
         numbers = []
 
@@ -424,6 +441,9 @@ class CharactersMixin:
                 for item in eq:
                     if item["slot"] == piece:
                         item_doc = await self.fetch_item(item["id"])
+                        if not item_doc:
+                            line = "Unknown item"
+                            continue
                         line = self.get_emoji(
                             interaction, f"{item_doc['rarity']}_{piece_name}")
                         for upgrade_type in "infusions", "upgrades":
@@ -462,7 +482,7 @@ class CharactersMixin:
                                 pass
                         line += stat_name
                         if piece.startswith("Weapon"):
-                            line += " " + self.readable_attribute(
+                            line += " " + readable_attribute(
                                 item_doc["details"]["type"])
                         if upgrades_to_display:
                             line += "\n*{}*".format(
@@ -492,7 +512,7 @@ class CharactersMixin:
             fields.append(("> **TRINKETS**", "\n".join(trinket_lines), False))
             upgrade_lines = []
             for bonus, count in bonuses.items():
-                bonus = self.readable_attribute(bonus)
+                bonus = readable_attribute(bonus)
                 emoji = self.get_emoji(interaction, f"attribute_{bonus}")
                 upgrade_lines.append(f"{emoji}**{bonus}**: {count}")
             if not upgrade_lines:
@@ -621,7 +641,7 @@ class CharactersMixin:
         characters = await self.get_all_characters(interaction.user)
         fields = {}
         for character in characters:
-            age = datetime.datetime.utcnow() - character.created
+            age = datetime.datetime.now(datetime.timezone.utc) - character.created
             days = age.days
             floor = days // 365
             # finds days till next birthday
@@ -644,13 +664,6 @@ class CharactersMixin:
             embed = embed_list_lines(embed, lines,
                                      "{}{} Birthday".format(k, suffix(k)))
         await interaction.followup.send(embed=embed)
-
-    def readable_attribute(self, attribute_name):
-        attribute_sub = re.sub(r"(\w)([A-Z])", r"\1 \2", attribute_name)
-        attribute_sub = re.sub('Crit ', 'Critical ', attribute_sub)
-        attribute_sub = re.sub('Healing', 'Healing Power', attribute_sub)
-        attribute_sub = re.sub('defense', 'Armor', attribute_sub)
-        return attribute_sub
 
     async def calculate_character_attributes(self, character, eq):
         # TODO remove redundant database calls from eq
@@ -761,9 +774,13 @@ class CharactersMixin:
         ]
         attr_dict = {key: 0 for (key) in attr_list}
         runes = {}
+        # Identical sigils don't stack
+        sigils = set()
+        sigil_critical_chance = 0
         level = character["level"]
         for piece in eq:
-            item = await self.fetch_item(piece["id"])
+            # Without its document, only selectable stats are known
+            item = await self.fetch_item(piece["id"]) or {"details": {}}
             # Gear with selectable values
             if "stats" in piece:
                 if piece["slot"] not in ignore_list:
@@ -818,6 +835,9 @@ class CharactersMixin:
                             else:
                                 runes[upgrade] = 1
                         elif item_upgrade["details"]["type"] == "Sigil":
+                            if upgrade in sigils:
+                                continue
+                            sigils.add(upgrade)
                             pattern_percentage = re.compile(r"^\+\d{1,}% ")
                             bonus = item_upgrade["details"]["infix_upgrade"][
                                 "buff"]["description"]
@@ -838,7 +858,9 @@ class CharactersMixin:
                                     '^.* ', '', attribute_name)
                                 attribute_name = re.sub(
                                     r'\.', '', attribute_name)
-                                if attribute_name in attr_dict:
+                                if attribute_name == "CriticalChance":
+                                    sigil_critical_chance += int(modifier)
+                                elif attribute_name in attr_dict:
                                     attr_dict[attribute_name] += int(modifier)
             # Infusions
             if "infusions" in piece:
@@ -892,6 +914,8 @@ class CharactersMixin:
                         attribute_name = re.sub(r'\+\d{1,} ', '',
                                                 attribute_name)
                         attribute_name = re.sub(';.*', '', attribute_name)
+                        attribute_name = re.sub('Healing Power', 'Healing',
+                                                attribute_name)
                         if attribute_name in attr_dict:
                             attr_dict[attribute_name] += int(modifier)
                     elif pattern_percentage.match(bonus):
@@ -927,12 +951,10 @@ class CharactersMixin:
                 attr_dict["ConditionDuration"])
         # Base value of 1000 on lvl 80 doesn't get calculated,
         # if below lvl 80 dont subtract it
-        if attr_dict["Precision"] < 1000:
-            base_prec = 0
-        else:
-            base_prec = 1000
+        # 5% at the level's base Precision
         attr_dict["Critical Chance"] = round(
-            4 + ((attr_dict["Precision"] - base_prec) / 21), 2)
+            5 + (attr_dict["Precision"] - basevalue) /
+            precision_per_critical_chance(level) + sigil_critical_chance, 2)
         attr_dict["defense"] += attr_dict["Toughness"]
 
         # Calculate base health
@@ -949,9 +971,9 @@ class CharactersMixin:
         output = {}
         for attribute in ordered_list:
             if attribute in percentage_list:
-                attr_dict[attribute] = '{0}%'.format(
-                    round(attr_dict[attribute]), 2)
-            attribute_sub = self.readable_attribute(attribute)
+                attr_dict[attribute] = "{:g}%".format(
+                    round(attr_dict[attribute], 2))
+            attribute_sub = readable_attribute(attribute)
             output[attribute_sub.title()] = attr_dict[attribute]
         return output
 
@@ -1149,31 +1171,22 @@ class CharactersMixin:
         specs = active_tab["build"]["specializations"]
         specializations = []
         for spec in specs:
-            spec_doc = await self.db.specializations.find_one({"_id": spec})
-            specializations.append(spec_doc)
-        return await self.get_profession(character["profession"],
-                                         specializations)
-
-    async def get_profession(self, profession, specializations):
-
-        async def get_elite_spec():
-            try:
-                spec = specializations[-1]
-            except IndexError:
-                return None
+            spec_doc = None
             if spec:
-                if not spec["elite"]:
-                    return None
-                return spec["name"]
-            return None
+                spec_doc = await self.db.specializations.find_one(
+                    {"_id": spec["id"]})
+            specializations.append(spec_doc)
+        return profession_info(self.gamedata, character["profession"],
+                               specializations)
 
-        Profession = collections.namedtuple("Profession",
-                                            ["name", "icon", "color"])
-        color = discord.Color(
-            int(self.gamedata["professions"][profession.lower()]["color"], 0))
-        name = await get_elite_spec() or profession
-        icon = profession_icon_url(name)
-        return Profession(name.title(), icon, color)
+    async def fetch_statname(self, item):
+        statset = await self.db.itemstats.find_one({"_id": item})
+        try:
+            name = statset["name"]
+        except (KeyError, TypeError):
+            name = ""
+        return name
 
-    def get_profession_icon(self, prof_name):
-        return profession_icon_url(prof_name)
+
+async def setup(bot):
+    await bot.add_cog(Characters(bot))

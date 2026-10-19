@@ -108,14 +108,6 @@ class DatabaseMixin:
         result = await self.bot.data.users.count({"key": {"$ne": None}})
         await ctx.send("{} registered users".format(result))
 
-    async def fetch_statname(self, item):
-        statset = await self.db.itemstats.find_one({"_id": item})
-        try:
-            name = statset["name"]
-        except KeyError:
-            name = ""
-        return name
-
     async def cache_dailies(self):
         """Cache today's and tomorrow's dailies from achievement categories."""
         ids = ",".join(str(i) for i in ACHIEVEMENT_CATEGORIES.values())

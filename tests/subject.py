@@ -16,7 +16,6 @@ from unittest.mock import MagicMock
 import time_machine
 
 from gw2bot.cogs.base import GW2Cog
-from gw2bot.cogs.guildwars2.characters import CharactersMixin
 from gw2bot.cogs.guildwars2 import daily
 from gw2bot.cogs.guildwars2.daily import DailyMixin
 from gw2bot.cogs.guildwars2.database import DatabaseMixin
@@ -67,7 +66,6 @@ def _fake_bot(session=None, users=None):
 
 class _Harness(
     GW2Cog,
-    CharactersMixin,
     DailyMixin,
     DatabaseMixin,
     EventsMixin,
@@ -107,11 +105,15 @@ def format_age(seconds, short=False):
 
 
 def profession_icon(name):
-    return CharactersMixin.get_profession_icon(None, name)
+    from gw2bot.utils.wiki import profession_icon_url
+
+    return profession_icon_url(name)
 
 
 def readable_attribute(name):
-    return _Harness().readable_attribute(name)
+    from gw2bot.cogs.characters import readable_attribute
+
+    return readable_attribute(name)
 
 
 def format_timedelta(td):
@@ -522,17 +524,9 @@ async def render_build(session, specializations, skills):
     specializations: [{"spec_doc", "active_traits", "trait_docs"}] as stored
     by the bot; skills: skill docs with an "icon" URL.
     """
-    from types import SimpleNamespace
+    from gw2bot.builds import Build
 
-    from PIL import ImageFont
-
-    from gw2bot.cogs.guildwars2.chatlinks import Build
-
-    cog = SimpleNamespace(
-        session=session,
-        bot=SimpleNamespace(loop=asyncio.get_running_loop()),
-        font=ImageFont.load_default(),
-    )
+    cog = SimpleNamespace(bot=SimpleNamespace(loop=asyncio.get_running_loop(), session=session))
     file = await Build(cog, None, specializations, skills, "[&code]").render()
     return file.fp.read() if file else None
 
@@ -811,7 +805,7 @@ def stored_key(permissions, account_name="Example.1234"):
 
 
 async def run_command(cog_for, command, responses, *, permissions, users=None, pages=(), head_error=None,
-                      **options):
+                      on_interaction=None, **options):
     """Run a slash command's handler with a fake interaction.
 
     cog_for(session, users) builds the cog; `responses` are the API
@@ -821,6 +815,7 @@ async def run_command(cog_for, command, responses, *, permissions, users=None, p
     dict, or its content if there's no embed: the followup's if the command
     deferred, else the direct response's. `pages` are the wiki pages that
     exist, and `head_error` makes checking them fail (see FakeSession).
+    on_interaction(interaction) is called before running the command.
     """
     from unittest.mock import AsyncMock
 
@@ -832,6 +827,9 @@ async def run_command(cog_for, command, responses, *, permissions, users=None, p
     interaction.response.defer = AsyncMock()
     interaction.response.send_message = AsyncMock()
     interaction.followup.send = AsyncMock()
+    interaction.user.send = AsyncMock()
+    if on_interaction:
+        on_interaction(interaction)
     await command.callback(cog, interaction, **options)
     reply = interaction.followup.send if interaction.followup.send.await_count else interaction.response.send_message
     if interaction.followup.send.await_count:
@@ -894,7 +892,11 @@ class MemoryItems:
         self.docs = {doc["_id"]: doc for doc in docs}
 
     async def find_one(self, query):
-        return self.docs.get(query["_id"])
+        try:
+            return self.docs.get(query["_id"])
+        except TypeError:
+            # Like Mongo, a document as the id matches nothing here
+            return None
 
     def find(self, query=None):
         query = query or {}
@@ -1093,3 +1095,79 @@ async def account_item_search(text, items):
     """The /search autocomplete choices for `text`, as (name, value)."""
     cog = _account_cog(db=gw2_db(items=items))
     return [(c.name, c.value) for c in await cog.item_autocomplete(MagicMock(), text)]
+
+
+# --- Characters ---------------------------------------------------------------
+
+def _characters_cog(session=None, users=None, db=None, public=(), config=None, channel=None):
+    """The characters commands' cog. `public` are the public characters'
+    documents, `config` the bot's config document and `channel` the image
+    channel (id 5)."""
+    from unittest.mock import AsyncMock
+
+    from gw2bot.cogs.characters import Characters
+
+    cog = Characters(_fake_bot(session, users))
+    cog.db = db or gw2_db()
+    cog.db.characters = MemoryCollection()
+    cog.db.characters.docs = [dict(doc) for doc in public]
+    cog.bot.data.config.get = AsyncMock(return_value=config if config is not None else {})
+    cog.bot.get_channel = lambda channel_id: channel if channel_id == 5 else None
+    cog.bot.fetch_user = AsyncMock(side_effect=lambda user_id: MagicMock(id=user_id))
+    return cog
+
+
+def _character_handler(command):
+    from gw2bot.cogs.characters import Characters
+
+    if command.startswith("sab "):
+        return getattr(Characters, "sab_" + command[4:])
+    return getattr(Characters, "character_" + command)
+
+
+async def character_command(command, responses, *, permissions=("account", "characters", "builds"), db=None,
+                            public=(), config=None, channel=None, now=None, users=None, **options):
+    """Run /character <command> or /sab <unlocks|zones> ("sab unlocks").
+
+    Returns (what was sent, API requests, DMs to the user, public
+    character documents afterwards)."""
+    import contextlib
+
+    cogs = []
+    interactions = []
+
+    def cog_for(session, users):
+        cogs.append(_characters_cog(session, users, db=db, public=public, config=config, channel=channel))
+        return cogs[0]
+
+    with _at(now) if now else contextlib.nullcontext():
+        sent, requests = await run_command(
+            cog_for, _character_handler(command), responses, permissions=permissions, users=users,
+            on_interaction=interactions.append, **options,
+        )
+    dms = [call.args[0] for call in interactions[0].user.send.await_args_list]
+    return sent, requests, dms, cogs[0].db.characters.docs
+
+
+async def character_attributes(level, profession, equipment, items=(), itemstats=()):
+    """The /character gear attribute panel: {name: value} for a character
+    wearing `equipment` (equipment tab entries), with `items` cached."""
+    cog = _characters_cog(db=gw2_db(items=items, itemstats=itemstats))
+    character = {"level": level, "profession": profession}
+    return await cog.calculate_character_attributes(character, equipment)
+
+
+async def character_choices(current, stored, responses=(), *, now):
+    """The character autocomplete for `current`, for a user whose stored
+    settings are `stored`. Returns (choices, database writes, API
+    requests), after any background refresh finished."""
+    session = FakeSession(*(responses or [(500, {})]))
+    users = FakeUserRepo(stored)
+    cog = _characters_cog(session, users)
+    interaction = MagicMock()
+    interaction.user.id = 1
+    with _at(now):
+        choices = await cog.character_autocomplete(interaction, current)
+        for _ in range(10):
+            await asyncio.sleep(0)
+    return [c.name for c in choices], users.writes, [(url, params) for url, params, _ in session.requests]
