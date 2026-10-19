@@ -1442,3 +1442,94 @@ async def run_gem_tracker(responses, tracked):
     except Exception as e:
         error = e
     return sent, users.writes, error
+
+
+class MemoryGuilds:
+    """bot.data.guilds: server settings by id, find() with equality and
+    {"$ne": value} on dotted fields, update() recorded."""
+
+    def __init__(self, docs):
+        self.docs = docs
+        self.writes = []
+
+    async def get(self, guild_id):
+        return self.docs.get(guild_id, {})
+
+    async def update(self, guild_id, fields, op="set"):
+        self.writes.append((guild_id, op, fields))
+
+    async def find(self, query=None, **kwargs):
+        def value(doc, name):
+            for part in name.split("."):
+                doc = doc.get(part) if isinstance(doc, dict) else None
+            return doc
+
+        def matches(doc, field, condition):
+            if isinstance(condition, dict):
+                return value(doc, field) != condition["$ne"]
+            return value(doc, field) == condition
+
+        for guild_id, doc in list(self.docs.items()):
+            if all(matches(doc, f, c) for f, c in (query or {}).items()):
+                yield {**doc, "_id": guild_id}
+
+
+def text_channel(channel_id, guild_id=10, *, can_send=True, can_embed=True):
+    """A channel whose sent messages are recorded in channel.sent as
+    (content, embed dict or None)."""
+    from unittest.mock import AsyncMock
+
+    channel = MagicMock(id=channel_id)
+    channel.guild.id = guild_id
+    permissions = channel.permissions_for.return_value
+    permissions.send_messages = can_send
+    permissions.embed_links = can_embed
+    permissions.read_message_history = True
+    channel.sent = []
+
+    async def send(content=None, *, embed=None, **kwargs):
+        channel.sent.append((content, embed.to_dict() if embed else None))
+        return MagicMock(id=1000 + len(channel.sent))
+
+    channel.send = AsyncMock(side_effect=send)
+    return channel
+
+
+async def run_news_checker(feed, cached_titles, guilds, channels):
+    """One run of the news checker against an RSS `feed` (text). `guilds`
+    are server settings by id, `channels` text_channel()s. Returns
+    (config writes, server settings writes, anything the run raised)."""
+    from unittest.mock import AsyncMock
+
+    cog = _notifier_cog()
+    cog.session = FakeWikiSession({"https://www.guildwars2.com/en/feed/": feed})
+    cog.bot.data.config.get = AsyncMock(return_value={"cache": {"news": cached_titles}})
+    cog.bot.data.config.update = AsyncMock()
+    cog.bot.data.guilds = MemoryGuilds(guilds)
+    by_id = {c.id: c for c in channels}
+    cog.bot.get_channel = by_id.get
+    try:
+        await type(cog).news_checker.coro(cog)
+        error = None
+    except Exception as e:
+        error = e
+    config_writes = [call.args[0] for call in cog.bot.data.config.update.await_args_list]
+    return config_writes, cog.bot.data.guilds.writes, error
+
+
+async def run_game_update_checker(config, build_page):
+    """One run of the game update checker with the bot's `config` document
+    and `build_page` as the build number page. Returns anything it raised."""
+    from unittest.mock import AsyncMock
+
+    cog = _notifier_cog()
+    cog.session = FakeWikiSession({"http://assetcdn.101.arenanetworks.com/latest/101": build_page})
+    cog.bot.data.config.get = AsyncMock(return_value=config)
+    cog.bot.data.config.update = AsyncMock()
+    cog.rebuild_database = AsyncMock()
+    cog.update_notification = AsyncMock(return_value=None)
+    try:
+        await type(cog).game_update_checker.coro(cog)
+    except Exception as e:
+        return e
+    return None

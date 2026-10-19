@@ -716,7 +716,13 @@ class NotiifiersMixin:
 
     @tasks.loop(minutes=3)
     async def news_checker(self):
-        to_post = await self.check_news()
+        try:
+            to_post = await self.check_news()
+        except Exception:
+            # E.g. an error page instead of the feed. An escaping exception
+            # would stop the loop for good
+            self.log.exception("Couldn't check the news")
+            return
         if to_post:
             embeds = []
             for item in to_post:
@@ -729,9 +735,13 @@ class NotiifiersMixin:
 
     @tasks.loop(minutes=1)
     async def game_update_checker(self):
-        if await self.game_build_changed():
-            await self.rebuild_database()
-        await self.send_update_notifs()
+        try:
+            if await self.game_build_changed():
+                await self.rebuild_database()
+            await self.send_update_notifs()
+        except Exception:
+            # An escaping exception would stop the loop for good
+            self.log.exception("Couldn't check for game updates")
 
     @game_update_checker.before_loop
     async def before_update_checker(self):
