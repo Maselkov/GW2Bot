@@ -1,6 +1,7 @@
 """Miscellaneous commands: /wiki and /chatcode."""
 import codecs
 import struct
+import urllib.parse
 
 import discord
 from bs4 import BeautifulSoup
@@ -70,7 +71,8 @@ class Misc(GW2Cog):
             "fr": "{}/index.php?search={}&title=Spécial%3ARecherche",
             "es": "{}/index.php?title=Especial%3ABuscar&search={}"
         }
-        url = (search_url[language].format(wiki[language], search_text))
+        url = search_url[language].format(wiki[language],
+                                          urllib.parse.quote(search_text))
         headers = {"User-Agent": "TybaltBot/v2"}
         # Overzealous filtering on the wiki's side lead to the bot's IP being blocked.
         # Seems to be a common issue, based on https://wiki.guildwars2.com/wiki/Guild_Wars_2_Wiki:Reporting_wiki_bugs#Forbidden_403
@@ -186,13 +188,32 @@ class Misc(GW2Cog):
             return await interaction.response.send_message(
                 "Invalid quantity. Quantity can be a number between 1 and 255",
                 ephemeral=True)
+
+        async def resolve(value, autocomplete, kind):
+            """An id: picked from the autocomplete, or the first match for
+            a typed name."""
+            if not value:
+                return None
+            if value.isdigit():
+                return int(value)
+            choices = await autocomplete(interaction, value)
+            if not choices:
+                raise LookupError(f"Could not find any {kind} named {value}")
+            return int(choices[0].value)
+
         try:
-            item = int(item)
-            skin = int(skin) if skin else None
-            upgrade_1 = int(upgrade_1) if upgrade_1 else None
-            upgrade_2 = int(upgrade_2) if upgrade_2 else None
-        except ValueError:
-            return await interaction.response.send_message("Invalid value",
+            item = await resolve(item, self.chatcode_item_autocomplete,
+                                 "items")
+            skin = await resolve(skin, self.chatcode_skin_autocomplete,
+                                 "skins")
+            upgrade_1 = await resolve(upgrade_1,
+                                      self.chatcode_upgrade_autocomplete,
+                                      "upgrades")
+            upgrade_2 = await resolve(upgrade_2,
+                                      self.chatcode_upgrade_autocomplete,
+                                      "upgrades")
+        except LookupError as e:
+            return await interaction.response.send_message(str(e),
                                                            ephemeral=True)
         upgrades = []
         if upgrade_1:

@@ -41,7 +41,7 @@ async def test_wiki_search_results():
 
 
 async def test_wiki_exact_match():
-    url = EN_SEARCH + "Divinity's Reach"
+    url = EN_SEARCH + "Divinity%27s%20Reach"
     page = "https://wiki.guildwars2.com/wiki/Divinity%27s_Reach"
     session = subject.FakeWikiSession(
         {page: "<html><head><title>Divinity's Reach - Guild Wars 2 Wiki (GW2W)</title></head></html>"},
@@ -120,10 +120,9 @@ async def test_chatcode_autocompletes():
     assert await subject.chatcode_choices("item", "", items=items) == []
 
 
-# --- Known bugs ---------------------------------------------------------------------------
+# --- Fixes --------------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="the search text isn't URL-encoded")
 async def test_wiki_search_text_is_encoded():
     url = EN_SEARCH + "Rune%20%26%20Sigil%20%2B1%20%23"
     session = subject.FakeWikiSession({url: results_page("Rune")})
@@ -131,7 +130,6 @@ async def test_wiki_search_text_is_encoded():
     assert [u for u, _ in requests] == [url]
 
 
-@pytest.mark.xfail(strict=True, reason="typed names aren't looked up")
 async def test_chatcode_with_typed_names():
     # Like other commands, typing a name instead of picking it uses the first match
     items = [{"_id": 46762, "name": "Banana", "type": "Consumable"},
