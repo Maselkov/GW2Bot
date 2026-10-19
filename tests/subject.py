@@ -56,6 +56,7 @@ def _fake_bot(session=None, users=None):
     from gw2bot.keys import ApiKeys
 
     bot = MagicMock()
+    bot.user.name = "GW2Bot"
     bot.gamedata = _GAMEDATA
     bot.instabilities = _INSTABILITIES
     bot.gw2api = _client(session) if session is not None else None
@@ -833,8 +834,19 @@ class MemoryItems:
         found = [doc for doc in self.docs.values() if matches(doc)]
 
         class Cursor:
+            def limit(self, length):
+                del found[length:]
+                return self
+
             async def to_list(self, length):
                 return found[:length] if length else found
+
+            def __aiter__(self):
+                return self._iterate()
+
+            async def _iterate(self):
+                for doc in found:
+                    yield doc
 
         return Cursor()
 
@@ -860,4 +872,34 @@ async def tp_item_search(text, items):
     cog = Commerce(_fake_bot())
     cog.db = SimpleNamespace(items=MemoryItems(items))
     choices = await Commerce.tp_autocomplete(cog, MagicMock(), text)
+    return [(c.name, c.value) for c in choices]
+
+
+def gw2_db(**collections):
+    """A stand-in for the gw2 collections: {name: [documents]}."""
+    return SimpleNamespace(**{name: MemoryItems(docs) for name, docs in collections.items()})
+
+
+async def achievement(responses, achievement_name, *, db, permissions=("account", "progression")):
+    """Run /achievement with the cached game data in `db` (see gw2_db)."""
+    from gw2bot.cogs.guildwars2.achievements import AchievementsMixin
+
+    def cog_for(session, users):
+        cog = _Harness(session, users)
+        cog.db = db
+        return cog
+
+    return await run_command(
+        cog_for, AchievementsMixin.achievementinfo, responses, permissions=permissions,
+        achievement_name=achievement_name,
+    )
+
+
+async def achievement_search(text, db):
+    """The /achievement autocomplete choices for `text`, as (name, value)."""
+    from gw2bot.cogs.guildwars2.achievements import AchievementsMixin
+
+    cog = _Harness()
+    cog.db = db
+    choices = await AchievementsMixin.achievement_autocomplete(cog, MagicMock(), text)
     return [(c.name, c.value) for c in choices]
