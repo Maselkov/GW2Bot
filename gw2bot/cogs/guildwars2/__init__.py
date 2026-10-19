@@ -21,7 +21,6 @@ from .guildmanage import GuildManageMixin
 from .key import KeyMixin
 from .misc import MiscMixin
 from .notifiers import NotiifiersMixin
-from .pvp import PvpMixin
 from .skills import SkillsMixin
 from .wallet import WalletMixin
 from .wizardsvault import WizardsVaultMixin
@@ -43,7 +42,6 @@ class GuildWars2(
     KeyMixin,
     MiscMixin,
     NotiifiersMixin,
-    PvpMixin,
     SkillsMixin,
     WalletMixin,
     WizardsVaultMixin,

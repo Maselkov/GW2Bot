@@ -82,3 +82,35 @@ async def test_key_needs_pvp_permission():
 
     with pytest.raises(APIKeyError, match="`pvp`"):
         await subject.pvp("stats", STATS, permissions=["account"])
+
+
+# --- The calculations ------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "record, expected",
+    [
+        (games(50, 30, byes=2), (52, 82, 63)),
+        (games(1, 2), (1, 3, 33)),  # rounded down
+        (games(0, 0), (0, 0, 0)),
+        (games(3, 0, desertions=1, forfeits=1), (3, 5, 60)),
+    ],
+)
+def test_win_ratio(record, expected):
+    assert subject.pvp_win_ratio(record) == expected
+
+
+def test_extremes_only_count_listed_played_professions():
+    top = subject.pvp_extremes(STATS, ["guardian", "necromancer", "warrior"])
+    assert top == {
+        "most_played": ("guardian", 82),
+        "highest_ratio": ("guardian", 63),
+        "least_played": ("necromancer", 60),
+        "lowest_ratio": ("necromancer", 33),
+    }
+
+
+def test_extremes_ties_go_to_the_first_listed():
+    stats = {"professions": {"thief": games(1, 1), "ranger": games(1, 1)}}
+    top = subject.pvp_extremes(stats, ["ranger", "thief"])
+    assert {k: v[0] for k, v in top.items()} == dict.fromkeys(top, "ranger")

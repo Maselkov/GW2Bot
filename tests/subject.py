@@ -23,7 +23,6 @@ from gw2bot.cogs.guildwars2.daily import DailyMixin
 from gw2bot.cogs.guildwars2.database import DatabaseMixin
 from gw2bot.cogs.guildwars2.events import EventsMixin
 from gw2bot.cogs.guildwars2.misc import MiscMixin
-from gw2bot.cogs.guildwars2.pvp import PvpMixin
 from gw2bot.cogs.guildwars2.skills import SkillsMixin
 from gw2bot.cogs.guildwars2.utils import chat, db
 from gw2bot.cogs.guildwars2.wvw import WvwMixin, match_summary
@@ -76,7 +75,6 @@ class _Harness(
     DatabaseMixin,
     EventsMixin,
     MiscMixin,
-    PvpMixin,
     SkillsMixin,
     WvwMixin,
 ):
@@ -771,5 +769,24 @@ async def pvp(command, stats, *, rank_icon="https://render/rank.png", permission
     responses = [(200, stats)]
     if command == "stats":
         responses.append((200, {"id": 1, "icon": rank_icon}))
-    handler = {"stats": PvpMixin.pvp_stats, "professions": PvpMixin.pvp_professions}[command]
-    return await run_command(_Harness, handler, responses, permissions=permissions, **options)
+    from gw2bot.cogs.pvp import Pvp
+
+    handler = {"stats": Pvp.pvp_stats, "professions": Pvp.pvp_professions}[command]
+
+    def cog_for(session, users):
+        return Pvp(_fake_bot(session, users))
+
+    return await run_command(cog_for, handler, responses, permissions=permissions, **options)
+
+
+def pvp_win_ratio(record):
+    from gw2bot.cogs.pvp import win_ratio
+
+    return win_ratio(record)
+
+
+def pvp_extremes(stats, professions):
+    """Most/least played and highest/lowest win rate among `professions`."""
+    from gw2bot.cogs.pvp import extremes, profession_records
+
+    return extremes(profession_records(stats, professions))
