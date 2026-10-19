@@ -3,6 +3,7 @@ import datetime
 import hashlib
 import json
 import logging
+import pkgutil
 
 import aiohttp
 import discord
@@ -19,7 +20,17 @@ from .keys import ApiKeys
 
 log = logging.getLogger(__name__)
 
-EXTENSIONS = ["gw2bot.owner", "gw2bot.cogs.guildwars2", "gw2bot.cogs.pvp", "gw2bot.cogs.wizardsvault"]
+# Modules in gw2bot/cogs that aren't extensions
+NOT_EXTENSIONS = {"base"}
+
+
+def extensions():
+    """The owner commands, then every cog in gw2bot/cogs (one module or
+    package per feature, each with a setup(bot))."""
+    from . import cogs
+
+    names = sorted(m.name for m in pkgutil.iter_modules(cogs.__path__) if m.name not in NOT_EXTENSIONS)
+    return ["gw2bot.owner"] + [f"gw2bot.cogs.{name}" for name in names]
 
 
 def intents():
@@ -79,7 +90,7 @@ class GW2Bot(commands.AutoShardedBot):
         log.info(report.summary())
         await self.data.ensure_indexes()
         await self.gw2_emojis.load()
-        for extension in EXTENSIONS:
+        for extension in extensions():
             await self.load_extension(extension)
         if self.settings.auto_sync:
             try:

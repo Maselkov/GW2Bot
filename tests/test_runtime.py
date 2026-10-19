@@ -249,3 +249,16 @@ async def test_command_hash_ignores_registration_order():
     assert command_tree_hash(first.tree) == command_tree_hash(second.tree)
     for bot in (first, second):
         await bot.data.close()
+
+
+def test_every_cog_module_is_loaded():
+    import importlib
+
+    from gw2bot.bot import extensions
+
+    names = extensions()
+    assert names[0] == "gw2bot.owner"
+    assert {"gw2bot.cogs.guildwars2", "gw2bot.cogs.pvp", "gw2bot.cogs.wizardsvault"} <= set(names)
+    assert "gw2bot.cogs.base" not in names
+    for name in names:
+        assert callable(getattr(importlib.import_module(name), "setup", None)), name
