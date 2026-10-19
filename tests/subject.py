@@ -23,6 +23,7 @@ from gw2bot.cogs.guildwars2.daily import DailyMixin
 from gw2bot.cogs.guildwars2.database import DatabaseMixin
 from gw2bot.cogs.guildwars2.events import EventsMixin
 from gw2bot.cogs.guildwars2.misc import MiscMixin
+from gw2bot.cogs.guildwars2.pvp import PvpMixin
 from gw2bot.cogs.guildwars2.skills import SkillsMixin
 from gw2bot.cogs.guildwars2.utils import chat, db
 from gw2bot.cogs.guildwars2.wvw import WvwMixin, match_summary
@@ -75,6 +76,7 @@ class _Harness(
     DatabaseMixin,
     EventsMixin,
     MiscMixin,
+    PvpMixin,
     SkillsMixin,
     WvwMixin,
 ):
@@ -730,3 +732,44 @@ class EvtcApiKeys:
     def accepted_tokens(self, user_id=1):
         """The tokens the upload API would accept for this user."""
         return {d["token"] for d in self.keys.docs if d["user"] == user_id}
+
+
+# --- Command handlers -------------------------------------------------------
+
+def stored_key(permissions, account_name="Example.1234"):
+    """A user's stored settings with one key (synthetic, never real data)."""
+    key = {"key": "KEY", "account_name": account_name, "permissions": list(permissions), "name": ""}
+    return {"key": key, "keys": [key]}
+
+
+async def run_command(cog_for, command, responses, *, permissions, **options):
+    """Run a slash command's handler with a fake interaction.
+
+    cog_for(session, users) builds the cog; `responses` are the API
+    responses in request order (see FakeSession). Returns (what was sent,
+    API requests). What was sent is the followup's embed as a dict, or its
+    content if there's no embed.
+    """
+    from unittest.mock import AsyncMock
+
+    session = FakeSession(*responses)
+    cog = cog_for(session, FakeUserRepo(stored_key(permissions)))
+    interaction = MagicMock()
+    interaction.user.id = 1
+    interaction.response.defer = AsyncMock()
+    interaction.followup.send = AsyncMock()
+    await command.callback(cog, interaction, **options)
+    interaction.response.defer.assert_awaited_once()
+    call = interaction.followup.send.await_args
+    embed = call.kwargs.get("embed")
+    sent = embed.to_dict() if embed else call.args[0] if call.args else call.kwargs.get("content")
+    return sent, [(url, params) for url, params, _ in session.requests]
+
+
+async def pvp(command, stats, *, rank_icon="https://render/rank.png", permissions=("account", "pvp"), **options):
+    """Run /pvp stats or /pvp professions against synthetic pvp/stats."""
+    responses = [(200, stats)]
+    if command == "stats":
+        responses.append((200, {"id": 1, "icon": rank_icon}))
+    handler = {"stats": PvpMixin.pvp_stats, "professions": PvpMixin.pvp_professions}[command]
+    return await run_command(_Harness, handler, responses, permissions=permissions, **options)
