@@ -10,21 +10,20 @@ import json
 import logging
 import pathlib
 import re
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import time_machine
 
 from gw2bot.cogs.base import GW2Cog
-from gw2bot.cogs.guildwars2.achievements import AchievementsMixin
 from gw2bot.cogs.guildwars2.characters import CharactersMixin
-from gw2bot.cogs.guildwars2.commerce import CommerceMixin
 from gw2bot.cogs.guildwars2 import daily
 from gw2bot.cogs.guildwars2.daily import DailyMixin
 from gw2bot.cogs.guildwars2.database import DatabaseMixin
 from gw2bot.cogs.guildwars2.events import EventsMixin
 from gw2bot.cogs.guildwars2.misc import MiscMixin
 from gw2bot.cogs.guildwars2.skills import SkillsMixin
-from gw2bot.cogs.guildwars2.utils import chat, db
+from gw2bot.utils import chat, db
 from gw2bot.cogs.guildwars2.wvw import WvwMixin, match_summary
 
 DATA_DIR = pathlib.Path(__file__).resolve().parent.parent / "gw2bot" / "data"
@@ -56,6 +55,7 @@ def _fake_bot(session=None, users=None):
     from gw2bot.keys import ApiKeys
 
     bot = MagicMock()
+    bot.user.name = "GW2Bot"
     bot.gamedata = _GAMEDATA
     bot.instabilities = _INSTABILITIES
     bot.gw2api = _client(session) if session is not None else None
@@ -68,9 +68,7 @@ def _fake_bot(session=None, users=None):
 
 class _Harness(
     GW2Cog,
-    AchievementsMixin,
     CharactersMixin,
-    CommerceMixin,
     DailyMixin,
     DatabaseMixin,
     EventsMixin,
@@ -140,15 +138,21 @@ def search_pattern(text):
 # --- Achievements ----------------------------------------------------------
 
 def tier_progress(tiers, progress):
-    return _Harness().tier_progress(tiers, progress)
+    from gw2bot.cogs.achievements import tier_progress
+
+    return tier_progress(tiers, progress)
 
 
 def max_ap(achievement, repeatable=False):
-    return _Harness().max_ap(achievement, repeatable)
+    from gw2bot.cogs.achievements import max_ap
+
+    return max_ap(achievement, repeatable)
 
 
 def earned_ap(achievement, progress):
-    return _Harness().earned_ap(achievement, progress)
+    from gw2bot.cogs.achievements import earned_ap
+
+    return earned_ap(achievement, progress)
 
 
 # --- Skills ----------------------------------------------------------------
@@ -407,7 +411,7 @@ def api_error_message(error):
 
 def patch_notes_markdown(html):
     """Discord markdown for a forum post's HTML."""
-    from gw2bot.cogs.guildwars2.utils.markdown import html_to_markdown
+    from gw2bot.utils.markdown import html_to_markdown
 
     return html_to_markdown(html)
 
@@ -471,16 +475,16 @@ async def render_build(session, specializations, skills):
 
 async def total_possible_ap(db):
     """Maximum achievement points, from the cached achievements in `db`."""
-    harness = _Harness()
-    harness.db = db
-    return await harness.total_possible_ap()
+    from gw2bot.cogs.achievements import total_possible_ap
+
+    return await total_possible_ap(db.achievements)
 
 
 async def account_ap(db, progress, account):
     """A user's AP from /account/achievements progress and /account."""
-    harness = _Harness()
-    harness.db = db
-    return await harness.calculate_user_ap(progress, account)
+    from gw2bot.cogs.achievements import account_ap
+
+    return await account_ap(db.achievements, progress, account)
 
 
 # --- Update notes from the forum -------------------------------------------
@@ -740,25 +744,32 @@ def stored_key(permissions, account_name="Example.1234"):
     return {"key": key, "keys": [key]}
 
 
-async def run_command(cog_for, command, responses, *, permissions, **options):
+async def run_command(cog_for, command, responses, *, permissions, users=None, **options):
     """Run a slash command's handler with a fake interaction.
 
     cog_for(session, users) builds the cog; `responses` are the API
-    responses in request order (see FakeSession). Returns (what was sent,
-    API requests). What was sent is the followup's embed as a dict, or its
-    content if there's no embed.
+    responses in request order (see FakeSession); `users` is the users
+    repository (default: one user with a key with `permissions`). Returns
+    (what was sent, API requests). What was sent is the reply's embed as a
+    dict, or its content if there's no embed: the followup's if the command
+    deferred, else the direct response's.
     """
     from unittest.mock import AsyncMock
 
     session = FakeSession(*responses)
-    cog = cog_for(session, FakeUserRepo(stored_key(permissions)))
+    users = users or FakeUserRepo(stored_key(permissions))
+    cog = cog_for(session, users)
     interaction = MagicMock()
     interaction.user.id = 1
     interaction.response.defer = AsyncMock()
+    interaction.response.send_message = AsyncMock()
     interaction.followup.send = AsyncMock()
     await command.callback(cog, interaction, **options)
-    interaction.response.defer.assert_awaited_once()
-    call = interaction.followup.send.await_args
+    reply = interaction.followup.send if interaction.followup.send.await_count else interaction.response.send_message
+    if interaction.followup.send.await_count:
+        # A followup needs a deferred (or answered) interaction first
+        assert interaction.response.defer.await_count or interaction.response.send_message.await_count
+    call = reply.await_args
     embed = call.kwargs.get("embed")
     sent = embed.to_dict() if embed else call.args[0] if call.args else call.kwargs.get("content")
     return sent, [(url, params) for url, params, _ in session.requests]
@@ -805,3 +816,135 @@ async def wizards_vault(daily, weekly, special, *, wallet=None, now, permissions
 
     with _at(now):
         return await run_command(cog_for, WizardsVault.wizards_vault, responses, permissions=permissions)
+
+
+class MemoryItems:
+    """In-memory stand-in for the items cache: find_one by _id, and find
+    with a regex on name plus an optional $nin on flags (item searches)."""
+
+    def __init__(self, docs=()):
+        self.docs = {doc["_id"]: doc for doc in docs}
+
+    async def find_one(self, query):
+        return self.docs.get(query["_id"])
+
+    def find(self, query):
+        def matches(doc):
+            if "name" in query and not query["name"].search(doc["name"]):
+                return False
+            excluded = query.get("flags", {}).get("$nin", [])
+            return not set(doc.get("flags", [])) & set(excluded)
+
+        found = [doc for doc in self.docs.values() if matches(doc)]
+
+        class Cursor:
+            def limit(self, length):
+                del found[length:]
+                return self
+
+            async def to_list(self, length):
+                return found[:length] if length else found
+
+            def __aiter__(self):
+                return self._iterate()
+
+            async def _iterate(self):
+                for doc in found:
+                    yield doc
+
+        return Cursor()
+
+
+async def commerce(command, responses, *, items=(), permissions=("account", "tradingpost"), users=None, **options):
+    """Run a /tp or /gem command; `items` are the cached item documents."""
+    from gw2bot.cogs.commerce import Commerce
+
+    handler = getattr(Commerce, command)
+
+    def cog_for(session, users):
+        cog = Commerce(_fake_bot(session, users))
+        cog.db = SimpleNamespace(items=MemoryItems(items))
+        return cog
+
+    return await run_command(cog_for, handler, responses, permissions=permissions, users=users, **options)
+
+
+async def tp_item_search(text, items):
+    """The /tp price autocomplete choices for `text`, as (name, value)."""
+    from gw2bot.cogs.commerce import Commerce
+
+    cog = Commerce(_fake_bot())
+    cog.db = SimpleNamespace(items=MemoryItems(items))
+    choices = await Commerce.tp_autocomplete(cog, MagicMock(), text)
+    return [(c.name, c.value) for c in choices]
+
+
+def gw2_db(**collections):
+    """A stand-in for the gw2 collections: {name: [documents]}."""
+    return SimpleNamespace(**{name: MemoryItems(docs) for name, docs in collections.items()})
+
+
+async def achievement(responses, achievement_name, *, db, permissions=("account", "progression")):
+    """Run /achievement with the cached game data in `db` (see gw2_db)."""
+    from gw2bot.cogs.achievements import Achievements
+
+    def cog_for(session, users):
+        cog = Achievements(_fake_bot(session, users))
+        cog.db = db
+        return cog
+
+    return await run_command(
+        cog_for, Achievements.achievementinfo, responses, permissions=permissions,
+        achievement_name=achievement_name,
+    )
+
+
+async def achievement_search(text, db):
+    """The /achievement autocomplete choices for `text`, as (name, value)."""
+    from gw2bot.cogs.achievements import Achievements
+
+    cog = Achievements(_fake_bot())
+    cog.db = db
+    choices = await Achievements.achievement_autocomplete(cog, MagicMock(), text)
+    return [(c.name, c.value) for c in choices]
+
+
+# Every currency and item id /wallet's overview shows
+WALLET_CURRENCY_IDS = [1, 4, 2, 3, 18, 23, 16, 50, 47, 43, 40, 41, 37, 42, 38, 44, 49, 51, 32, 45, 25, 27,
+                       19, 22, 20, 29, 34, 35, 15, 26, 31, 36, 65, 33, 69, 7, 24, 59, 28, 70, 58, 60,
+                       61, 66, 64, 67, 68, 71, 62, 63, 72, 73, 75, 53, 55, 57, 54]
+WALLET_ITEM_IDS = [79280, 79469, 79899, 80332, 81127, 81706, 86069, 86977, 87645, 88955, 89537, 90783,
+                   92072, 92272, 46682, 70820, 71581]
+
+
+async def wallet(responses, *, currencies, items, permissions=("account", "wallet", "inventories", "characters"),
+                 random_value=0.5, **options):
+    """Run /wallet. `responses`: account/wallet, then (for the overview)
+    account/bank, account/inventory, account/materials and characters.
+    random_value stands in for random.random() (the overview's
+    occasional joke title)."""
+    from unittest.mock import patch
+
+    from gw2bot.cogs.wallet import Wallet
+
+    def cog_for(session, users):
+        cog = Wallet(_fake_bot(session, users))
+        cog.db = gw2_db(currencies=currencies, items=items)
+        return cog
+
+    with patch("random.random", return_value=random_value):
+        return await run_command(cog_for, Wallet.wallet, responses, permissions=permissions, **options)
+
+
+async def items_in_account(responses, item_ids, *, permissions=("account", "inventories", "characters"), **options):
+    """GW2Cog.find_items_in_account: `responses` are account/bank,
+    account/inventory, account/materials, characters (and
+    commerce/delivery with the tradingpost permission)."""
+    session = FakeSession(*responses)
+    cog = _Harness(session, FakeUserRepo(stored_key(permissions)))
+    user = MagicMock(id=1)
+    result = await cog.find_items_in_account(user, item_ids, **options)
+    # Plain dicts, for comparing
+    if options.get("flatten"):
+        return dict(result)
+    return {item: dict(places) for item, places in result.items()}

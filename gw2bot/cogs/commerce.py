@@ -1,14 +1,40 @@
+"""Trading post and gem exchange: /tp and /gem."""
 import operator
 
 import discord
 from discord import app_commands
 from discord.app_commands import Choice
-from .utils.db import prepare_search
 
-from .exceptions import APIBadRequest, APIError, APINotFound
+from ..gw2api.errors import APIBadRequest, APINotFound
+from .base import GW2Cog
+from ..utils.db import prepare_search
 
 
-class CommerceMixin:
+def undercuts(offers, price, state):
+    """How many listings are at least as good as `price`: for a sell, offers
+    priced at or below it; for a buy, offers at or above it."""
+    worse = operator.lt if state == "buys" else operator.gt
+    count = 0
+    for offer in offers:
+        if worse(offer["unit_price"], price):
+            break
+        count += offer["listings"]
+    return count
+
+
+async def gem_price(api, quantity=400):
+    """Copper to buy `quantity` gems."""
+    results = await api.get("commerce/exchange/coins?quantity=10000000")
+    return results["coins_per_gem"] * quantity
+
+
+async def coin_price(api, quantity=400):
+    """Copper received for selling `quantity` gems."""
+    results = await api.get("commerce/exchange/gems?quantity={}".format(quantity))
+    return results["quantity"]
+
+
+class Commerce(GW2Cog):
     tp_group = app_commands.Group(name="tp",
                                   description="Trading post related commands")
     gem_group = app_commands.Group(name="gem",
@@ -45,12 +71,9 @@ class CommerceMixin:
         data.set_footer(text="Black Lion Trading Company")
         results = results[:20]  # Only display 20 most recent transactions
         item_id = ""
-        dup_item = {}
         # Collect listed items
         for result in results:
             item_id += str(result["item_id"]) + ","
-            if result["item_id"] not in dup_item:
-                dup_item[result["item_id"]] = len(dup_item)
         # Get information about all items, doesn't matter if string ends with ,
         endpoint_listing = "commerce/listings?ids={0}".format(str(item_id))
         # Call API once for all items
@@ -60,34 +83,26 @@ class CommerceMixin:
             await interaction.followup.send("You don't have any ongoing "
                                             "transactions")
             return None
+        # By id: items without listings are left out of the response
+        listings = {listing["id"]: listing for listing in listings}
         for result in results:
-            index = dup_item[result["item_id"]]
             price = result["price"]
             itemdoc = await self.fetch_item(result["item_id"])
             quantity = result["quantity"]
             item_name = itemdoc["name"]
-            offers = listings[index][state]
-            max_price = offers[0]["unit_price"]
-            undercuts = 0
-            op = operator.lt if state == "buys" else operator.gt
-            for offer in offers:
-                if op(offer["unit_price"], price):
-                    break
-                undercuts += offer["listings"]
-            undercuts = "· Undercuts: {}".format(
-                undercuts) if undercuts else ""
+            offers = listings.get(result["item_id"], {}).get(state)
             if quantity == 1:
                 total = ""
             else:
                 total = " - Total: " + self.gold_to_coins(
                     interaction, quantity * price)
-            data.add_field(name=item_name,
-                           value="{} x {}{}\nMax. offer: {} {}".format(
-                               quantity,
-                               self.gold_to_coins(interaction, price), total,
-                               self.gold_to_coins(interaction,
-                                                  max_price), undercuts),
-                           inline=False)
+            value = "{} x {}{}".format(quantity, self.gold_to_coins(interaction, price), total)
+            if offers:
+                count = undercuts(offers, price, state)
+                undercut_text = "· Undercuts: {}".format(count) if count else ""
+                value += "\nMax. offer: {} {}".format(
+                    self.gold_to_coins(interaction, offers[0]["unit_price"]), undercut_text)
+            data.add_field(name=item_name, value=value, inline=False)
         return data
 
     async def tp_autocomplete(self, interaction: discord.Interaction,
@@ -119,8 +134,6 @@ class CommerceMixin:
         except APINotFound:
             return await interaction.followup.send("This item isn't on the TP."
                                                    )
-        except APIError:
-            raise
         choice = await self.db.items.find_one({"_id": int(item)})
         buyprice = results["buys"]["unit_price"]
         sellprice = results["sells"]["unit_price"]
@@ -195,21 +208,6 @@ class CommerceMixin:
                            inline=False)
         await interaction.followup.send(embed=data)
 
-    def gold_to_coins(self, ctx, money):
-        gold, remainder = divmod(money, 10000)
-        silver, copper = divmod(remainder, 100)
-        kwargs = {"fallback": True, "fallback_fmt": " {} "}
-        gold = "{}{}".format(gold, self.get_emoji(ctx, "gold", **
-                                                  kwargs)) if gold else ""
-        silver = "{}{}".format(silver, self.get_emoji(
-            ctx, "silver", **kwargs)) if silver else ""
-        copper = "{}{}".format(copper, self.get_emoji(
-            ctx, "copper", **kwargs)) if copper else ""
-        return "".join(filter(None, [gold, silver, copper]))
-
-    def rarity_to_color(self, rarity):
-        return int(self.gamedata["items"]["rarity_colors"][rarity], 0)
-
     @gem_group.command(name="price")
     @app_commands.describe(
         quantity="The number of gems to evaluate (default is 400)")
@@ -218,33 +216,22 @@ class CommerceMixin:
                         quantity: int = 400):
         """Lists current gold/gem exchange prices."""
         if quantity <= 1:
-            return await interaction.followup.send(
-                "Quantity must be higher than 1")
+            return await interaction.response.send_message(
+                "Quantity must be higher than 1", ephemeral=True)
         await interaction.response.defer()
-        gem_price = await self.get_gem_price(quantity)
-        coin_price = await self.get_coin_price(quantity)
+        gems_cost = await gem_price(self.api, quantity)
+        gems_buy = await coin_price(self.api, quantity)
         data = discord.Embed(title="Currency exchange",
                              colour=await self.get_embed_color(interaction))
         data.add_field(name="{} gems would cost you".format(quantity),
-                       value=self.gold_to_coins(interaction, gem_price),
+                       value=self.gold_to_coins(interaction, gems_cost),
                        inline=False)
         data.set_thumbnail(url="https://render.guildwars2.com/file/220061640EC"
                            "A41C0577758030357221B4ECCE62C/502065.png")
         data.add_field(name="{} gems could buy you".format(quantity),
-                       value=self.gold_to_coins(interaction, coin_price),
+                       value=self.gold_to_coins(interaction, gems_buy),
                        inline=False)
         await interaction.followup.send(embed=data)
-
-    async def get_gem_price(self, quantity=400):
-        endpoint = "commerce/exchange/coins?quantity=10000000"
-        results = await self.call_api(endpoint)
-        cost = results['coins_per_gem'] * quantity
-        return cost
-
-    async def get_coin_price(self, quantity=400):
-        endpoint = "commerce/exchange/gems?quantity={}".format(quantity)
-        results = await self.call_api(endpoint)
-        return results["quantity"]
 
     @gem_group.command(name="track")
     @app_commands.describe(gold="Receive a notification when price of 400 "
@@ -261,3 +248,7 @@ class CommerceMixin:
             f"drops below {gold} gold",
             ephemeral=True)
         await self.bot.data.users.update(interaction.user.id, {"gemtrack": price})
+
+
+async def setup(bot):
+    await bot.add_cog(Commerce(bot))

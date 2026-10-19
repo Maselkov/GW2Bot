@@ -7,9 +7,7 @@ from PIL import ImageFont
 from ...errors import error_message
 from ..base import GW2Cog
 from .account import AccountMixin
-from .achievements import AchievementsMixin
 from .characters import CharactersMixin
-from .commerce import CommerceMixin
 from .daily import DailyMixin
 from .database import DatabaseMixin
 from .emojis import EmojiMixin
@@ -22,15 +20,12 @@ from .key import KeyMixin
 from .misc import MiscMixin
 from .notifiers import NotiifiersMixin
 from .skills import SkillsMixin
-from .wallet import WalletMixin
 from .wvw import WvwMixin
 
 class GuildWars2(
     GW2Cog,
     AccountMixin,
-    AchievementsMixin,
     CharactersMixin,
-    CommerceMixin,
     DailyMixin,
     DatabaseMixin,
     EmojiMixin,
@@ -42,14 +37,12 @@ class GuildWars2(
     MiscMixin,
     NotiifiersMixin,
     SkillsMixin,
-    WalletMixin,
     WvwMixin,
 ):
     """Guild Wars 2 commands"""
 
     def __init__(self, bot):
         super().__init__(bot)
-        self.db = self.bot.data.gw2
         self.session = bot.session
         self.boss_schedule = self.generate_schedule()
         self.log = logging.getLogger(__name__)

@@ -6,7 +6,7 @@ import discord
 from discord import app_commands
 from discord.app_commands import Choice
 
-from .utils.chat import en_space, tab
+from gw2bot.utils.chat import en_space, tab
 
 DAILY_CATEGORIES = [
     {

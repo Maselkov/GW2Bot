@@ -11,7 +11,7 @@ from discord.ext import tasks
 
 from .daily import ACHIEVEMENT_CATEGORIES, CATEGORY_SCHEMA, daily_rotation
 from .exceptions import APIError
-from .utils.db import prepare_search
+from gw2bot.utils.db import prepare_search
 
 
 class DatabaseMixin:
@@ -111,14 +111,6 @@ class DatabaseMixin:
         result = await self.bot.data.users.count({"key": {"$ne": None}})
         await ctx.send("{} registered users".format(result))
 
-    async def get_title(self, title_id):
-        try:
-            results = await self.db.titles.find_one({"_id": title_id})
-            title = results["name"]
-        except (KeyError, TypeError):
-            return ""
-        return title
-
     async def fetch_statname(self, item):
         statset = await self.db.itemstats.find_one({"_id": item})
         try:
@@ -126,9 +118,6 @@ class DatabaseMixin:
         except KeyError:
             name = ""
         return name
-
-    async def fetch_item(self, item):
-        return await self.db.items.find_one({"_id": item})
 
     async def cache_dailies(self):
         """Cache today's and tomorrow's dailies from achievement categories."""

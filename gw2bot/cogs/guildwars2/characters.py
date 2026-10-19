@@ -14,7 +14,7 @@ from . import guild
 
 from .exceptions import APIError, APINotFound
 from .skills import Build
-from .utils.chat import embed_list_lines, zero_width_space
+from gw2bot.utils.chat import embed_list_lines, zero_width_space
 
 LETTERS = ["🇦", "🇧", "🇨", "🇩", "🇪", "🇫", "🇬", "🇭", "🇮", "🇯"]
 

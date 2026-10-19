@@ -9,7 +9,7 @@ from discord.ext import commands, tasks
 from discord import app_commands
 from discord.app_commands import Choice
 from .exceptions import APIError
-from .utils.chat import embed_list_lines, en_space, magic_space, zero_width_space
+from gw2bot.utils.chat import embed_list_lines, en_space, magic_space, zero_width_space
 
 UTC_TZ = datetime.timezone.utc
 
