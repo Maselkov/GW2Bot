@@ -248,3 +248,26 @@ async def test_bot_migrates_on_first_start_only(mongo):
     await client[target].users.update_one({"_id": 1}, {"$set": {"key.account_name": "Renamed.1"}})
     # The second start doesn't copy over changes made since
     assert await start() == "Renamed.1"
+
+
+# --- The slash command tree -----------------------------------------------------
+
+# Hash of the global command payload with every extension loaded. Restructuring
+# must not change it: users would see no difference, and production wouldn't
+# re-sync. When commands change on purpose, update it (production then syncs
+# on its next start).
+COMMAND_TREE_HASH = "b9fbe229a28fa8fac9e3a6acb948498da7ad1b4bdde30d02ddef5caf4a6a3cdd"
+
+
+async def test_command_tree_is_unchanged(mongo):
+    from gw2bot.bot import GW2Bot, command_tree_hash
+    from gw2bot.config import Settings
+
+    client, source, target = mongo
+    settings = Settings(token="unused", mongo_uri=URI, mongo_db=target, migrate_from_db=source, auto_sync=False)
+    async with GW2Bot(settings) as bot:
+        await bot.setup_hook()
+        try:
+            assert command_tree_hash(bot.tree) == COMMAND_TREE_HASH
+        finally:
+            await bot.close()

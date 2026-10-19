@@ -32,7 +32,7 @@ gw2bot = "gw2bot.__main__:main"
 include = ["gw2bot*"]
 
 [tool.setuptools.package-data]
-"gw2bot.cogs.guildwars2" = ["*.json"]
+"gw2bot.data" = ["*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -10,7 +10,7 @@ from pymongo.errors import BulkWriteError
 from discord.ext import tasks
 
 from .daily import ACHIEVEMENT_CATEGORIES, CATEGORY_SCHEMA, daily_rotation
-from .exceptions import APIError, APIKeyError
+from .exceptions import APIError
 from .utils.db import prepare_search
 
 
@@ -129,27 +129,6 @@ class DatabaseMixin:
 
     async def fetch_item(self, item):
         return await self.db.items.find_one({"_id": item})
-
-    async def fetch_key(self, user, scopes=None):
-        doc = await self.bot.data.users.get(user.id)
-        if not doc or "key" not in doc or not doc["key"]:
-            raise APIKeyError(
-                "No API key associated with your account. "
-                "Add your key using `/key add` command. If you don't know "
-                "how, the command includes a tutorial.")
-        if scopes:
-            missing = []
-            for scope in scopes:
-                if scope not in doc["key"]["permissions"]:
-                    missing.append(scope)
-            if missing:
-                missing = ", ".join(missing)
-                raise APIKeyError(
-                    "{.mention}, your API key is missing the following "
-                    "permissions to use this command: `{}`\nConsider adding "
-                    "a new key with those permissions "
-                    "checked".format(user, missing))
-        return doc["key"]
 
     async def cache_dailies(self):
         """Cache today's and tomorrow's dailies from achievement categories."""
