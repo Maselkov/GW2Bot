@@ -6,7 +6,6 @@ from PIL import ImageFont
 
 from ...errors import error_message
 from ..base import GW2Cog
-from .account import AccountMixin
 from .characters import CharactersMixin
 from .chatlinks import ChatLinksMixin
 from .daily import DailyMixin
@@ -23,7 +22,6 @@ from .notifiers import NotiifiersMixin
 
 class GuildWars2(
     GW2Cog,
-    AccountMixin,
     CharactersMixin,
     ChatLinksMixin,
     DailyMixin,
