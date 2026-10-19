@@ -127,7 +127,7 @@ class Daily(GW2Cog):
         await interaction.followup.send(embed=embed)
 
     def get_year_day(self, tomorrow=True):
-        date = datetime.datetime.utcnow().date()
+        date = datetime.datetime.now(datetime.timezone.utc).date()
         if tomorrow:
             date += datetime.timedelta(days=1)
         day = (date - date.replace(month=1, day=1)).days
@@ -205,7 +205,7 @@ class Daily(GW2Cog):
         else:
             embed.set_footer(text=self.bot.user.name,
                              icon_url=self.bot.user.display_avatar.url)
-        embed.timestamp = datetime.datetime.utcnow()
+        embed.timestamp = datetime.datetime.now(datetime.timezone.utc)
         return embed
 
     def add_psna_fields(self, embed, ctx, *, tomorrow=False):

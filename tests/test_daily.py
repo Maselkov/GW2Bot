@@ -1,4 +1,7 @@
 """/daily and /notifier daily."""
+import datetime
+import zoneinfo
+
 import pytest
 
 import subject
@@ -46,8 +49,14 @@ async def test_notifier_daily_disable():
     assert writes == [(10, "set", {"daily.on": False})]
 
 
-@pytest.mark.xfail(strict=True, reason="edits the timed-out message through followup.edit_message without an id")
 async def test_notifier_daily_dropdown_times_out():
     sent, final, writes = await subject.notifier_daily()
     assert final == ("No response in time.", None)
     assert writes == []
+
+
+async def test_daily_timestamp_on_a_server_outside_utc():
+    # Freezing the clock at a Helsinki time also runs the bot in Helsinki time
+    now = datetime.datetime(2024, 3, 6, 14, 30, tzinfo=zoneinfo.ZoneInfo("Europe/Helsinki"))
+    embed = await subject.daily_command(subject.DAILY_CACHE, category="raids", now=now)
+    assert datetime.datetime.fromisoformat(embed["timestamp"]) == now

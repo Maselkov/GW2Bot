@@ -159,7 +159,7 @@ class NotiifiersMixin:
         )
         await interaction.response.send_message("** **", view=view, ephemeral=True)
         if await view.wait():
-            return await interaction.followup.edit_message(
+            return await interaction.edit_original_response(
                 content="No response in time.", view=None
             )
 

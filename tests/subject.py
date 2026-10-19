@@ -1696,10 +1696,14 @@ def _daily_cog(session=None, users=None, cache=None):
     return cog
 
 
-async def daily_command(cache, **options):
-    """Run /daily with `cache` as the cached rotation (None: not cached)."""
-    sent, _ = await run_command(lambda session, users: _daily_cog(session, users, cache), daily.Daily.daily, [],
-                                permissions=(), **options)
+async def daily_command(cache, *, now=None, **options):
+    """Run /daily with `cache` as the cached rotation (None: not cached),
+    optionally with the clock frozen at `now`."""
+    import contextlib
+
+    with _at(now) if now else contextlib.nullcontext():
+        sent, _ = await run_command(lambda session, users: _daily_cog(session, users, cache), daily.Daily.daily, [],
+                                    permissions=(), **options)
     return sent
 
 
