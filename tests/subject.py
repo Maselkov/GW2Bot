@@ -95,6 +95,10 @@ def format_age(seconds, short=False):
     return CharactersMixin.format_age(seconds, short=short)
 
 
+def profession_icon(name):
+    return CharactersMixin.get_profession_icon(None, name)
+
+
 def readable_attribute(name):
     return _Harness().readable_attribute(name)
 

@@ -2,6 +2,7 @@ import asyncio
 import collections
 import copy
 import datetime
+import hashlib
 import re
 
 import discord
@@ -16,6 +17,14 @@ from .skills import Build
 from .utils.chat import embed_list_lines, zero_width_space
 
 LETTERS = ["🇦", "🇧", "🇨", "🇩", "🇪", "🇫", "🇬", "🇭", "🇮", "🇯"]
+
+
+def profession_icon_url(name):
+    """Wiki URL of the tango icon for a profession or elite specialization."""
+    filename = name.title().replace(" ", "_") + "_tango_icon_200px.png"
+    digest = hashlib.md5(filename.encode()).hexdigest()
+    return ("https://wiki.guildwars2.com/images/"
+            f"{digest[0]}/{digest[:2]}/{filename}")
 
 
 class CharacterGearDropdown(discord.ui.Select):
@@ -157,13 +166,8 @@ class Character:
                 return spec["name"]
             return self.profession.title()
 
-        def get_icon_url(prof_name):
-            base_url = ("https://resources.gw2bot.info/"
-                        "professions/{}_icon.png")
-            return base_url.format(prof_name.replace(" ", "_").lower())
-
         name = await get_elite_spec()
-        icon = get_icon_url(name)
+        icon = profession_icon_url(name)
         info = {"name": name, "icon": icon}
         self.spec_cache[mode] = info
         return info
@@ -1180,19 +1184,13 @@ class CharactersMixin:
                 return spec["name"]
             return None
 
-        def get_icon_url(prof_name):
-            base_url = ("https://resources.gw2bot.info/"
-                        "professions/{}_icon.png")
-            return base_url.format(prof_name.replace(" ", "_").lower())
-
         Profession = collections.namedtuple("Profession",
                                             ["name", "icon", "color"])
         color = discord.Color(
             int(self.gamedata["professions"][profession.lower()]["color"], 0))
         name = await get_elite_spec() or profession
-        icon = get_icon_url(name)
+        icon = profession_icon_url(name)
         return Profession(name.title(), icon, color)
 
     def get_profession_icon(self, prof_name):
-        url = ("https://resources.gw2bot.info/professions/{}_icon.png")
-        return url.format(prof_name.replace(" ", "_").lower())
+        return profession_icon_url(prof_name)

@@ -513,3 +513,15 @@ def test_wvw_team_autocomplete():
     assert subject.wvw_team_choices("moo") == [("Moogooloo (NA)", "11001")]
     assert subject.wvw_team_choices("aviary") == [("Great House Aviary (EU)", "12014")]
     assert len(subject.wvw_team_choices("")) == 25
+
+
+@pytest.mark.parametrize(
+    "name, expected",
+    [
+        ("Guardian", "https://wiki.guildwars2.com/images/6/6c/Guardian_tango_icon_200px.png"),
+        ("guardian", "https://wiki.guildwars2.com/images/6/6c/Guardian_tango_icon_200px.png"),
+        ("Dragonhunter", "https://wiki.guildwars2.com/images/1/1f/Dragonhunter_tango_icon_200px.png"),
+    ],
+)
+def test_profession_icon(name, expected):
+    assert subject.profession_icon(name) == expected
