@@ -37,8 +37,8 @@ A behaviour that changes on purpose is called out in the PR. Anything else that 
 | Section | Trigger | Writes | Messages | Worst known issue |
 |---|---|---|---|---|
 | [Daily notifier](#daily-notifier) (moved) | 23:40 UTC daily; dailies refresh every 15 min | `daily.message`, dailies cache | channel posts, pins | Untracked per-server tasks |
-| [Event reminders](#event-reminders) | every 10 s | `event_reminders` | DMs | Users with closed DMs are retried forever |
-| [Boss notifier](#boss-notifier) | before each world boss | `bossnotifs.message` | channel posts | Failures are silent |
+| [Event reminders](#event-reminders) (moved) | every 10 s | `event_reminders` | DMs | Users with closed DMs are retried forever |
+| [Boss notifier](#boss-notifier) (moved) | before each world boss | `bossnotifs.message` | channel posts | Failures are silent |
 | [Chat link previews](#chat-link-previews) | every message | `statistics.link_previews` | replies | Undecodable links raise in `finally` |
 | [News](#news) | every 3 min | `cache.news`, `news.on` | channel posts | Items whose title changes are posted again |
 | [Game updates](#game-updates) | every 1 min | `cache.build`, game data caches, `updates` | channel posts | The rebuild runs inside the loop |
@@ -81,8 +81,9 @@ the notifiers move, and gets its example notification from the `Daily` cog.
 
 ## Event reminders
 
-`events.py: event_reminder_task, process_reminder, get_time_until_event`, `EventTimerReminderUnsubscribeView`,
-`notifiers.py: reminder_event`. Set up with `/reminder event` (event name, minutes before, 0–60).
+**Moved** to `gw2bot/cogs/events.py` (`Events`): `event_reminder_task`, `process_reminder`,
+`get_time_until_event`, `EventTimerReminderUnsubscribeView` (registered in `cog_load`), and the `/reminder` group
+with `/reminder event` (event name, minutes before, 0–60).
 
 - **Schedule.** Every 10 s, for each user with `event_reminders`, one untracked task per reminder.
 - **Behaviour.**
@@ -102,13 +103,13 @@ the notifiers move, and gets its example notification from the `Daily` cog.
     (an unsubscribe from another reminder's DM).
   - Users with closed DMs are retried every 10 s, forever.
 - **Tests.**
-  - Existing: event timing (`test_logic.py`); `/reminder event` for each kind of event, and a boss missing from
-    the schedule (`test_event_reminders.py`).
-  - To write: when a reminder fires and when it's held back, the DM and its saved fields, and Unsubscribe.
+  - Existing: event timing (`test_logic.py`); `/reminder event`, a boss missing from the schedule, when a
+    reminder fires or is held back, the DM and its saved fields, and Unsubscribe (`test_event_reminders.py`).
 
 ## Boss notifier
 
-`notifiers.py: boss_notifier`. Set up with `/notifier bosses` (channel, behaviour: delete (default) / edit).
+**Moved** to `gw2bot/cogs/events.py` (`Events`): `boss_notifier`. Set up with `/notifier bosses` (channel,
+behaviour: delete (default) / edit), which stays in the old cog's `/notifier` group until it moves.
 
 - **Schedule.** Every 5 minutes, but each run sleeps until the next world boss spawns plus 1 s. In practice it
   posts once per boss slot.
@@ -120,12 +121,14 @@ the notifiers move, and gets its example notification from the `Daily` cog.
     every time.
 - **Errors.** Swallowed per server, with nothing logged.
 - **Known issues.**
+  - *Fixed:* in edit mode, a deleted message stopped the server's boss notifications for good. A new message is
+    posted instead.
   - Silent failures: a deleted channel or missing permissions are never logged or turned off.
   - The setup command's choice text says "the previous day's message"; it's the previous boss's message.
   - The "Need permission" message itself fails without send permission, and that's swallowed too.
 - **Tests.**
-  - Existing: the schedule (`test_logic.py`).
-  - To write: a run against fake servers for delete and edit, missing permissions, and a deleted channel.
+  - Existing: the schedule (`test_logic.py`); delete and edit modes, a deleted message, missing embed
+    permission, and deleted channels (`test_event_reminders.py`).
 
 ## Chat link previews
 
