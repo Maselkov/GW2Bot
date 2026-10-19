@@ -108,3 +108,34 @@ def test_ley_line_anomaly_schedule():
         if name == "Ley-Line Anomaly" and t.date() == start.date()
     ]
     assert times == [datetime.time(h, 20) for h in range(0, 24, 2)]
+
+
+def kp_encounters(gamedata):
+    for area in gamedata["killproofs"]["areas"]:
+        for encounter in area["encounters"]:
+            yield area["name"], encounter
+
+
+def kp_achievement_ids(gamedata):
+    ids = set()
+    for _, encounter in kp_encounters(gamedata):
+        ids.update(encounter["ids"] if encounter["type"] == "all_achievements" else [encounter["id"]])
+    return ids
+
+
+def test_kp_encounters_are_well_formed(gamedata):
+    for area, encounter in kp_encounters(gamedata):
+        assert encounter["name"], area
+        if encounter["type"] in ("single_achievement", "progressed_achievement"):
+            assert isinstance(encounter["id"], int), (area, encounter["name"])
+        else:
+            assert encounter["type"] == "all_achievements", (area, encounter["name"])
+            assert encounter["ids"] and all(isinstance(i, int) for i in encounter["ids"])
+
+
+def test_kp_includes_every_raid_wing(gamedata):
+    areas = [area["name"] for area in gamedata["killproofs"]["areas"]]
+    assert areas[:8] == [
+        "Spirit Vale", "Salvation Pass", "Stronghold of the Faithful", "Bastion of the Penitent",
+        "Hall of Chains", "Mythwright Gambit", "The Key of Ahdashim", "Mount Balrior",
+    ]
