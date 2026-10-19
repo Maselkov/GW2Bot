@@ -36,7 +36,7 @@ A behaviour that changes on purpose is called out in the PR. Anything else that 
 
 | Section | Trigger | Writes | Messages | Worst known issue |
 |---|---|---|---|---|
-| [Daily notifier](#daily-notifier) | 23:40 UTC daily; dailies refresh every 15 min | `daily.message`, dailies cache | channel posts, pins | `/notifier daily` times out with an error |
+| [Daily notifier](#daily-notifier) (moved) | 23:40 UTC daily; dailies refresh every 15 min | `daily.message`, dailies cache | channel posts, pins | Untracked per-server tasks |
 | [Event reminders](#event-reminders) | every 10 s | `event_reminders` | DMs | Users with closed DMs are retried forever |
 | [Boss notifier](#boss-notifier) | before each world boss | `bossnotifs.message` | channel posts | Failures are silent |
 | [Chat link previews](#chat-link-previews) | every message | `statistics.link_previews` | replies | Undecodable links raise in `finally` |
@@ -50,8 +50,10 @@ A behaviour that changes on purpose is called out in the PR. Anything else that 
 
 ## Daily notifier
 
-`notifiers.py: send_daily_notifs`, `database.py: refresh_dailies, cache_dailies`, `daily.py: daily_embed`.
-Set up with `/notifier daily` (channel, categories dropdown, pin, behaviour: none / autodelete / autoedit).
+**Moved** to `gw2bot/cogs/daily.py` (`Daily`): `send_daily_notifs`, `refresh_dailies`, `cache_dailies`, `/daily`
+and `daily_embed`. The cog starts its loops in `cog_load`. Set up with `/notifier daily` (channel, categories
+dropdown, pin, behaviour: none / autodelete / autoedit). That command stays in the old cog's `/notifier` group until
+the notifiers move, and gets its example notification from the `Daily` cog.
 
 - **Schedule.**
   - `refresh_dailies` runs every 15 minutes and caches today's and tomorrow's rotation in `config.cache.dailies`
@@ -71,12 +73,11 @@ Set up with `/notifier daily` (channel, categories dropdown, pin, behaviour: non
 - **Known issues.**
   - *Fixed:* autopin pinned the previous message instead of a newly posted one, so it only worked with autoedit.
   - The per-server tasks are untracked (see Shared facts).
-  - `/notifier daily` waits 60 s for the dropdown, then calls `followup.edit_message` without a message id, which
-    fails.
+  - *Fixed:* `/notifier daily` failed when the dropdown timed out (`followup.edit_message` without a message id).
+  - *Fixed:* `/daily`'s timestamp was a naive `utcnow()`, which discord.py reads as local time.
 - **Tests.**
-  - Existing: rotation, categories and the embed (`test_logic.py`); each behaviour and autopin
-    (`test_daily_notifier.py`).
-  - To write: missing permissions, and the cache refresh failing.
+  - Existing: rotation, categories and the embed (`test_logic.py`); each behaviour, autopin, permissions and the
+    cache refresh (`test_daily_notifier.py`); `/daily` and `/notifier daily` (`test_daily.py`).
 
 ## Event reminders
 
