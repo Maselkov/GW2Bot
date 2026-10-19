@@ -46,7 +46,7 @@ A behaviour that changes on purpose is called out in the PR. Anything else that 
 | [EVTC autopost](#evtc-autopost-and-uploads) | every 5 s; uploads on message | `evtc.notifications`, `encounters` | channel posts | "name#0" in footers |
 | [API key role](#api-key-role-and-key) | every 5 min; `/key add` | member roles | — | Can't be disabled without picking a role |
 | [Forced account names](#forced-account-names) | every 5 min | member nicknames | — | Failures are silent |
-| [Guild sync](#guild-sync) | every 60 s; member join | roles, kicks, `guildsyncs` | DMs, prompts | **Purge kicks everyone when the API fails** |
+| [Guild sync](#guild-sync) | every 60 s; member join | roles, kicks, `guildsyncs` | DMs, prompts | Off-by-one sync limit (purge fixed in #194) |
 
 ## Daily notifier
 
@@ -324,10 +324,10 @@ Set up with `/notifier daily` (channel, categories dropdown, pin, behaviour: non
 - **Errors.** Exceptions per sync are logged. Role, kick and timeout errors are swallowed. The loop swallows each
   server's errors silently.
 - **Known issues.**
-  - **Purge kicks everyone when a sync can't read its guild's members.** Membership is only recorded for syncs
-    whose member list was fetched. When `fetch_members` fails (the API is down, or the key was deleted or lost
-    leader access), every member without roles counts as "in no guild" and is kicked. That can happen on every
-    60-second run for as long as the API fails.
+  - *Fixed in #194:* purge kicked everyone without roles when a sync couldn't read its guild's members, or when
+    no syncs were configured. The original guild sync guarded against this; Guildsync 2.0 lost the guard. Since
+    discord.py 2.0 a `TypeError` stopped the purge before it kicked anyone, and `00d2453` fixed that error,
+    turning the purge back on. It now runs only when every sync read its members.
   - The limit check allows 9 syncs: `count > GUILDSYNC_LIMIT` where `>=` was meant.
   - The `APIForbidden` error message reads "Key has in-game leader permissions"; it means the key lacks them.
   - `guildsync_consumer`, `schedule_guildsync` and the queue they use are dead code: nothing starts or calls them,
@@ -341,7 +341,7 @@ Set up with `/notifier daily` (channel, categories dropdown, pin, behaviour: non
     - role creation and deletion for tag and ranks;
     - membership with several accounts and ranks, and the role hierarchy limit;
     - the member-join sync;
-    - purge, including failed member fetches (xfail: everyone is kicked);
+    - purge: done in #194 (`tests/test_guildsync.py`);
     - the authorization prompt;
     - the sync limit (xfail).
 
@@ -357,5 +357,4 @@ Least risky first. Each item is one PR.
 6. `/key` and the API key role.
 7. Guild sync, forced account names and the rest of `/server`.
 
-The guild sync purge issue is the exception: it's worth fixing now, ahead of the order, because it affects live
-servers.
+The guild sync purge issue was the exception, fixed ahead of the order in #194 because it affected live servers.
