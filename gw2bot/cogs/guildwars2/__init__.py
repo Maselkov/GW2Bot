@@ -11,7 +11,7 @@ from .database import DatabaseMixin
 from .emojis import EmojiMixin
 from .events import EventsMixin, EventTimerReminderUnsubscribeView
 from .evtc import EvtcMixin
-from .guild import GuildMixin
+from .guild import GuildSync
 from .guild.sync import GuildSyncPromptUserConfirmView
 from .guildmanage import GuildManageMixin
 from .key import KeyMixin
@@ -26,7 +26,7 @@ class GuildWars2(
     EmojiMixin,
     EventsMixin,
     EvtcMixin,
-    GuildMixin,
+    GuildSync,
     GuildManageMixin,
     KeyMixin,
     MiscMixin,
