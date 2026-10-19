@@ -1,3 +1,4 @@
+"""Account commands: /account, /li, /kp, /bosses, /search, /cats and /nodes."""
 import asyncio
 import collections
 import datetime
@@ -10,14 +11,25 @@ import pymongo
 from discord import app_commands
 from discord.app_commands import Choice
 
-from ..achievements import account_ap, total_possible_ap
-from .exceptions import APIError, APINotFound
-from gw2bot.utils.chat import embed_list_lines
+from gw2bot.utils.chat import embed_list_lines, format_age
 from gw2bot.utils.db import prepare_search
-from ..wvw import WVW_ACCOUNT_SCHEMA, team_name
+
+from ..gw2api.errors import APIError, APINotFound
+from .achievements import account_ap, total_possible_ap
+from .base import GW2Cog
+from .wvw import WVW_ACCOUNT_SCHEMA, team_name
+
+CHARACTERS = "characters?page=0&page_size=200"
+# First schema with characters' equipment and build tabs
+CHARACTERS_SCHEMA = "2021-07-15T13:00:00.000Z"
 
 
-class AccountMixin:
+class Account(GW2Cog):
+
+    async def get_raids(self):
+        """The cached /v2/raids wings."""
+        config = await self.bot.data.config.get()
+        return config["cache"].get("raids")
 
     @app_commands.command()
     async def account(self, interaction: discord.Interaction):
@@ -61,12 +73,13 @@ class AccountMixin:
             pvprank = pvp["pvp_rank"] + pvp["pvp_rank_rollovers"]
             embed.add_field(name="PVP rank", value=pvprank)
         if "characters" in doc["permissions"]:
-            characters = await self.get_all_characters(user)
+            characters = await self.call_api(CHARACTERS, user,
+                                             schema_string=CHARACTERS_SCHEMA)
             total_played = 0
             for character in characters:
-                total_played += character.age
+                total_played += character["age"]
             embed.add_field(name="Total time played",
-                            value=self.format_age(total_played),
+                            value=format_age(total_played),
                             inline=False)
         if "access" in results:
             access = results["access"]
@@ -346,10 +359,11 @@ class AccountMixin:
             total = 0
             storage_counts = OrderedDict(
                 sorted(results.items(), key=lambda kv: kv[1], reverse=True))
-            characters = await self.get_all_characters(user)
+            characters = await self.call_api(CHARACTERS, user,
+                                             schema_string=CHARACTERS_SCHEMA)
             char_names = []
             for character in characters:
-                char_names.append(character.name)
+                char_names.append(character["name"])
             for k, v in storage_counts.items():
                 if v:
                     if 'is_upgrade' in item_doc and item_doc['is_upgrade']:
@@ -610,3 +624,7 @@ class AccountMixin:
                          "uploaded by you",
                          icon_url=self.bot.user.display_avatar.url)
         return embed
+
+
+async def setup(bot):
+    await bot.add_cog(Account(bot))

@@ -15,7 +15,7 @@ from .exceptions import APIError, APINotFound
 from gw2bot.utils.wiki import profession_icon_url
 
 from .chatlinks import Build
-from gw2bot.utils.chat import embed_list_lines, zero_width_space
+from gw2bot.utils.chat import embed_list_lines, format_age, zero_width_space
 
 LETTERS = ["🇦", "🇧", "🇨", "🇩", "🇪", "🇫", "🇬", "🇭", "🇮", "🇯"]
 
@@ -173,16 +173,6 @@ class CharactersMixin:
     sab_group = app_commands.Group(name="sab",
                                    description="Character related commands")
 
-    @staticmethod
-    def format_age(age, *, short=False):
-        hours, seconds = divmod(age, 3600)
-        minutes = round(seconds / 60)
-        h_str = "h" if short else " hours"
-        m_str = "m" if short else " minutes"
-        if hours:
-            return "{}{} {}{}".format(hours, h_str, minutes, m_str)
-        return "{}{}".format(minutes, m_str)
-
     async def character_autocomplete(self, interaction: discord.Interaction,
                                      current: str):
         doc = await self.bot.data.users.get(interaction.user.id)
@@ -300,7 +290,7 @@ class CharactersMixin:
             return await interaction.followup.send("Invalid character name")
         except APIError:
             raise
-        age = self.format_age(results["age"])
+        age = format_age(results["age"])
         created = results["created"].split("T", 1)[0]
         deaths = results["deaths"]
         deathsperhour = round(deaths / (results["age"] / 3600), 1)
@@ -360,7 +350,7 @@ class CharactersMixin:
 
         def extra_info(char):
             if info == "age":
-                return ": " + self.format_age(char.age, short=True)
+                return ": " + format_age(char.age, short=True)
             if info == "created":
                 return f": <t:{int(char.created.timestamp())}:f>"
             is_80 = char.level == 80

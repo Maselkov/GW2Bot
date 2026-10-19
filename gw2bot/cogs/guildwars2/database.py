@@ -1,9 +1,7 @@
 import asyncio
-import collections
 import time
 
 import discord
-from discord.app_commands import Choice
 from discord.ext import commands
 from pymongo import ReplaceOne
 from pymongo.errors import BulkWriteError
@@ -11,7 +9,6 @@ from discord.ext import tasks
 
 from .daily import ACHIEVEMENT_CATEGORIES, CATEGORY_SCHEMA, daily_rotation
 from .exceptions import APIError
-from gw2bot.utils.db import prepare_search
 
 
 class DatabaseMixin:
@@ -175,10 +172,6 @@ class DatabaseMixin:
                                 pois = []
             print("Continents done")
 
-    async def get_raids(self):
-        config = await self.bot.data.config.get()
-        return config["cache"].get("raids")
-
     async def cache_endpoint(self, endpoint, all_at_once=False):
 
         async def bulk_write(item_group):
@@ -252,38 +245,6 @@ class DatabaseMixin:
         print("Done")
         self.log.info("Database done! Time elapsed: {} seconds".format(end -
                                                                        start))
-
-    async def item_autocomplete(self, interaction: discord.Interaction,
-                                current: str):
-
-        def consolidate_duplicates(items):
-            unique_items = collections.OrderedDict()
-            for item in items:
-                item_tuple = item["name"], item["rarity"], item["type"]
-                if item_tuple not in unique_items:
-                    unique_items[item_tuple] = []
-                unique_items[item_tuple].append(item["_id"])
-            unique_list = []
-            for k, v in unique_items.items():
-                unique_list.append({
-                    "name": k[0],
-                    "rarity": k[1],
-                    "ids": " ".join(v),
-                    "type": k[2]
-                })
-            return unique_list
-
-        query = prepare_search(current)
-        query = {
-            "name": query,
-        }
-        items = await self.db.items.find(query).to_list(25)
-        items = sorted(consolidate_duplicates(current),
-                       key=lambda c: c["name"])
-        return [
-            Choice(name=f"{it['name']} - {it['rarity']}", value=it["ids"])
-            for it in items
-        ]
 
     @tasks.loop(minutes=15)
     async def refresh_dailies(self):

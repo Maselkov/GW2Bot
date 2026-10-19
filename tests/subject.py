@@ -101,7 +101,9 @@ def format_coins(copper):
 # --- Formatting ------------------------------------------------------------
 
 def format_age(seconds, short=False):
-    return CharactersMixin.format_age(seconds, short=short)
+    from gw2bot.utils.chat import format_age
+
+    return format_age(seconds, short=short)
 
 
 def profession_icon(name):
@@ -1059,12 +1061,9 @@ class MemoryEncounters:
 def _account_cog(session=None, users=None, db=None, raids=None):
     from unittest.mock import AsyncMock
 
-    from gw2bot.cogs.guildwars2.account import AccountMixin
+    from gw2bot.cogs.account import Account
 
-    class Cog(AccountMixin, _Harness):
-        pass
-
-    cog = Cog(session, users)
+    cog = Account(_fake_bot(session, users))
     cog.db = db or gw2_db()
     if not hasattr(cog.db, "encounters"):
         cog.db.encounters = MemoryEncounters()
@@ -1079,9 +1078,9 @@ async def account_command(command, responses, *, permissions=("account",), db=No
     `now` freezes the clock."""
     import contextlib
 
-    from gw2bot.cogs.guildwars2.account import AccountMixin
+    from gw2bot.cogs.account import Account
 
-    handler = getattr(AccountMixin, command)
+    handler = getattr(Account, command)
 
     def cog_for(session, users):
         return _account_cog(session, users, db=db, raids=raids)

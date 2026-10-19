@@ -40,3 +40,14 @@ def embed_list_lines(embed,
 
 def cleanup_xml_tags(text):
     return re.sub("<[^<]+>", "", text)
+
+
+def format_age(age, *, short=False):
+    """Time played, from seconds: "2 hours 5 minutes", or "2h 5m"."""
+    hours, seconds = divmod(age, 3600)
+    minutes = round(seconds / 60)
+    h_str = "h" if short else " hours"
+    m_str = "m" if short else " minutes"
+    if hours:
+        return "{}{} {}{}".format(hours, h_str, minutes, m_str)
+    return "{}{}".format(minutes, m_str)
