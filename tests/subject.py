@@ -1601,3 +1601,68 @@ async def run_daily_notifier(settings, *, previous_message_exists=True):
     for _ in range(50):
         await asyncio.sleep(0)
     return {**events, "writes": cog.bot.data.guilds.writes}
+
+
+async def api_key_role(**options):
+    """Run /server api_key_role on server 10. Returns (reply, settings
+    writes, whether a sync of the server's roles started)."""
+    from unittest.mock import AsyncMock
+
+    from gw2bot.cogs.guildwars2.guildmanage import GuildManageMixin
+
+    guilds = MemoryGuilds({})
+    cogs = []
+
+    def cog_for(session, users):
+        class Cog(GuildManageMixin, _Harness):
+            pass
+
+        cog = Cog(session, users)
+        cog.bot.data.guilds = guilds
+        cog.key_sync_guild = AsyncMock()
+        cogs.append(cog)
+        return cog
+
+    def in_server(interaction):
+        interaction.guild.id = 10
+
+    sent, _ = await run_command(cog_for, GuildManageMixin.server_key_sync, [], permissions=(),
+                                on_interaction=in_server, **options)
+    return sent, guilds.writes, cogs[0].key_sync_guild.await_count == 1
+
+
+async def switch_key(stored, token):
+    """Run /key switch for a user whose settings are `stored`. Returns
+    (reply, settings writes)."""
+    from gw2bot.cogs.guildwars2.key import KeyMixin
+
+    users = MemoryUsers({1: stored})
+
+    def cog_for(session, _):
+        class Cog(KeyMixin, _Harness):
+            pass
+
+        return Cog(session, users)
+
+    sent, _ = await run_command(cog_for, KeyMixin.key_switch, [], permissions=(), users=users, token=token)
+    return sent, users.writes
+
+
+async def can_add_guildsync(existing, in_game_guild_id="NEW"):
+    """Whether a server with `existing` guild syncs (in-game guild ids) can
+    add one for `in_game_guild_id`."""
+    from gw2bot.cogs.guildwars2.guild import GuildSync
+
+    class Syncs:
+        async def find_one(self, query):
+            return {"gid": query["gid"]} if query["gid"] in existing else None
+
+        async def count_documents(self, query):
+            return len(existing)
+
+    class Cog(GuildSync, _Harness):
+        pass
+
+    cog = Cog()
+    cog.db = SimpleNamespace(guildsyncs=Syncs())
+    return await cog.can_add_sync(MagicMock(id=10), in_game_guild_id)

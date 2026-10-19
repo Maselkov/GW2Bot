@@ -182,7 +182,7 @@ class KeyMixin:
             )
         await self.bot.data.users.update(interaction.user.id, {"key": k})
         msg = "Swapped to selected key."
-        if key["name"]:
+        if k["name"]:
             msg += " Name : `{}`".format(k["name"])
         await interaction.response.send_message(msg, ephemeral=True)
 
