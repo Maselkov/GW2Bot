@@ -40,3 +40,65 @@ async def test_autopin_pins_the_new_message(behaviour):
     if not behaviour:
         # The previous day's message stays, unpinned
         assert events["unpinned"] == [999]
+
+
+# --- Permissions --------------------------------------------------------------------------
+
+
+async def test_skips_a_deleted_channel():
+    events = await subject.run_daily_notifier({}, channel_exists=False)
+    assert events["sent"] == events["texts"] == events["writes"] == []
+
+
+async def test_skips_a_channel_it_cant_send_to():
+    events = await subject.run_daily_notifier({}, can_send=False)
+    assert events["sent"] == events["texts"] == []
+
+
+async def test_asks_for_embed_permission():
+    events = await subject.run_daily_notifier({}, can_embed=False)
+    assert events["texts"] == ["Need permission to embed links in order to send daily notifs!"]
+    assert events["sent"] == []
+
+
+async def test_posts_tomorrows_dailies():
+    events = await subject.run_daily_notifier({"categories": ["raids"]})
+    [embed] = events["embeds"]
+    assert embed["title"] == "Dailies"
+    # Midnight UTC, when they start
+    assert embed["timestamp"].endswith("T00:00:00+00:00")
+
+
+# --- The dailies cache --------------------------------------------------------------------
+
+
+CATEGORIES = [
+    {"id": 88, "achievements": [{"id": 1}, {"id": 2}], "tomorrow": [{"id": 3}]},
+    {"id": 475, "achievements": [{"id": 4}], "tomorrow": [{"id": 4}]},
+    {"id": 238, "achievements": [], "tomorrow": []},
+    {"id": 243, "achievements": [], "tomorrow": []},
+]
+NAMES = [
+    {"id": 1, "name": "Daily Tier 4 Aquatic Ruins"},
+    {"id": 2, "name": "Daily Tier 1 Aquatic Ruins"},
+    {"id": 3, "name": "Daily Tier 4 Volcanic"},
+    {"id": 4, "name": "Raid Bounty: Vale Guardian"},
+]
+
+
+async def test_dailies_refresh_caches_today_and_tomorrow():
+    writes, error = await subject.run_dailies_refresh([(200, CATEGORIES), (200, NAMES)])
+    assert error is None
+    assert writes == [{
+        "cache.dailies": {"fractals": ["Daily Tier 4 Aquatic Ruins"], "raids": ["Raid Bounty: Vale Guardian"],
+                          "lws3": [], "lws4": []},
+        "cache.dailies_tomorrow": {"fractals": ["Daily Tier 4 Volcanic"], "raids": ["Raid Bounty: Vale Guardian"],
+                                   "lws3": [], "lws4": []},
+    }]
+
+
+async def test_dailies_refresh_keeps_the_cache_on_errors(caplog):
+    writes, error = await subject.run_dailies_refresh([(500, {"text": "error"})])
+    assert error is None
+    assert writes == []
+    assert "Couldn't cache dailies" in caplog.text

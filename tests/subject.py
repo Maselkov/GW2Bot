@@ -1535,16 +1535,18 @@ async def run_game_update_checker(config, build_page):
     return None
 
 
-async def run_daily_notifier(settings, *, previous_message_exists=True):
+async def run_daily_notifier(settings, *, previous_message_exists=True, channel_exists=True, can_send=True,
+                             can_embed=True):
     """One 23:40 daily notifier run for a server whose `daily` settings
     are `settings` (channel 5; the previous post is message 999). Returns
     {"sent", "edited", "deleted", "pinned", "unpinned": [message ids],
+    "texts": [text-only messages], "embeds": [embeds sent, as dicts],
     "writes": server settings writes}."""
     from unittest.mock import AsyncMock
 
     import discord
 
-    events = {"sent": [], "edited": [], "deleted": [], "pinned": [], "unpinned": []}
+    events = {"sent": [], "edited": [], "deleted": [], "pinned": [], "unpinned": [], "texts": [], "embeds": []}
     messages = {}
 
     def message(message_id):
@@ -1571,9 +1573,15 @@ async def run_daily_notifier(settings, *, previous_message_exists=True):
     channel = MagicMock(id=5)
     channel.guild.id = 10
     permissions = channel.permissions_for.return_value
-    permissions.send_messages = permissions.embed_links = permissions.read_message_history = True
+    permissions.send_messages = can_send
+    permissions.embed_links = can_embed
+    permissions.read_message_history = True
 
-    async def send(*args, **kwargs):
+    async def send(*args, embed=None, **kwargs):
+        if embed is None:
+            events["texts"].append(args[0])
+            return message(0)
+        events["embeds"].append(embed.to_dict())
         msg = message(1000 + len(events["sent"]) + 1)
         events["sent"].append(msg.id)
         return msg
@@ -1596,7 +1604,7 @@ async def run_daily_notifier(settings, *, previous_message_exists=True):
     cog.bot.data.config.get = AsyncMock(return_value={"cache": {"dailies_tomorrow": {"raids": [], "fractals": []}}})
     cog.bot.data.guilds = MemoryGuilds({10: {"daily": {"on": True, "channel": 5, "categories": ["psna"],
                                                        "message": 999, **settings}}})
-    cog.bot.get_channel = {5: channel}.get
+    cog.bot.get_channel = {5: channel}.get if channel_exists else {}.get
     await type(cog).send_daily_notifs.coro(cog)
     for _ in range(50):
         await asyncio.sleep(0)
@@ -1666,3 +1674,103 @@ async def can_add_guildsync(existing, in_game_guild_id="NEW"):
     cog = Cog()
     cog.db = SimpleNamespace(guildsyncs=Syncs())
     return await cog.can_add_sync(MagicMock(id=10), in_game_guild_id)
+
+
+
+DAILY_CACHE = {
+    "fractals": ["Daily Tier 4 Aquatic Ruins", "Daily Recommended Fractal—Scale 25"],
+    "raids": ["Raid Bounty: Vale Guardian"],
+    "lws3": ["Daily Bitterfrost Frontier Mining Specialist"],
+    "lws4": [],
+}
+
+
+def _daily_cog(session=None, users=None, cache=None):
+    from unittest.mock import AsyncMock
+
+    cog = _Harness(session, users)
+    config = {"cache": {"dailies": cache, "dailies_tomorrow": cache}} if cache is not None else {"cache": {}}
+    cog.bot.data.config.get = AsyncMock(return_value=config)
+    cog.bot.data.config.update = AsyncMock()
+    return cog
+
+
+async def daily_command(cache, **options):
+    """Run /daily with `cache` as the cached rotation (None: not cached)."""
+    from gw2bot.cogs.guildwars2.daily import DailyMixin
+
+    sent, _ = await run_command(lambda session, users: _daily_cog(session, users, cache), DailyMixin.daily, [],
+                                permissions=(), **options)
+    return sent
+
+
+async def run_dailies_refresh(responses):
+    """One run of the dailies refresh against the API `responses`
+    (achievements/categories, then achievements). Returns (config writes,
+    anything the run raised)."""
+    cog = _daily_cog(FakeSession(*responses), cache={})
+    try:
+        await type(cog).refresh_dailies.coro(cog)
+        error = None
+    except Exception as e:
+        error = e
+    return [call.args[0] for call in cog.bot.data.config.update.await_args_list], error
+
+
+async def notifier_daily(*, choose=None, enabled=True, already_enabled=False, **options):
+    """Run /notifier daily on server 10, posting to channel 5, then pick
+    the categories in `choose` from its dropdown (None: let it time out).
+    Returns (first reply, final message as (content, embed dict or None),
+    server settings writes)."""
+    from unittest.mock import AsyncMock, patch
+
+    import discord
+
+    from gw2bot.cogs.guildwars2.notifiers import NotiifiersMixin
+
+    guilds = MemoryGuilds({10: {"daily": {"on": already_enabled}}})
+    final = []
+
+    async def wait(view):
+        if choose is None:
+            return True
+        dropdown = view.children[0]
+        dropdown._values = list(choose)
+        interaction = MagicMock()
+        interaction.guild.id = 10
+        interaction.response.defer = AsyncMock()
+        interaction.edit_original_response = AsyncMock()
+        await dropdown.callback(interaction)
+        kwargs = interaction.edit_original_response.await_args.kwargs
+        embed = kwargs.get("embed")
+        final.append((kwargs.get("content"), embed.to_dict() if embed else None))
+        return False
+
+    interactions = []
+
+    def cog_for(session, users):
+        class Cog(NotiifiersMixin, _Harness):
+            pass
+
+        cog = Cog(session, users)
+        cog.bot.data.guilds = guilds
+        config = {"cache": {"dailies": DAILY_CACHE, "dailies_tomorrow": DAILY_CACHE}}
+        cog.bot.data.config.get = AsyncMock(return_value=config)
+        return cog
+
+    def in_server(interaction):
+        interaction.guild.id = 10
+        interaction.edit_original_response = AsyncMock()
+        interactions.append(interaction)
+
+    channel = MagicMock(id=5, mention="<#5>")
+    channel.permissions_for.return_value.send_messages = True
+    channel.permissions_for.return_value.embed_links = True
+    with patch.object(discord.ui.View, "wait", wait):
+        sent, _ = await run_command(cog_for, NotiifiersMixin.daily_notifier, [], permissions=(),
+                                    on_interaction=in_server, enabled=enabled,
+                                    channel=channel if enabled else None, **options)
+    if choose is None and enabled:
+        edit = interactions[0].edit_original_response.await_args
+        final.append((edit.kwargs.get("content"), None) if edit else None)
+    return sent, final[0] if final else None, guilds.writes
