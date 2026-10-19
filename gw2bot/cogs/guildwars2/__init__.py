@@ -20,7 +20,6 @@ from .key import KeyMixin
 from .misc import MiscMixin
 from .notifiers import NotiifiersMixin
 from .skills import SkillsMixin
-from .wallet import WalletMixin
 from .wvw import WvwMixin
 
 class GuildWars2(
@@ -38,7 +37,6 @@ class GuildWars2(
     MiscMixin,
     NotiifiersMixin,
     SkillsMixin,
-    WalletMixin,
     WvwMixin,
 ):
     """Guild Wars 2 commands"""

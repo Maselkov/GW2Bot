@@ -87,3 +87,56 @@ async def test_unknown_currency_name():
     sent, requests = await subject.wallet([], currencies=CURRENCIES, items=ITEMS, currency="nothing")
     assert sent == "No results found for Nothing"
     assert requests == []
+
+
+# --- The account item search (also used by /search and /li) -------------------------
+
+RUBY, SHARD = 79280, 19721
+CHARACTERS = [
+    {
+        "name": "Character 1",
+        # Bags are items themselves, with an id
+        "bags": [{"id": 8932, "size": 20, "inventory": [{"id": RUBY, "count": 5}, None,
+                                                         {"id": 1, "upgrades": [RUBY, RUBY]}]}, None],
+        "equipment_tabs": [
+            {"equipment": [{"id": 2, "location": "Equipped", "infusions": [RUBY]},
+                           {"id": 3, "location": "LegendaryArmory", "infusions": [RUBY]}]},
+            {"equipment": [{"id": 3, "location": "LegendaryArmory", "infusions": [RUBY]}]},
+        ],
+    },
+]
+SEARCH = [(200, [{"id": RUBY, "count": 250}]), (200, [{"id": SHARD, "count": 1}]),
+          (200, [{"id": RUBY, "count": 100}]), (200, CHARACTERS)]
+
+
+async def test_counts_per_place():
+    counts = await subject.items_in_account(SEARCH, [RUBY, SHARD])
+    assert counts[RUBY] == {
+        "bank": 250,
+        "material storage": 100,
+        # 5 in a bag plus 2 upgrades in another item, and 1 infusion equipped
+        "Character 1": 8,
+        # Legendary armory items count once, however many tabs use them
+        "legendary armory": 1,
+    }
+    assert counts[SHARD] == {"shared": 1}
+
+
+async def test_search_separates_equipped():
+    counts = await subject.items_in_account(SEARCH, [RUBY], search=True)
+    assert counts[RUBY]["Character 1"] == [7, 1]
+    assert counts[RUBY]["bank"] == [250, 0]
+
+
+async def test_flattened_totals():
+    assert await subject.items_in_account(SEARCH, [RUBY, SHARD], flatten=True) == {
+        "bank": 250, "material storage": 100, "Character 1": 8, "legendary armory": 1, "shared": 1,
+    }
+
+
+async def test_delivery_box_with_tradingpost_permission():
+    responses = SEARCH + [(200, {"coins": 0, "items": [{"id": RUBY, "count": 4}]})]
+    counts = await subject.items_in_account(
+        responses, [RUBY], permissions=("account", "inventories", "characters", "tradingpost")
+    )
+    assert counts[RUBY]["TP delivery"] == 4

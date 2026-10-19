@@ -16,7 +16,6 @@ from unittest.mock import MagicMock
 import time_machine
 
 from gw2bot.cogs.base import GW2Cog
-from gw2bot.cogs.guildwars2.account import AccountMixin
 from gw2bot.cogs.guildwars2.characters import CharactersMixin
 from gw2bot.cogs.guildwars2 import daily
 from gw2bot.cogs.guildwars2.daily import DailyMixin
@@ -25,7 +24,6 @@ from gw2bot.cogs.guildwars2.events import EventsMixin
 from gw2bot.cogs.guildwars2.misc import MiscMixin
 from gw2bot.cogs.guildwars2.skills import SkillsMixin
 from gw2bot.utils import chat, db
-from gw2bot.cogs.guildwars2.wallet import WalletMixin
 from gw2bot.cogs.guildwars2.wvw import WvwMixin, match_summary
 
 DATA_DIR = pathlib.Path(__file__).resolve().parent.parent / "gw2bot" / "data"
@@ -70,8 +68,6 @@ def _fake_bot(session=None, users=None):
 
 class _Harness(
     GW2Cog,
-    AccountMixin,
-    WalletMixin,
     CharactersMixin,
     DailyMixin,
     DatabaseMixin,
@@ -929,12 +925,26 @@ async def wallet(responses, *, currencies, items, permissions=("account", "walle
     occasional joke title)."""
     from unittest.mock import patch
 
-    from gw2bot.cogs.guildwars2.wallet import WalletMixin
+    from gw2bot.cogs.wallet import Wallet
 
     def cog_for(session, users):
-        cog = _Harness(session, users)
+        cog = Wallet(_fake_bot(session, users))
         cog.db = gw2_db(currencies=currencies, items=items)
         return cog
 
     with patch("random.random", return_value=random_value):
-        return await run_command(cog_for, WalletMixin.wallet, responses, permissions=permissions, **options)
+        return await run_command(cog_for, Wallet.wallet, responses, permissions=permissions, **options)
+
+
+async def items_in_account(responses, item_ids, *, permissions=("account", "inventories", "characters"), **options):
+    """GW2Cog.find_items_in_account: `responses` are account/bank,
+    account/inventory, account/materials, characters (and
+    commerce/delivery with the tradingpost permission)."""
+    session = FakeSession(*responses)
+    cog = _Harness(session, FakeUserRepo(stored_key(permissions)))
+    user = MagicMock(id=1)
+    result = await cog.find_items_in_account(user, item_ids, **options)
+    # Plain dicts, for comparing
+    if options.get("flatten"):
+        return dict(result)
+    return {item: dict(places) for item, places in result.items()}

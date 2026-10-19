@@ -1,3 +1,4 @@
+"""/wallet: wallet currencies, and currencies kept as items."""
 import random
 import re
 
@@ -5,12 +6,12 @@ import discord
 from discord import app_commands
 from discord.app_commands import Choice
 
-from .exceptions import APIError
-from gw2bot.utils.chat import embed_list_lines
-from gw2bot.utils.db import prepare_search
+from ..utils.chat import embed_list_lines
+from ..utils.db import prepare_search
+from .base import GW2Cog
 
 
-class WalletMixin:
+class Wallet(GW2Cog):
 
     async def get_wallet(self, interaction: discord.Interaction, ids):
         flattened_ids = [y for x in ids for y in x]
@@ -205,3 +206,7 @@ class WalletMixin:
         embed.set_footer(text=self.bot.user.name,
                          icon_url=self.bot.user.display_avatar.url)
         await interaction.followup.send(embed=embed)
+
+
+async def setup(bot):
+    await bot.add_cog(Wallet(bot))
