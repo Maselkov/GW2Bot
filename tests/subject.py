@@ -1533,3 +1533,71 @@ async def run_game_update_checker(config, build_page):
     except Exception as e:
         return e
     return None
+
+
+async def run_daily_notifier(settings, *, previous_message_exists=True):
+    """One 23:40 daily notifier run for a server whose `daily` settings
+    are `settings` (channel 5; the previous post is message 999). Returns
+    {"sent", "edited", "deleted", "pinned", "unpinned": [message ids],
+    "writes": server settings writes}."""
+    from unittest.mock import AsyncMock
+
+    import discord
+
+    events = {"sent": [], "edited": [], "deleted": [], "pinned": [], "unpinned": []}
+    messages = {}
+
+    def message(message_id):
+        msg = MagicMock(id=message_id, pinned=False)
+
+        async def act(name):
+            if message_id in events["deleted"]:
+                raise discord.NotFound(MagicMock(status=404), "Unknown Message")
+            events[name].append(message_id)
+
+        def recorder(name):
+            async def record(*args, **kwargs):
+                await act(name)
+
+            return AsyncMock(side_effect=record)
+
+        msg.edit, msg.delete = recorder("edited"), recorder("deleted")
+        msg.pin, msg.unpin = recorder("pinned"), recorder("unpinned")
+        messages[message_id] = msg
+        return msg
+
+    if previous_message_exists:
+        message(999)
+    channel = MagicMock(id=5)
+    channel.guild.id = 10
+    permissions = channel.permissions_for.return_value
+    permissions.send_messages = permissions.embed_links = permissions.read_message_history = True
+
+    async def send(*args, **kwargs):
+        msg = message(1000 + len(events["sent"]) + 1)
+        events["sent"].append(msg.id)
+        return msg
+
+    async def fetch_message(message_id):
+        if message_id not in messages or message_id in events["deleted"]:
+            raise discord.NotFound(MagicMock(status=404), "Unknown Message")
+        return messages[message_id]
+
+    async def history(**kwargs):
+        return
+        yield
+
+    channel.send = AsyncMock(side_effect=send)
+    channel.fetch_message = AsyncMock(side_effect=fetch_message)
+    channel.history = history
+
+    cog = _notifier_cog()
+    cog.cache_dailies = AsyncMock()
+    cog.bot.data.config.get = AsyncMock(return_value={"cache": {"dailies_tomorrow": {"raids": [], "fractals": []}}})
+    cog.bot.data.guilds = MemoryGuilds({10: {"daily": {"on": True, "channel": 5, "categories": ["psna"],
+                                                       "message": 999, **settings}}})
+    cog.bot.get_channel = {5: channel}.get
+    await type(cog).send_daily_notifs.coro(cog)
+    for _ in range(50):
+        await asyncio.sleep(0)
+    return {**events, "writes": cog.bot.data.guilds.writes}

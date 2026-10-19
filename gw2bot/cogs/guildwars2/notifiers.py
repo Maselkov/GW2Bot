@@ -600,8 +600,8 @@ class NotiifiersMixin:
                 await self.bot.data.guilds.update(channel.guild.id, {"daily.message": message.id})
             autopin = doc.get("autopin", False)
             if autopin:
-                message = old_message
                 if edited:
+                    message = old_message
                     if message.pinned:
                         return
                 try:
