@@ -1,5 +1,4 @@
 """Account commands: /account, /li, /kp, /bosses, /search, /cats and /nodes."""
-import asyncio
 import collections
 import datetime
 import re
@@ -91,7 +90,7 @@ class Account(GW2Cog):
 
                 # Having PathOfFire access implies HeartOfThorns access.
                 if "PathOfFire" in access and "HeartOfThorns" not in access:
-                    access += "HeartOfThorns"
+                    access.append("HeartOfThorns")
 
             def format_name(name):
                 return " ".join(re.findall(r'[A-Z\d][^A-Z\d]*', name))
@@ -163,7 +162,8 @@ class Account(GW2Cog):
                         if group["crafted"]:
                             crafted_total += sum_item
                         item_doc = await self.fetch_item(item)
-                        line = f"{item_doc['name']} - **{sum_item}**"
+                        name = item_doc["name"] if item_doc else "Unknown item"
+                        line = f"{name} - **{sum_item}**"
                         if group["worth"] != 1:
                             line = f"{amount} " + line
                         breakdown.append(line)
@@ -337,7 +337,7 @@ class Account(GW2Cog):
                     "Could not find any items with that name.")
         item_doc = await self.fetch_item(ids[0])
 
-        async def generate_results_embed(results):
+        async def generate_results_embed(results, characters):
             seq = [k for k, v in results.items() if v]
             if not seq:
                 return None
@@ -359,8 +359,6 @@ class Account(GW2Cog):
             total = 0
             storage_counts = OrderedDict(
                 sorted(results.items(), key=lambda kv: kv[1], reverse=True))
-            characters = await self.call_api(CHARACTERS, user,
-                                             schema_string=CHARACTERS_SCHEMA)
             char_names = []
             for character in characters:
                 char_names.append(character["name"])
@@ -433,23 +431,17 @@ class Account(GW2Cog):
         doc = await self.fetch_key(user, ["inventories", "characters"])
         endpoints = [
             "account/bank", "account/inventory", "account/materials",
-            "characters?page=0&page_size=200"
+            CHARACTERS
         ]
-        task = asyncio.create_task(
-            self.call_multiple(endpoints,
-                               key=doc["key"],
-                               schema_string="2021-07-15T13:00:00.000Z"))
-        storage = None
-        if (not task.done()):
-            storage = await task
-        if exc := task.exception():
-            raise exc
+        storage = await self.call_multiple(endpoints,
+                                           key=doc["key"],
+                                           schema_string=CHARACTERS_SCHEMA)
         search_results = await self.find_items_in_account(interaction.user,
                                                           ids,
                                                           flatten=True,
                                                           search=True,
                                                           results=storage)
-        embed = await generate_results_embed(search_results)
+        embed = await generate_results_embed(search_results, storage[3])
         if not embed:
             return await interaction.followup.send(
                 content=f"`{item_doc['name']}`: Not found on your account.")
@@ -561,7 +553,8 @@ class Account(GW2Cog):
         cotm = self.get_emoji(ctx, "call_of_the_mists")
         emboldened = self.get_emoji(ctx, "emboldened")
         start_date = datetime.date(year=2022, month=6, day=20)
-        current = datetime.datetime.utcnow().date()
+        now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+        current = now.date()
         monday_1 = (start_date - datetime.timedelta(days=start_date.weekday()))
         monday_2 = (current - datetime.timedelta(days=current.weekday()))
         weeks = (monday_2 - monday_1).days // 7
@@ -614,7 +607,7 @@ class Account(GW2Cog):
                 events = "{} event{}".format(len(events), suffix)
             description = (", ".join(filter(None, [bosses, events])) +
                            " not completed this week")
-        if datetime.datetime.utcnow() > next_reset_time:
+        if now > next_reset_time:
             description = description.replace("this", "that")
             description += ("\n❗Warning❗\n Data outdated for this week. Log "
                             "into GW2 in order to update.")

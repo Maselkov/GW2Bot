@@ -299,12 +299,10 @@ async def test_search(gamedata):
     ]) + "\n```")]
     assert embed["author"]["name"] == "Example.1234"
     assert embed["footer"]["text"] == "GW2Bot"
-    # The characters are fetched twice
     assert [url for url, _ in requests] == [
         API + "account/bank",
         API + "account/inventory",
         API + "account/materials",
-        API + "characters?page=0&page_size=200",
         API + "characters?page=0&page_size=200",
     ]
 
@@ -378,20 +376,19 @@ async def test_all_nodes(gamedata):
     assert sent == "You've collected all home instance nodes! Congratulations!"
 
 
-# --- Known bugs ----------------------------------------------------------------------
+# --- Fixes ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="adds Heart of Thorns letter by letter")
 async def test_path_of_fire_implies_heart_of_thorns():
     account = {**ACCOUNT, "access": ["GuildWars2", "PathOfFire"]}
     embed, _ = await subject.account_command("account", [(200, account)])
     assert field(embed, "Expansion access") == "Path Of Fire\nHeart Of Thorns"
 
 
-@pytest.mark.xfail(strict=True, reason="crashes on a trophy item that isn't cached")
 async def test_li_with_an_uncached_item():
     responses = storage(bank=[{"id": INSIGHT, "count": 10}]) + [(200, [])]
     embed, _ = await subject.account_command(
         "li", responses, permissions=("account", "inventories", "characters", "wallet"),
+        db=subject.gw2_db(items=[]),
     )
     assert fields(embed) == [("10 Legendary Insights earned", "Unknown item - **10**")]
