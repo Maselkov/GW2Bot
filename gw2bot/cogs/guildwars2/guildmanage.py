@@ -64,18 +64,20 @@ class GuildManageMixin:
             return await interaction.response.send_message(
                 "Chat link preview is aleady enabled.", ephemeral=True
             )
+        # The previews live in the ChatLinks cog until /server moves too (a
+        # command group can't span cogs)
+        previews = self.bot.get_cog("ChatLinks")
         if not disabled and not enabled:
             await self.bot.data.guilds.update(guild.id, {"link_preview_disabled": True})
-            self.chatcode_preview_opted_out_guilds.add(guild.id)
+            if previews:
+                previews.set_previews_enabled(guild.id, False)
             return await interaction.response.send_message(
                 "Chat link preview is now disabled.", ephemeral=True
             )
         if disabled and enabled:
             await self.bot.data.guilds.update(guild.id, {"link_preview_disabled": not enabled})
-            try:
-                self.chatcode_preview_opted_out_guilds.remove(guild.id)
-            except KeyError:
-                pass
+            if previews:
+                previews.set_previews_enabled(guild.id, True)
             return await interaction.response.send_message(
                 "Chat link preview is now enabled.", ephemeral=True
             )

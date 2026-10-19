@@ -662,22 +662,28 @@ class SettingsCommands:
         """(Re)create the cog, as after a restart: in-memory caches are lost."""
         from unittest.mock import AsyncMock
 
+        from gw2bot.cogs.chatlinks import ChatLinks
         from gw2bot.cogs.guildwars2.evtc import EvtcMixin
         from gw2bot.cogs.guildwars2.guildmanage import GuildManageMixin
-        from gw2bot.cogs.guildwars2.chatlinks import ChatLinksMixin
 
-        class Cog(GuildManageMixin, ChatLinksMixin, EvtcMixin):
+        class Cog(GuildManageMixin, EvtcMixin):
             pass
 
+        bot = MagicMock()
+        bot.data.guilds = self.guilds
+        bot.data.channels = self.channels
         self.cog = Cog()
-        self.cog.bot = MagicMock()
-        self.cog.bot.data.guilds = self.guilds
-        self.cog.bot.data.channels = self.channels
-        self.cog.chatcode_preview_opted_out_guilds = set()
+        self.cog.bot = bot
         self.cog.force_guild_account_names = AsyncMock()
+        self.previews = ChatLinks(bot)
+        bot.get_cog = {"ChatLinks": self.previews}.get
 
     async def load(self):
-        await self.cog.prepare_linkpreview_guild_cache()
+        await self.previews.cog_load()
+
+    def previews_disabled(self):
+        """Servers whose chat link previews are off, as the previews see it."""
+        return self.previews.previews_disabled
 
     async def run(self, command, guild_id=10, **options):
         """The reply to running `command` (a method name) in a guild."""
@@ -1893,3 +1899,49 @@ async def et_command(category, now):
         sent, _ = await run_command(lambda session, users: _events_cog(session, users), Events.et, [],
                                     permissions=(), category=category)
     return sent
+
+
+
+# --- Chat link previews ------------------------------------------------------------
+
+def link(header, *values):
+    """A chat link: the type byte, then 4-byte little-endian ids."""
+    import base64
+    import struct
+
+    data = bytes([header]) + b"".join(struct.pack("<I", v) for v in values)
+    return "[&" + base64.b64encode(data).decode() + "]"
+
+
+async def post_chat_link(content, *, db=None, in_guild=True, opted_out=False, author_is_bot=False, pages=(),
+                         can_use_emojis=False):
+    """Post a message with `content` where the chat link previewer sees it.
+    `db` is the game data cache (see gw2_db). Returns (previews sent as
+    (embed dict, replied to the message), link_previews counts added)."""
+    from unittest.mock import AsyncMock
+
+    from gw2bot.cogs.chatlinks import ChatLinks
+
+    session = FakeSession((500, {}), pages=pages)
+    cog = ChatLinks(_fake_bot(session))
+    cog.db = db or gw2_db()
+    cog.previews_disabled = {10} if opted_out else set()
+    cog.bot.user.display_avatar.url = "https://cdn/bot.png"
+    cog.bot.data.statistics.update_one = AsyncMock()
+    message = MagicMock(content=content)
+    message.author.bot = author_is_bot
+    message.author.display_name = "Example"
+    message.author.display_avatar.url = "https://cdn/example.png"
+    if in_guild:
+        message.guild.id = 10
+    else:
+        message.guild = None
+    permissions = message.channel.permissions_for.return_value
+    permissions.read_message_history = True
+    permissions.external_emojis = can_use_emojis
+    message.channel.send = AsyncMock()
+    await type(cog).find_chatcodes(cog, message)
+    sent = [(call.kwargs["embed"].to_dict(), call.kwargs.get("reference") is message)
+            for call in message.channel.send.await_args_list]
+    counted = [call.args[1]["$inc"] for call in cog.bot.data.statistics.update_one.await_args_list]
+    return sent, counted

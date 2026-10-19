@@ -39,7 +39,7 @@ A behaviour that changes on purpose is called out in the PR. Anything else that 
 | [Daily notifier](#daily-notifier) (moved) | 23:40 UTC daily; dailies refresh every 15 min | `daily.message`, dailies cache | channel posts, pins | Untracked per-server tasks |
 | [Event reminders](#event-reminders) (moved) | every 10 s | `event_reminders` | DMs | Users with closed DMs are retried forever |
 | [Boss notifier](#boss-notifier) (moved) | before each world boss | `bossnotifs.message` | channel posts | Failures are silent |
-| [Chat link previews](#chat-link-previews) | every message | `statistics.link_previews` | replies | Undecodable links raise in `finally` |
+| [Chat link previews](#chat-link-previews) (moved) | every message | `statistics.link_previews` | replies | Uncached POIs show nothing |
 | [News](#news) | every 3 min | `cache.news`, `news.on` | channel posts | Items whose title changes are posted again |
 | [Game updates](#game-updates) | every 1 min | `cache.build`, game data caches, `updates` | channel posts | The rebuild runs inside the loop |
 | [Gem tracker](#gem-tracker) | every 5 min | `gemtrack` | DMs | Undeliverable users are retried forever |
@@ -132,7 +132,9 @@ behaviour: delete (default) / edit), which stays in the old cog's `/notifier` gr
 
 ## Chat link previews
 
-`chatlinks.py: find_chatcodes` (an `on_message` listener), `/server preview_chat_links`.
+**Moved** to `gw2bot/cogs/chatlinks.py` (`ChatLinks`): `find_chatcodes` (an `on_message` listener) and the
+opt-out set, loaded in `cog_load`. `/server preview_chat_links` stays in the old cog's `/server` group until it
+moves, and updates the cog through `set_previews_enabled()`.
 
 - **Trigger.** Any message containing a chat link (`[&...]`), from a human, in a server that hasn't opted out.
   Opt-outs are cached in memory, loaded at startup from `link_preview_disabled`.
@@ -144,14 +146,16 @@ behaviour: delete (default) / edit), which stays in the old cog's `/notifier` gr
   - **Counting:** increments `statistics.link_previews.<type>` for every link, even ignored or failed ones.
 - **Errors.** Logged with `log.exception`.
 - **Known issues.**
-  - If the link can't be decoded, or has an unknown type byte, `link_type` is unset when the `finally` block
-    counts it. That raises `UnboundLocalError` out of the listener, so discord.py logs it as an unhandled error.
-  - A map link whose POI isn't cached raises `TypeError` (logged).
-  - An item link with a skin that isn't cached raises after setting the name to "Unknown" (logged).
+  - *Fixed:* an undecodable link or an unknown type byte raised `UnboundLocalError` from the counting `finally`.
+    Such links are ignored now.
+  - *Fixed:* an item link with an uncached skin raised instead of showing "Unknown".
+  - *Fixed:* errors were logged with `log.exception(exc_info=e)`, which itself raised, so they escaped unlogged.
+  - A map link whose POI isn't cached shows nothing (the error is logged).
 - **Tests.**
   - Existing: the opt-out command and its restart cache (`test_settings_commands.py`), skill and trait embeds
-    (`test_skills.py`), build images (`test_rendering.py`).
-  - To write: one preview per link type, an opted-out server, a bot author, and an undecodable link (xfail).
+    (`test_skills.py`), build images (`test_rendering.py`), and a preview per link type, opt-outs, bots, invalid
+    links and uncached data (`test_chat_links.py`).
+  - To write: a build template link end to end.
 
 ## News
 

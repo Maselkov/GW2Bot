@@ -5,10 +5,10 @@ import subject
 async def test_chat_link_previews_can_be_disabled_and_reenabled():
     commands = subject.SettingsCommands()
     assert await commands.run("previewchatlinks", enabled=False) == "Chat link preview is now disabled."
-    assert 10 in commands.cog.chatcode_preview_opted_out_guilds
+    assert 10 in commands.previews_disabled()
     assert await commands.run("previewchatlinks", enabled=False) == "Chat link preview is aleady disabled."
     assert await commands.run("previewchatlinks", enabled=True) == "Chat link preview is now enabled."
-    assert 10 not in commands.cog.chatcode_preview_opted_out_guilds
+    assert 10 not in commands.previews_disabled()
 
 
 async def test_disabled_chat_link_previews_survive_a_restart():
@@ -16,7 +16,7 @@ async def test_disabled_chat_link_previews_survive_a_restart():
     await commands.run("previewchatlinks", enabled=False)
     commands.start()
     await commands.load()
-    assert commands.cog.chatcode_preview_opted_out_guilds == {10}
+    assert commands.previews_disabled() == {10}
 
 
 async def test_force_account_names_already_enabled():
