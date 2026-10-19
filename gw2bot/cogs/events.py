@@ -12,6 +12,11 @@ from .base import GW2Cog
 
 UTC_TZ = datetime.timezone.utc
 
+
+def naive_utcnow():
+    """The time in UTC, naive like the dates MongoDB returns."""
+    return datetime.datetime.now(UTC_TZ).replace(tzinfo=None)
+
 ET_CATEGORIES = [{
     "value": "hot",
     "name": "HoT - Heart of Thorns"
@@ -257,7 +262,7 @@ class Events(GW2Cog):
                                 boss_time -
                                 datetime.datetime.now(UTC_TZ)).total_seconds())
                 day += 1
-        time = datetime.datetime.utcnow()
+        time = datetime.datetime.now(UTC_TZ)
         position = (60 * time.hour + time.minute) % 120
         for location in self.gamedata["event_timers"][reminder["group"]]:
             if location["name"] == reminder["map_name"]:
@@ -295,7 +300,7 @@ class Events(GW2Cog):
         if time < reminder["time"] + 30:
             last_reminded = reminder.get("last_reminded")
             if (last_reminded and
-                (datetime.datetime.utcnow() - last_reminded).total_seconds()
+                (naive_utcnow() - last_reminded.replace(tzinfo=None)).total_seconds()
                     < reminder["time"] + 120):
                 return
             try:
