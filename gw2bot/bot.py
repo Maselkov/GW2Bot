@@ -11,7 +11,11 @@ from discord.ext import commands
 
 from .db import Data
 from .db.migrate import migrate
+from .emojis import Emojis
+from .errors import error_message
+from .gamedata import load_gamedata
 from .gw2api import Client
+from .keys import ApiKeys
 
 log = logging.getLogger(__name__)
 
@@ -55,6 +59,10 @@ class GW2Bot(commands.AutoShardedBot):
         self.settings = settings
         self.data = Data(settings.mongo_uri, settings.mongo_db)
         self.state = self.data.state
+        self.gamedata, self.instabilities = load_gamedata()
+        self.keys = ApiKeys(self.data.users)
+        # Not self.emojis: discord.py's Client.emojis is the emoji cache
+        self.gw2_emojis = Emojis(self, self.data.config)
         self.available = True
         self.session = None
         self.gw2api = None
@@ -70,6 +78,7 @@ class GW2Bot(commands.AutoShardedBot):
         report = await migrate(self.data.client, self.settings.migrate_from_db, self.settings.mongo_db)
         log.info(report.summary())
         await self.data.ensure_indexes()
+        await self.gw2_emojis.load()
         for extension in EXTENSIONS:
             await self.load_extension(extension)
         if self.settings.auto_sync:
@@ -125,8 +134,9 @@ class GW2Bot(commands.AutoShardedBot):
     ):
         msg = ""
         if isinstance(error, app_commands.CommandInvokeError):
+            msg = error_message(error.original)
             cog = getattr(interaction.command, "binding", None)
-            if hasattr(cog, "cog_error_handler"):
+            if not msg and hasattr(cog, "cog_error_handler"):
                 msg = await cog.cog_error_handler(interaction, error.original)
             if not msg:
                 log.exception("Exception in command", exc_info=error.original)

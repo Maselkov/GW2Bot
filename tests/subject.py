@@ -14,9 +14,8 @@ from unittest.mock import MagicMock
 
 import time_machine
 
-from gw2bot.cogs.guildwars2 import GuildWars2
+from gw2bot.cogs.base import GW2Cog
 from gw2bot.cogs.guildwars2.achievements import AchievementsMixin
-from gw2bot.cogs.guildwars2.api import ApiMixin
 from gw2bot.cogs.guildwars2.characters import CharactersMixin
 from gw2bot.cogs.guildwars2.commerce import CommerceMixin
 from gw2bot.cogs.guildwars2 import daily
@@ -28,7 +27,7 @@ from gw2bot.cogs.guildwars2.skills import SkillsMixin
 from gw2bot.cogs.guildwars2.utils import chat, db
 from gw2bot.cogs.guildwars2.wvw import WvwMixin, match_summary
 
-DATA_DIR = pathlib.Path(__file__).resolve().parent.parent / "gw2bot" / "cogs" / "guildwars2"
+DATA_DIR = pathlib.Path(__file__).resolve().parent.parent / "gw2bot" / "data"
 UTC = datetime.timezone.utc
 
 
@@ -41,9 +40,35 @@ _GAMEDATA = _load("gamedata.json")
 _INSTABILITIES = _load("instabilities.json")
 
 
+class _StubEmojis:
+    """No registered emojis: get() gives the fallback text, like an emoji
+    the bot can't use."""
+
+    ids = {}
+
+    def get(self, ctx, emoji, *, fallback=False, fallback_fmt="{}", **kwargs):
+        return fallback_fmt.format(emoji) if fallback else ""
+
+
+def _fake_bot(session=None, users=None):
+    """A bot with the services cogs use: game data, the API client (over
+    `session`), users' keys (over the `users` repository) and emojis."""
+    from gw2bot.keys import ApiKeys
+
+    bot = MagicMock()
+    bot.gamedata = _GAMEDATA
+    bot.instabilities = _INSTABILITIES
+    bot.gw2api = _client(session) if session is not None else None
+    if users is not None:
+        bot.data.users = users
+        bot.keys = ApiKeys(users)
+    bot.gw2_emojis = _StubEmojis()
+    return bot
+
+
 class _Harness(
+    GW2Cog,
     AchievementsMixin,
-    ApiMixin,
     CharactersMixin,
     CommerceMixin,
     DailyMixin,
@@ -55,21 +80,10 @@ class _Harness(
 ):
     """Just enough of the cog's state for its non-Discord logic to run."""
 
-    def __init__(self, session=None):
-        self.gamedata = _GAMEDATA
-        self.instabilities = _INSTABILITIES
-        self.embed_color = 0xC12D2B
-        self.emojis = {}
+    def __init__(self, session=None, users=None):
+        super().__init__(_fake_bot(session, users))
         self.log = logging.getLogger("tests")
-        self.bot = MagicMock()
         self.session = session
-        self.api = _client(session) if session is not None else None
-
-    def get_emoji(self, ctx, emoji, *, fallback=False, fallback_fmt="{}", **kwargs):
-        return fallback_fmt.format(emoji) if fallback else ""
-
-    async def get_embed_color(self, ctx):
-        return self.embed_color
 
 
 def _at(when):
@@ -372,20 +386,21 @@ async def fetch_account(session, stored, user_id=1):
     """
     from unittest.mock import AsyncMock
 
-    harness = _Harness(session)
-    harness.bot.data.users = FakeUserRepo(stored)
+    users = FakeUserRepo(stored)
+    harness = _Harness(session, users)
     user = MagicMock(id=user_id)
     user.send = AsyncMock()
     data = await harness.call_api("account", user)
-    await asyncio.gather(*getattr(harness, "background_tasks", ()), return_exceptions=True)
+    await asyncio.gather(*harness.keys.background_tasks, return_exceptions=True)
     sent = [call.args[0] for call in user.send.await_args_list]
-    return data, harness.bot.data.users.writes, sent
+    return data, users.writes, sent
 
 
 def api_error_message(error):
     """The message shown to the user for an exception from the API layer."""
-    interaction = MagicMock()
-    return asyncio.run(GuildWars2.cog_error_handler(None, interaction, error))
+    from gw2bot.errors import error_message
+
+    return error_message(error)
 
 
 # --- Update notes ----------------------------------------------------------

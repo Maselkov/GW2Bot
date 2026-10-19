@@ -1,14 +1,13 @@
 import datetime
-import json
 import logging
-import pathlib
 
 import discord
 from PIL import ImageFont
 
+from ...errors import error_message
+from ..base import GW2Cog
 from .account import AccountMixin
 from .achievements import AchievementsMixin
-from .api import ApiMixin
 from .characters import CharactersMixin
 from .commerce import CommerceMixin
 from .daily import DailyMixin
@@ -16,7 +15,6 @@ from .database import DatabaseMixin
 from .emojis import EmojiMixin
 from .events import EventsMixin, EventTimerReminderUnsubscribeView
 from .evtc import EvtcMixin
-from .exceptions import APIError, APIInactiveError, APIInvalidKey, APIKeyError
 from .guild import GuildMixin
 from .guild.sync import GuildSyncPromptUserConfirmView
 from .guildmanage import GuildManageMixin
@@ -29,14 +27,10 @@ from .wallet import WalletMixin
 from .wizardsvault import WizardsVaultMixin
 from .wvw import WvwMixin
 
-DATA_DIR = pathlib.Path(__file__).resolve().parent
-
-
 class GuildWars2(
-    discord.ext.commands.Cog,
+    GW2Cog,
     AccountMixin,
     AchievementsMixin,
-    ApiMixin,
     CharactersMixin,
     CommerceMixin,
     DailyMixin,
@@ -58,20 +52,13 @@ class GuildWars2(
     """Guild Wars 2 commands"""
 
     def __init__(self, bot):
-        self.bot = bot
+        super().__init__(bot)
         self.db = self.bot.data.gw2
-        with open(DATA_DIR / "gamedata.json", encoding="utf-8", mode="r") as f:
-            self.gamedata = json.load(f)
-        with open(DATA_DIR / "instabilities.json", encoding="utf-8", mode="r") as f:
-            self.instabilities = json.load(f)
         self.session = bot.session
-        self.api = bot.gw2api
         self.boss_schedule = self.generate_schedule()
-        self.embed_color = 0xC12D2B
         self.log = logging.getLogger(__name__)
         self.tasks = []
         self.waiting_for = []
-        self.emojis = {}
         self.chatcode_preview_opted_out_guilds = set()
         try:
             self.font = ImageFont.truetype("GWTwoFont1p1.ttf", size=30)
@@ -94,8 +81,6 @@ class GuildWars2(
             task.start()
 
     async def cog_load(self):
-        # Runs after setup() has created the cog's config document
-        await self.prepare_emojis()
         await self.prepare_linkpreview_guild_cache()
         self.bot.add_view(EventTimerReminderUnsubscribeView(self))
         self.bot.add_view(GuildSyncPromptUserConfirmView(self))
@@ -105,29 +90,12 @@ class GuildWars2(
             task.cancel()
 
     async def cog_error_handler(self, interaction, error):
-        msg = ""
-        user = interaction.user
-        if isinstance(error, APIKeyError):
-            msg = str(error)
-        elif isinstance(error, APIInactiveError):
-            msg = "The API is currently down. Try again later."
-        elif isinstance(error, APIInvalidKey):
-            msg = "Your API key is invalid! Remove your " "key and add a new one"
-        elif isinstance(error, APIError):
-            msg = f"API has responded with the following error: " f"`{error}`".format(
-                user, error
-            )
-        return msg
+        return error_message(error)
 
     def can_embed_links(self, ctx):
         if not isinstance(ctx.channel, discord.abc.GuildChannel):
             return True
         return ctx.channel.permissions_for(ctx.me).embed_links
-
-    async def get_embed_color(self, ctx):
-        # Toothy's per-user embed_color only ever applied to text commands
-        # (contexts with .author), never to slash commands
-        return self.embed_color
 
     def tell_off(
         self, component_context, message="Only the command owner may do that."

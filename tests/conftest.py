@@ -5,7 +5,7 @@ import sys
 import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-DATA_DIR = ROOT / "gw2bot" / "cogs" / "guildwars2"
+DATA_DIR = ROOT / "gw2bot" / "data"
 
 sys.path.insert(0, str(ROOT / "tests"))
 
