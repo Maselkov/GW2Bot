@@ -22,9 +22,7 @@ from gw2bot.cogs.guildwars2.daily import DailyMixin
 from gw2bot.cogs.guildwars2.database import DatabaseMixin
 from gw2bot.cogs.guildwars2.events import EventsMixin
 from gw2bot.cogs.guildwars2.misc import MiscMixin
-from gw2bot.cogs.guildwars2.skills import SkillsMixin
 from gw2bot.utils import chat, db
-from gw2bot.cogs.guildwars2.wvw import WvwMixin, match_summary
 
 DATA_DIR = pathlib.Path(__file__).resolve().parent.parent / "gw2bot" / "data"
 UTC = datetime.timezone.utc
@@ -58,6 +56,7 @@ def _fake_bot(session=None, users=None):
     bot.user.name = "GW2Bot"
     bot.gamedata = _GAMEDATA
     bot.instabilities = _INSTABILITIES
+    bot.session = session
     bot.gw2api = _client(session) if session is not None else None
     if users is not None:
         bot.data.users = users
@@ -73,8 +72,6 @@ class _Harness(
     DatabaseMixin,
     EventsMixin,
     MiscMixin,
-    SkillsMixin,
-    WvwMixin,
 ):
     """Just enough of the cog's state for its non-Discord logic to run."""
 
@@ -159,7 +156,44 @@ def earned_ap(achievement, progress):
 
 def skill_fields(skill):
     """List of (field, value) shown for a skill's facts."""
-    return [(f["field"], f.get("value")) for f in _Harness().get_skill_fields(skill)]
+    from gw2bot.cogs.skills import skill_fields
+
+    return [(f["field"], f.get("value")) for f in skill_fields(skill)]
+
+
+async def skill_command(command, *, skills=(), traits=(), pages=(), wiki_error=None, **options):
+    """Run /skill or /trait with the cached `skills` and `traits`; `pages`
+    are the wiki pages that exist, and wiki_error ("timeout" or
+    "connection") makes the wiki unreachable. Returns (what was sent, wiki
+    URLs checked)."""
+    import aiohttp
+
+    head_error = {None: None, "timeout": asyncio.TimeoutError(), "connection": aiohttp.ClientConnectionError()}[
+        wiki_error
+    ]
+    from gw2bot.cogs.skills import Skills
+
+    handler = {"skill": Skills.skillinfo, "trait": Skills.traitinfo}[command]
+    sessions = []
+
+    def cog_for(session, users):
+        sessions.append(session)
+        cog = Skills(_fake_bot(session, users))
+        cog.db = gw2_db(skills=skills, traits=traits)
+        return cog
+
+    sent, _ = await run_command(cog_for, handler, [], permissions=(), pages=pages, head_error=head_error, **options)
+    return sent, sessions[0].heads
+
+
+async def skill_search(command, text, *, skills=(), traits=()):
+    """The /skill or /trait autocomplete choices for `text`, as (name, value)."""
+    from gw2bot.cogs.skills import Skills
+
+    cog = Skills(_fake_bot())
+    cog.db = gw2_db(skills=skills, traits=traits)
+    autocomplete = {"skill": cog.skill_autocomplete, "trait": cog.trait_autocomplete}[command]
+    return [(c.name, c.value) for c in await autocomplete(MagicMock(), text)]
 
 
 # --- Dailies (all evaluated as of noon UTC on `date`) ----------------------
@@ -216,17 +250,34 @@ def cm_instabilities(date):
 # --- WvW --------------------------------------------------------------------
 
 def wvw_match_summary(match, team_id):
+    from gw2bot.cogs.wvw import match_summary
+
     return match_summary(match, team_id)
 
 
 def find_wvw_team(team):
-    return _Harness().find_team(team)
+    from gw2bot.cogs.wvw import find_team
+
+    return find_team(_GAMEDATA, team)
 
 
 def wvw_team_choices(current):
     """[(name, value)] offered by the team autocomplete."""
-    choices = asyncio.run(_Harness().team_autocomplete(None, current))
+    from gw2bot.cogs.wvw import Wvw
+
+    choices = asyncio.run(Wvw(_fake_bot()).team_autocomplete(None, current))
     return [(c.name, c.value) for c in choices]
+
+
+async def wvw_info(responses, *, permissions=("account",), **options):
+    """Run /wvw info; `responses`: account (without a team option), then
+    wvw/matches."""
+    from gw2bot.cogs.wvw import Wvw
+
+    def cog_for(session, users):
+        return Wvw(_fake_bot(session, users))
+
+    return await run_command(cog_for, Wvw.wvw_info, responses, permissions=permissions, **options)
 
 
 # --- Event timers ----------------------------------------------------------
@@ -341,10 +392,17 @@ class FakeSession:
     exception to raise; a str body is a non-JSON page. The last response
     repeats once the queue is exhausted. Records requests as (url, query
     params, headers) and retry waits in `delays`.
+
+    HEAD requests (the bot checking a wiki page exists) are 200 for the
+    URLs in `pages`, else 404, and recorded in `heads`; `head_error` (an
+    exception) makes them all fail.
     """
 
-    def __init__(self, *responses):
+    def __init__(self, *responses, pages=(), head_error=None):
         self.responses = list(responses)
+        self.pages = set(pages)
+        self.head_error = head_error
+        self.heads = []
         self.requests = []
         self.delays = []
         self.in_flight = 0
@@ -357,6 +415,12 @@ class FakeSession:
             return FakeFailure(response)
         status, body, *rest = response
         return FakeResponse(self, status, body, rest[0] if rest else {})
+
+    def head(self, url, **kwargs):
+        self.heads.append(url)
+        if self.head_error:
+            return FakeFailure(self.head_error)
+        return FakeResponse(self, 200 if url in self.pages else 404, None, {})
 
 
 async def api_get(session, endpoint, key=None, schema=None):
@@ -460,7 +524,7 @@ async def render_build(session, specializations, skills):
 
     from PIL import ImageFont
 
-    from gw2bot.cogs.guildwars2.skills import Build
+    from gw2bot.cogs.guildwars2.chatlinks import Build
 
     cog = SimpleNamespace(
         session=session,
@@ -609,9 +673,9 @@ class SettingsCommands:
 
         from gw2bot.cogs.guildwars2.evtc import EvtcMixin
         from gw2bot.cogs.guildwars2.guildmanage import GuildManageMixin
-        from gw2bot.cogs.guildwars2.skills import SkillsMixin
+        from gw2bot.cogs.guildwars2.chatlinks import ChatLinksMixin
 
-        class Cog(GuildManageMixin, SkillsMixin, EvtcMixin):
+        class Cog(GuildManageMixin, ChatLinksMixin, EvtcMixin):
             pass
 
         self.cog = Cog()
@@ -744,7 +808,8 @@ def stored_key(permissions, account_name="Example.1234"):
     return {"key": key, "keys": [key]}
 
 
-async def run_command(cog_for, command, responses, *, permissions, users=None, **options):
+async def run_command(cog_for, command, responses, *, permissions, users=None, pages=(), head_error=None,
+                      **options):
     """Run a slash command's handler with a fake interaction.
 
     cog_for(session, users) builds the cog; `responses` are the API
@@ -752,11 +817,12 @@ async def run_command(cog_for, command, responses, *, permissions, users=None, *
     repository (default: one user with a key with `permissions`). Returns
     (what was sent, API requests). What was sent is the reply's embed as a
     dict, or its content if there's no embed: the followup's if the command
-    deferred, else the direct response's.
+    deferred, else the direct response's. `pages` are the wiki pages that
+    exist, and `head_error` makes checking them fail (see FakeSession).
     """
     from unittest.mock import AsyncMock
 
-    session = FakeSession(*responses)
+    session = FakeSession(*responses, pages=pages, head_error=head_error)
     users = users or FakeUserRepo(stored_key(permissions))
     cog = cog_for(session, users)
     interaction = MagicMock()
@@ -819,8 +885,8 @@ async def wizards_vault(daily, weekly, special, *, wallet=None, now, permissions
 
 
 class MemoryItems:
-    """In-memory stand-in for the items cache: find_one by _id, and find
-    with a regex on name plus an optional $nin on flags (item searches)."""
+    """In-memory stand-in for a game data cache: find_one by _id, and find
+    with a regex on name plus $nin / $ne conditions (searches)."""
 
     def __init__(self, docs=()):
         self.docs = {doc["_id"]: doc for doc in docs}
@@ -830,10 +896,16 @@ class MemoryItems:
 
     def find(self, query):
         def matches(doc):
-            if "name" in query and not query["name"].search(doc["name"]):
-                return False
-            excluded = query.get("flags", {}).get("$nin", [])
-            return not set(doc.get("flags", [])) & set(excluded)
+            for field, condition in query.items():
+                value = doc.get(field)
+                if field == "name":
+                    if not condition.search(value):
+                        return False
+                elif "$nin" in condition and set(value or []) & set(condition["$nin"]):
+                    return False
+                elif "$ne" in condition and value == condition["$ne"]:
+                    return False
+            return True
 
         found = [doc for doc in self.docs.values() if matches(doc)]
 

@@ -1,6 +1,9 @@
+"""WvW commands: /wvw info."""
 import discord
 from discord import app_commands
 from discord.app_commands import Choice
+
+from .base import GW2Cog
 
 # First /v2/account schema with the `wvw` object (team_id, rank)
 WVW_ACCOUNT_SCHEMA = "2024-07-20T01:00:00.000Z"
@@ -33,34 +36,37 @@ def match_summary(match, team_id):
     }
 
 
-class WvwMixin:
+def team_name(gamedata, team_id):
+    return gamedata["wvw_teams"].get(str(team_id), f"Team {team_id}")
+
+
+def team_region(team_id):
+    return "NA" if str(team_id).startswith("11") else "EU"
+
+
+def find_team(gamedata, team):
+    """Team id from an autocomplete value or a typed team name."""
+    if team.isdigit():
+        return int(team)
+    for team_id, name in gamedata["wvw_teams"].items():
+        if name.lower() == team.strip().lower():
+            return int(team_id)
+    return None
+
+
+class Wvw(GW2Cog):
 
     wvw_group = app_commands.Group(name="wvw",
                                    description="WvW related commands")
-
-    def get_team_name(self, team_id):
-        return self.gamedata["wvw_teams"].get(str(team_id), f"Team {team_id}")
-
-    def team_region(self, team_id):
-        return "NA" if str(team_id).startswith("11") else "EU"
 
     async def team_autocomplete(self, interaction: discord.Interaction,
                                 current: str):
         current = current.lower()
         return [
-            Choice(name=f"{name} ({self.team_region(team_id)})", value=team_id)
+            Choice(name=f"{name} ({team_region(team_id)})", value=team_id)
             for team_id, name in self.gamedata["wvw_teams"].items()
             if current in name.lower()
         ][:25]
-
-    def find_team(self, team):
-        """Team id from an autocomplete value or a typed team name."""
-        if team.isdigit():
-            return int(team)
-        for team_id, name in self.gamedata["wvw_teams"].items():
-            if name.lower() == team.strip().lower():
-                return int(team_id)
-        return None
 
     @wvw_group.command(name="info")
     @app_commands.describe(
@@ -83,7 +89,7 @@ class WvwMixin:
                     "Your account isn't on a WvW team right now. Use the "
                     "`team` option to look up a team.")
         else:
-            team_id = self.find_team(team)
+            team_id = find_team(self.gamedata, team)
             if not team_id:
                 return await interaction.followup.send("Invalid team name")
         match = await self.call_api(f"wvw/matches?world={team_id}")
@@ -107,8 +113,12 @@ class WvwMixin:
         matchup = []
         for side in "red", "blue", "green":
             names = ", ".join(
-                self.get_team_name(t) for t in summary["teams"].get(side, []))
+                team_name(self.gamedata, t) for t in summary["teams"].get(side, []))
             matchup.append(f"{side.title()}: {names or '-'}")
         data.add_field(name="Matchup", value="\n".join(matchup), inline=False)
-        data.set_author(name=self.get_team_name(team_id))
+        data.set_author(name=team_name(self.gamedata, team_id))
         await interaction.followup.send(embed=data)
+
+
+async def setup(bot):
+    await bot.add_cog(Wvw(bot))
