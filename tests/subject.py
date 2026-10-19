@@ -16,6 +16,7 @@ from unittest.mock import MagicMock
 import time_machine
 
 from gw2bot.cogs.base import GW2Cog
+from gw2bot.cogs.guildwars2.account import AccountMixin
 from gw2bot.cogs.guildwars2.characters import CharactersMixin
 from gw2bot.cogs.guildwars2 import daily
 from gw2bot.cogs.guildwars2.daily import DailyMixin
@@ -24,6 +25,7 @@ from gw2bot.cogs.guildwars2.events import EventsMixin
 from gw2bot.cogs.guildwars2.misc import MiscMixin
 from gw2bot.cogs.guildwars2.skills import SkillsMixin
 from gw2bot.utils import chat, db
+from gw2bot.cogs.guildwars2.wallet import WalletMixin
 from gw2bot.cogs.guildwars2.wvw import WvwMixin, match_summary
 
 DATA_DIR = pathlib.Path(__file__).resolve().parent.parent / "gw2bot" / "data"
@@ -68,6 +70,8 @@ def _fake_bot(session=None, users=None):
 
 class _Harness(
     GW2Cog,
+    AccountMixin,
+    WalletMixin,
     CharactersMixin,
     DailyMixin,
     DatabaseMixin,
@@ -907,3 +911,30 @@ async def achievement_search(text, db):
     cog.db = db
     choices = await Achievements.achievement_autocomplete(cog, MagicMock(), text)
     return [(c.name, c.value) for c in choices]
+
+
+# Every currency and item id /wallet's overview shows
+WALLET_CURRENCY_IDS = [1, 4, 2, 3, 18, 23, 16, 50, 47, 43, 40, 41, 37, 42, 38, 44, 49, 51, 32, 45, 25, 27,
+                       19, 22, 20, 29, 34, 35, 15, 26, 31, 36, 65, 33, 69, 7, 24, 59, 28, 70, 58, 60,
+                       61, 66, 64, 67, 68, 71, 62, 63, 72, 73, 75, 53, 55, 57, 54]
+WALLET_ITEM_IDS = [79280, 79469, 79899, 80332, 81127, 81706, 86069, 86977, 87645, 88955, 89537, 90783,
+                   92072, 92272, 46682, 70820, 71581]
+
+
+async def wallet(responses, *, currencies, items, permissions=("account", "wallet", "inventories", "characters"),
+                 random_value=0.5, **options):
+    """Run /wallet. `responses`: account/wallet, then (for the overview)
+    account/bank, account/inventory, account/materials and characters.
+    random_value stands in for random.random() (the overview's
+    occasional joke title)."""
+    from unittest.mock import patch
+
+    from gw2bot.cogs.guildwars2.wallet import WalletMixin
+
+    def cog_for(session, users):
+        cog = _Harness(session, users)
+        cog.db = gw2_db(currencies=currencies, items=items)
+        return cog
+
+    with patch("random.random", return_value=random_value):
+        return await run_command(cog_for, WalletMixin.wallet, responses, permissions=permissions, **options)
