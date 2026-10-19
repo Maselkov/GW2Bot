@@ -8,7 +8,6 @@ from ..base import GW2Cog
 from .chatlinks import ChatLinksMixin
 from .database import DatabaseMixin
 from .emojis import EmojiMixin
-from .events import EventsMixin, EventTimerReminderUnsubscribeView
 from .evtc import EvtcMixin
 from .guild import GuildSync
 from .guild.sync import GuildSyncPromptUserConfirmView
@@ -21,7 +20,6 @@ class GuildWars2(
     ChatLinksMixin,
     DatabaseMixin,
     EmojiMixin,
-    EventsMixin,
     EvtcMixin,
     GuildSync,
     GuildManageMixin,
@@ -33,7 +31,6 @@ class GuildWars2(
     def __init__(self, bot):
         super().__init__(bot)
         self.session = bot.session
-        self.boss_schedule = self.generate_schedule()
         self.log = logging.getLogger(__name__)
         self.tasks = []
         self.waiting_for = []
@@ -43,9 +40,7 @@ class GuildWars2(
             self.news_checker,
             self.gem_tracker,
             self.guild_synchronizer,
-            self.boss_notifier,
             self.forced_account_names,
-            self.event_reminder_task,
             self.post_evtc_notifications,
             self.key_sync_task,
         ]
@@ -54,7 +49,6 @@ class GuildWars2(
 
     async def cog_load(self):
         await self.prepare_linkpreview_guild_cache()
-        self.bot.add_view(EventTimerReminderUnsubscribeView(self))
         self.bot.add_view(GuildSyncPromptUserConfirmView(self))
 
     async def cog_unload(self):

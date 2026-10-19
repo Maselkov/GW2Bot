@@ -1,12 +1,21 @@
+"""Event timers: /et, /reminder event and its reminders, and the boss notifier."""
 import asyncio
 import datetime
+import logging
 
 import discord
 from discord import app_commands
 from discord.app_commands import Choice
 from discord.ext import tasks
 
+from .base import GW2Cog
+
 UTC_TZ = datetime.timezone.utc
+
+
+def naive_utcnow():
+    """The time in UTC, naive like the dates MongoDB returns."""
+    return datetime.datetime.now(UTC_TZ).replace(tzinfo=None)
 
 ET_CATEGORIES = [{
     "value": "hot",
@@ -60,7 +69,26 @@ class EventTimerReminderUnsubscribeView(discord.ui.View):
                                                 ephemeral=True)
 
 
-class EventsMixin:
+class Events(GW2Cog):
+
+    reminder_group = app_commands.Group(
+        name="reminder", description="Commands for setting various personal reminders."
+    )
+
+    def __init__(self, bot):
+        super().__init__(bot)
+        self.log = logging.getLogger(__name__)
+        self.boss_schedule = self.generate_schedule()
+
+    async def cog_load(self):
+        # Reminder DMs' Unsubscribe buttons keep working across restarts
+        self.bot.add_view(EventTimerReminderUnsubscribeView(self))
+        self.event_reminder_task.start()
+        self.boss_notifier.start()
+
+    async def cog_unload(self):
+        self.event_reminder_task.cancel()
+        self.boss_notifier.cancel()
 
     @app_commands.command()
     @app_commands.describe(category="Event timer category")
@@ -72,88 +100,6 @@ class EventsMixin:
         else:
             embed = await self.timer_embed(interaction, category)
         await interaction.response.send_message(embed=embed)
-
-    async def et_reminder_settings_menu(self, ctx):
-        # Unimplemented. Should get around to it sometime.
-        user = ctx.author
-        embed_templates = [
-            {
-                "setting":
-                "online_only",
-                "title":
-                "Online only",
-                "description":
-                "Enable to have reminders sent only when you're online on Discord",
-                "footer":
-                "Note that the bot can't distinguish whether you're invisible or offline",
-            },
-            {
-                "setting":
-                "ingame_only",
-                "title":
-                "Ingame only",
-                "description":
-                "Enable to have reminders sent only while you're in game",
-                "footer":
-                "This works based off your Discord game status. Make sure to enable it",
-            },
-        ]
-        doc = await self.bot.data.users.get(user.id)
-        doc = doc.get("et_reminder_settings", {})
-        settings = [t["setting"] for t in embed_templates]
-        settings = {s: doc.get(s, False) for s in settings}
-        messages = []
-        reactions = {"✔": True, "❌": False}
-        to_cleanup = [
-            await user.send("Use reactions below to configure reminders")
-        ]
-
-        def setting_embed(template):
-            enabled = "enabled" if settings[
-                template["setting"]] else "disabled"
-            description = (f"**{template['description']}**\n"
-                           f"Current state: **{enabled}**")
-            embed = discord.Embed(title=template["title"],
-                                  description=description,
-                                  color=self.embed_color)
-            if template["footer"]:
-                embed.set_footer(text=template["footer"])
-            return embed
-
-        for template in embed_templates:
-            embed = setting_embed(template)
-            msg = await user.send(embed=embed)
-            messages.append({"message": msg, "setting": template["setting"]})
-            to_cleanup.append(msg)
-            for reaction in reactions:
-                asyncio.create_task(msg.add_reaction(reaction))
-
-        def check(r, u):
-            if not isinstance(r.emoji, str):
-                return False
-            if u != user:
-                return False
-            return r.emoji in reactions and r.message.id in [
-                m["message"].id for m in messages
-            ]
-
-        while True:
-            try:
-                reaction, _ = await self.bot.wait_for("reaction_add",
-                                                      check=check,
-                                                      timeout=120)
-            except asyncio.TimeoutError:
-                break
-            setting = next(m["setting"] for m in messages
-                           if m["message"].id == reaction.message.id)
-            settings[setting] = reactions[reaction.emoji]
-            template = next(t for t in embed_templates
-                            if t["setting"] == setting)
-            embed = setting_embed(template)
-            asyncio.create_task(reaction.message.edit(embed=embed))
-            await self.bot.data.users.update(user.id, {"et_reminder_settings": settings})
-        for message in to_cleanup:
-            asyncio.create_task(message.delete())
 
     def generate_schedule(self):
         now = datetime.datetime.now(UTC_TZ)
@@ -296,18 +242,6 @@ class EventsMixin:
                          icon_url=self.bot.user.display_avatar.url)
         return embed
 
-    async def get_timezone(self, guild):
-        if not guild:
-            return UTC_TZ
-        doc = await self.bot.data.guilds.get(guild.id)
-        if not doc:
-            return UTC_TZ
-        tz = doc.get("timezone")
-        if tz:
-            offset = datetime.timedelta(hours=tz)
-            tz = datetime.timezone(offset)
-        return tz or UTC_TZ
-
     def get_time_until_event(self, reminder):
         """Seconds until the reminder's event, or None if it isn't in the
         schedule (e.g. renamed in the game data since)."""
@@ -328,7 +262,7 @@ class EventsMixin:
                                 boss_time -
                                 datetime.datetime.now(UTC_TZ)).total_seconds())
                 day += 1
-        time = datetime.datetime.utcnow()
+        time = datetime.datetime.now(UTC_TZ)
         position = (60 * time.hour + time.minute) % 120
         for location in self.gamedata["event_timers"][reminder["group"]]:
             if location["name"] == reminder["map_name"]:
@@ -366,7 +300,7 @@ class EventsMixin:
         if time < reminder["time"] + 30:
             last_reminded = reminder.get("last_reminded")
             if (last_reminded and
-                (datetime.datetime.utcnow() - last_reminded).total_seconds()
+                (naive_utcnow() - last_reminded.replace(tzinfo=None)).total_seconds()
                     < reminder["time"] + 120):
                 return
             try:
@@ -413,3 +347,137 @@ class EventsMixin:
     @event_reminder_task.before_loop
     async def before_event_reminder_task(self):
         await self.bot.wait_until_ready()
+
+    async def event_name_autocomplete(self, interaction: discord.Interaction, current):
+        if not current:
+            return []
+        current = current.lower()
+        names = set()
+        timers = self.gamedata["event_timers"]
+        for category in timers:
+            if category == "bosses":
+                subtypes = "normal", "hardcore"
+                for subtype in subtypes:
+                    for boss in timers[category][subtype]:
+                        name = boss["name"]
+                        if current in name.lower():
+                            names.add(Choice(name=name, value=name))
+            else:
+                for subcategory in timers[category]:
+                    map_name = subcategory["name"]
+                    for event in subcategory["phases"]:
+                        if event["name"]:
+                            name = f"{map_name} - {event['name']}"
+                            if current in name.lower():
+                                names.add(Choice(name=name, value=event["name"]))
+        return sorted(list(names)[:25], key=lambda c: c.name)
+
+    @reminder_group.command(name="event")
+    @app_commands.describe(
+        event_name="Event name. Examples: Shadow Behemoth. Gerent Preparation",
+        minutes_before_event="The number of minutes before "
+        "the event that you'll be notified at",
+    )
+    @app_commands.autocomplete(event_name=event_name_autocomplete)
+    async def reminder_event(
+        self,
+        interaction: discord.Interaction,
+        event_name: str,
+        minutes_before_event: int = 5,
+    ):
+        """Make the bot automatically notify you before an event starts"""
+        if minutes_before_event < 0:
+            return await interaction.response.send_message(
+                "That's not how time works!", ephemeral=True
+            )
+        if minutes_before_event > 60:
+            return await interaction.response.send_message(
+                "Time can't be greater than one hour", ephemeral=True
+            )
+        event_name = event_name.lower()
+        reminder = {}
+        for boss in self.boss_schedule:
+            if boss["name"].lower() == event_name:
+                reminder["type"] = "boss"
+                reminder["name"] = boss["name"]
+        if not reminder:
+            # Every map event group the timers have (all but world bosses)
+            groups = [g for g in self.gamedata["event_timers"] if g != "bosses"]
+            for group in groups:
+                maps = self.gamedata["event_timers"][group]
+                for location in maps:
+                    for phase in location["phases"]:
+                        if not phase["name"]:
+                            continue
+                        if phase["name"].lower() == event_name:
+                            reminder["type"] = "phase"
+                            reminder["name"] = phase["name"]
+                            reminder["group"] = group
+                            reminder["map_name"] = location["name"]
+        if not reminder:
+            return await interaction.response.send_message(
+                "No event found matching that name", ephemeral=True
+            )
+        reminder["time"] = minutes_before_event * 60
+        await self.bot.data.users.update(
+            interaction.user.id, {"event_reminders": reminder}, op="push"
+        )
+        await interaction.response.send_message(
+            "Reminder set succesfully", ephemeral=True
+        )
+
+    @tasks.loop(minutes=5)
+    async def boss_notifier(self):
+        boss = self.get_upcoming_bosses(1)[0]
+        await asyncio.sleep(boss["diff"].total_seconds() + 1)
+        cursor = self.bot.data.guilds.find({"bossnotifs.on": True, "bossnotifs.channel": {"$ne": None}})
+        async for doc in cursor:
+            try:
+                doc = doc["bossnotifs"]
+                edit = doc.get("edit", False)
+                channel = self.bot.get_channel(doc["channel"])
+                embed = self.schedule_embed(2)
+                old_message_id = doc.get("message")
+                edited = False
+                try:
+                    if edit and old_message_id:
+                        try:
+                            old_message = await channel.fetch_message(old_message_id)
+                            await old_message.edit(embed=embed)
+                            edited = True
+                            continue
+                        except discord.NotFound:
+                            # Deleted: post a new one to edit from now on
+                            old_message_id = None
+                        except discord.HTTPException:
+                            pass
+                    message = await channel.send(embed=embed)
+                except discord.Forbidden:
+                    message = await channel.send(
+                        "Need permission to "
+                        "embed links in order "
+                        "to send boss "
+                        "notifs!"
+                    )
+                    continue
+                if not edited:
+                    await self.bot.data.guilds.update(channel.guild.id, {"bossnotifs.message": message.id})
+                    if old_message_id:
+                        try:
+                            to_delete = await channel.fetch_message(old_message_id)
+                            await to_delete.delete()
+                        except discord.HTTPException:
+                            pass
+            except asyncio.CancelledError:
+                return
+            except Exception:
+                pass
+            await asyncio.sleep(0.1)
+
+    @boss_notifier.before_loop
+    async def before_boss_notifier(self):
+        await self.bot.wait_until_ready()
+
+
+async def setup(bot):
+    await bot.add_cog(Events(bot))
