@@ -113,15 +113,24 @@ async def test_trait_autocomplete():
 # --- Not found ---------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="replies with a followup before deferring")
 async def test_skill_not_found():
     sent, heads = await subject.skill_command("skill", skills=SKILLS, skill="Anvil")
     assert sent == "Could not find any skills with that name."
     assert heads == []
 
 
-@pytest.mark.xfail(strict=True, reason="crashes on an id that isn't cached")
 @pytest.mark.parametrize("command", ["skill", "trait"])
 async def test_unknown_id(command):
     sent, _ = await subject.skill_command(command, skills=SKILLS, traits=TRAITS, **{command: "123456"})
     assert sent == f"Could not find any {command}s with that name."
+
+
+# --- The wiki ----------------------------------------------------------------
+
+
+@pytest.mark.parametrize("error", ["timeout", "connection"])
+async def test_skill_without_the_wiki(error):
+    embed, heads = await subject.skill_command("skill", skills=SKILLS, wiki_error=error, skill="5501")
+    assert embed["title"] == "Meteor Shower"
+    assert "url" not in embed
+    assert heads == [WIKI + "Meteor_Shower"]

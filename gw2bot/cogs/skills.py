@@ -253,23 +253,6 @@ def skill_fields(skill):
                 }
             )
             continue
-        if fact_type == "Buff":
-            count = fact.get("apply_count")
-            if not count:
-                fields.append(
-                    {
-                        "field": "{status}".format(**fact),
-                        "value": "Condition Removed",
-                    }
-                )
-                continue
-            fields.append(
-                {
-                    "field": "{} {status}({duration}s)".format(count, **fact),
-                    "value": fact["description"],
-                }
-            )
-            continue
         if fact_type == "Number":
             fields.append({"field": text, "value": str(fact["value"])})
             continue
@@ -344,6 +327,7 @@ class Skills(GW2Cog):
     @app_commands.autocomplete(skill=skill_autocomplete)
     async def skillinfo(self, interaction: discord.Interaction, skill: str):
         """Information about a given skill"""
+        await interaction.response.defer()
         try:
             skill_id = int(skill)
         except ValueError:
@@ -354,8 +338,10 @@ class Skills(GW2Cog):
                 return await interaction.followup.send(
                     "Could not find any skills with that name."
                 )
-        await interaction.response.defer()
         choice = await self.db.skills.find_one({"_id": skill_id})
+        if not choice:
+            return await interaction.followup.send(
+                "Could not find any skills with that name.")
         data = await skill_embed(self, choice, interaction)
         await interaction.followup.send(embed=data)
 
@@ -376,6 +362,9 @@ class Skills(GW2Cog):
                     "Could not find any traits with that name."
                 )
         choice = await self.db.traits.find_one({"_id": trait_id})
+        if not choice:
+            return await interaction.followup.send(
+                "Could not find any traits with that name.")
         data = await skill_embed(self, choice, interaction)
         await interaction.followup.send(embed=data)
 

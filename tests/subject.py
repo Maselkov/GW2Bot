@@ -161,9 +161,16 @@ def skill_fields(skill):
     return [(f["field"], f.get("value")) for f in skill_fields(skill)]
 
 
-async def skill_command(command, *, skills=(), traits=(), pages=(), **options):
+async def skill_command(command, *, skills=(), traits=(), pages=(), wiki_error=None, **options):
     """Run /skill or /trait with the cached `skills` and `traits`; `pages`
-    are the wiki pages that exist. Returns (what was sent, wiki URLs checked)."""
+    are the wiki pages that exist, and wiki_error ("timeout" or
+    "connection") makes the wiki unreachable. Returns (what was sent, wiki
+    URLs checked)."""
+    import aiohttp
+
+    head_error = {None: None, "timeout": asyncio.TimeoutError(), "connection": aiohttp.ClientConnectionError()}[
+        wiki_error
+    ]
     from gw2bot.cogs.skills import Skills
 
     handler = {"skill": Skills.skillinfo, "trait": Skills.traitinfo}[command]
@@ -175,7 +182,7 @@ async def skill_command(command, *, skills=(), traits=(), pages=(), **options):
         cog.db = gw2_db(skills=skills, traits=traits)
         return cog
 
-    sent, _ = await run_command(cog_for, handler, [], permissions=(), pages=pages, **options)
+    sent, _ = await run_command(cog_for, handler, [], permissions=(), pages=pages, head_error=head_error, **options)
     return sent, sessions[0].heads
 
 
@@ -387,12 +394,14 @@ class FakeSession:
     params, headers) and retry waits in `delays`.
 
     HEAD requests (the bot checking a wiki page exists) are 200 for the
-    URLs in `pages`, else 404, and recorded in `heads`.
+    URLs in `pages`, else 404, and recorded in `heads`; `head_error` (an
+    exception) makes them all fail.
     """
 
-    def __init__(self, *responses, pages=()):
+    def __init__(self, *responses, pages=(), head_error=None):
         self.responses = list(responses)
         self.pages = set(pages)
+        self.head_error = head_error
         self.heads = []
         self.requests = []
         self.delays = []
@@ -409,6 +418,8 @@ class FakeSession:
 
     def head(self, url, **kwargs):
         self.heads.append(url)
+        if self.head_error:
+            return FakeFailure(self.head_error)
         return FakeResponse(self, 200 if url in self.pages else 404, None, {})
 
 
@@ -797,7 +808,8 @@ def stored_key(permissions, account_name="Example.1234"):
     return {"key": key, "keys": [key]}
 
 
-async def run_command(cog_for, command, responses, *, permissions, users=None, pages=(), **options):
+async def run_command(cog_for, command, responses, *, permissions, users=None, pages=(), head_error=None,
+                      **options):
     """Run a slash command's handler with a fake interaction.
 
     cog_for(session, users) builds the cog; `responses` are the API
@@ -806,11 +818,11 @@ async def run_command(cog_for, command, responses, *, permissions, users=None, p
     (what was sent, API requests). What was sent is the reply's embed as a
     dict, or its content if there's no embed: the followup's if the command
     deferred, else the direct response's. `pages` are the wiki pages that
-    exist (see FakeSession).
+    exist, and `head_error` makes checking them fail (see FakeSession).
     """
     from unittest.mock import AsyncMock
 
-    session = FakeSession(*responses, pages=pages)
+    session = FakeSession(*responses, pages=pages, head_error=head_error)
     users = users or FakeUserRepo(stored_key(permissions))
     cog = cog_for(session, users)
     interaction = MagicMock()
