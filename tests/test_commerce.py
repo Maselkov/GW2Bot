@@ -173,3 +173,26 @@ async def test_gem_track_rejects_out_of_range():
     sent, _ = await subject.commerce("gem_track", [], users=users, gold=501)
     assert sent == "Invalid value. Gold may be between 0 and 500"
     assert users.writes == []
+
+
+# --- Fixes ---------------------------------------------------------------------------
+
+
+async def test_gem_price_rejects_tiny_quantities():
+    sent, requests = await subject.commerce("gem_price", [], quantity=1)
+    assert sent == "Quantity must be higher than 1"
+    assert requests == []
+
+
+async def test_items_without_listings_keep_the_others_right():
+    # The API leaves out items without listings, e.g. a sell order that
+    # filled between the two requests
+    sells = [
+        {"id": 1, "item_id": 24615, "price": 250000, "quantity": 1},
+        {"id": 2, "item_id": 19721, "price": 1500, "quantity": 5},
+    ]
+    embed, _ = await subject.commerce("tp_selling", [(200, sells), (200, LISTINGS[:1])], items=ITEMS)
+    assert fields(embed) == [
+        ("Superior Sigil of Force", "1 x 25 gold "),
+        ("Glob of Ectoplasm", "5 x 15 silver  - Total: 75 silver \nMax. offer: 14 silver  · Undercuts: 13"),
+    ]

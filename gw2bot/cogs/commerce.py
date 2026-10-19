@@ -71,12 +71,9 @@ class Commerce(GW2Cog):
         data.set_footer(text="Black Lion Trading Company")
         results = results[:20]  # Only display 20 most recent transactions
         item_id = ""
-        dup_item = {}
         # Collect listed items
         for result in results:
             item_id += str(result["item_id"]) + ","
-            if result["item_id"] not in dup_item:
-                dup_item[result["item_id"]] = len(dup_item)
         # Get information about all items, doesn't matter if string ends with ,
         endpoint_listing = "commerce/listings?ids={0}".format(str(item_id))
         # Call API once for all items
@@ -86,28 +83,26 @@ class Commerce(GW2Cog):
             await interaction.followup.send("You don't have any ongoing "
                                             "transactions")
             return None
+        # By id: items without listings are left out of the response
+        listings = {listing["id"]: listing for listing in listings}
         for result in results:
-            index = dup_item[result["item_id"]]
             price = result["price"]
             itemdoc = await self.fetch_item(result["item_id"])
             quantity = result["quantity"]
             item_name = itemdoc["name"]
-            offers = listings[index][state]
-            max_price = offers[0]["unit_price"]
-            count = undercuts(offers, price, state)
-            undercut_text = "· Undercuts: {}".format(count) if count else ""
+            offers = listings.get(result["item_id"], {}).get(state)
             if quantity == 1:
                 total = ""
             else:
                 total = " - Total: " + self.gold_to_coins(
                     interaction, quantity * price)
-            data.add_field(name=item_name,
-                           value="{} x {}{}\nMax. offer: {} {}".format(
-                               quantity,
-                               self.gold_to_coins(interaction, price), total,
-                               self.gold_to_coins(interaction,
-                                                  max_price), undercut_text),
-                           inline=False)
+            value = "{} x {}{}".format(quantity, self.gold_to_coins(interaction, price), total)
+            if offers:
+                count = undercuts(offers, price, state)
+                undercut_text = "· Undercuts: {}".format(count) if count else ""
+                value += "\nMax. offer: {} {}".format(
+                    self.gold_to_coins(interaction, offers[0]["unit_price"]), undercut_text)
+            data.add_field(name=item_name, value=value, inline=False)
         return data
 
     async def tp_autocomplete(self, interaction: discord.Interaction,
@@ -221,8 +216,8 @@ class Commerce(GW2Cog):
                         quantity: int = 400):
         """Lists current gold/gem exchange prices."""
         if quantity <= 1:
-            return await interaction.followup.send(
-                "Quantity must be higher than 1")
+            return await interaction.response.send_message(
+                "Quantity must be higher than 1", ephemeral=True)
         await interaction.response.defer()
         gems_cost = await gem_price(self.api, quantity)
         gems_buy = await coin_price(self.api, quantity)
