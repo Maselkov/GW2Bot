@@ -76,3 +76,32 @@ async def test_repeatable_achievement_is_capped():
 async def test_achievement_autocomplete():
     assert await subject.achievement_search("chick", db()) == [("Playing Chicken", "1")]
     assert await subject.achievement_search("", db()) == []
+
+
+# --- Fixes ---------------------------------------------------------------------------
+
+
+async def test_name_typed_without_picking_from_the_list():
+    progress = {"id": 1, "current": 2, "max": 3, "done": False, "bits": []}
+    embed, _ = await subject.achievement([(200, progress)], "playing chicken", db=db())
+    assert embed["title"] == "Playing Chicken"
+
+
+async def test_unknown_achievement():
+    sent, requests = await subject.achievement([], "no such thing", db=db())
+    assert sent == "No achievement found matching `no such thing`."
+    assert requests == []
+    sent, _ = await subject.achievement([], "999", db=db())
+    assert sent == "No achievement found matching `999`."
+
+
+async def test_objectives_and_rewards_missing_from_the_cache():
+    progress = {"id": 1, "current": 2, "max": 3, "done": False, "bits": []}
+    empty_cache = subject.gw2_db(achievements=[CHICKEN], items=[], minis=[], skins=[], titles=[])
+    embed, _ = await subject.achievement([(200, progress)], "1", db=empty_cache)
+    assert fields(embed)[1] == (
+        "Objectives (1/1)", "```diff\n-✖Race A\n-✖Unknown item\n-✖Unknown miniature\n-✖Unknown skin\n```"
+    )
+    assert fields(embed)[2] == (
+        "Rewards", "1 gold 23 silver 45 copper \n2 Unknown item\nTyria Mastery Point\nTitle: "
+    )

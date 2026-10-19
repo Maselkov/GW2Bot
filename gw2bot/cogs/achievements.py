@@ -96,11 +96,13 @@ class Achievements(GW2Cog):
         """Display achievement information and your completion status"""
         user = interaction.user
         await interaction.response.defer()
-        choice = await self.db.achievements.find_one(
-            {"_id": int(achievement_name)})
+        choice = await self.find_achievement(achievement_name)
+        if not choice:
+            return await interaction.followup.send(
+                f"No achievement found matching `{achievement_name}`.")
         try:
             doc = await self.fetch_key(user, ["progression"])
-            endpoint = "account/achievements?id=" + achievement_name
+            endpoint = "account/achievements?id={}".format(choice["_id"])
             results = await self.call_api(endpoint, key=doc["key"])
         except APINotFound:
             results = {}
@@ -108,6 +110,15 @@ class Achievements(GW2Cog):
         embed.set_author(name=doc["account_name"],
                          icon_url=user.display_avatar.url)
         await interaction.followup.send(embed=embed)
+
+    async def find_achievement(self, name):
+        """The cached achievement with this id (as picked from the
+        autocomplete), or else the first whose name starts with `name`."""
+        if name.isdigit():
+            return await self.db.achievements.find_one({"_id": int(name)})
+        async for ach in self.db.achievements.find({"name": prepare_search(name)}).limit(1):
+            return ach
+        return None
 
     async def ach_embed(self, ctx, res, ach):
         description = cleanup_xml_tags(ach["description"])
@@ -141,13 +152,13 @@ class Achievements(GW2Cog):
                     text = bit["text"]
                 elif bit["type"] == "Item":
                     doc = await self.fetch_item(bit["id"])
-                    text = doc["name"]
+                    text = doc["name"] if doc else "Unknown item"
                 elif bit["type"] == "Minipet":
                     doc = await self.db.minis.find_one({"_id": bit["id"]})
-                    text = doc["name"]
+                    text = doc["name"] if doc else "Unknown miniature"
                 elif bit["type"] == "Skin":
                     doc = await self.db.skins.find_one({"_id": bit["id"]})
-                    text = doc["name"]
+                    text = doc["name"] if doc else "Unknown skin"
                 prefix = "+✔" if completed or i in completed_bits else "-✖"
                 lines.append(prefix + text)
             number_of_fields = math.ceil(len(lines) / 10)
@@ -166,7 +177,7 @@ class Achievements(GW2Cog):
                 elif rew["type"] == "Item":
                     doc = await self.fetch_item(rew["id"])
                     cnt = str(rew["count"]) + " " if rew["count"] > 1 else ""
-                    reward = cnt + doc["name"]
+                    reward = cnt + (doc["name"] if doc else "Unknown item")
                 elif rew["type"] == "Mastery":
                     reward = rew["region"] + " Mastery Point"
                 elif rew["type"] == "Title":
