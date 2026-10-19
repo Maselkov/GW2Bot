@@ -114,3 +114,17 @@ def test_extremes_ties_go_to_the_first_listed():
     stats = {"professions": {"thief": games(1, 1), "ranger": games(1, 1)}}
     top = subject.pvp_extremes(stats, ["ranger", "thief"])
     assert {k: v[0] for k, v in top.items()} == dict.fromkeys(top, "ranger")
+
+
+# --- Accounts that haven't played -------------------------------------------------
+
+
+async def test_professions_without_any_games():
+    stats = {**STATS, "professions": {}}
+    sent, _ = await subject.pvp("professions", stats)
+    assert sent == "You haven't played any PvP games yet."
+
+
+async def test_profession_never_played():
+    sent, _ = await subject.pvp("professions", STATS, profession="revenant")
+    assert sent == "You haven't played Revenant in PvP yet."
