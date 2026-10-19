@@ -155,3 +155,14 @@ async def test_bot_client_against_live_api(client):
     assert worlds
     with pytest.raises(APINotFound):
         await api.get("items/999999999")
+
+
+async def test_kp_achievements_exist(client, gamedata):
+    from test_gamedata import kp_achievement_ids
+
+    ids = sorted(kp_achievement_ids(gamedata))
+    found = set()
+    for start in range(0, len(ids), 200):
+        chunk = ",".join(map(str, ids[start:start + 200]))
+        found |= {a["id"] for a in await get(client, f"achievements?ids={chunk}")}
+    assert not set(ids) - found, "unknown achievement ids in killproofs"
