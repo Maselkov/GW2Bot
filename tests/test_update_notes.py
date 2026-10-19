@@ -3,7 +3,7 @@ import datetime
 import email.utils
 
 import subject
-from gw2bot.cogs.guildwars2 import update_notes
+from gw2bot.utils import update_notes
 
 FEED_URL = update_notes.FEED_URL
 TOPIC_URL = "https://en-forum.guildwars2.com/topic/1-game-update-notes-october-13-2026/"

@@ -201,7 +201,23 @@ class GuildManageMixin:
             return
 
     @key_sync_task.before_loop
-    async def before_forced_account_names(self):
+    async def before_key_sync_task(self):
+        await self.bot.wait_until_ready()
+
+    @tasks.loop(minutes=5)
+    async def forced_account_names(self):
+        cursor = self.bot.data.guilds.find({"force_account_names": True})
+        async for doc in cursor:
+            try:
+                guild = self.bot.get_guild(doc["_id"])
+                await self.force_guild_account_names(guild)
+            except asyncio.CancelledError:
+                return
+            except Exception:
+                pass
+
+    @forced_account_names.before_loop
+    async def before_forced_account_names_loop(self):
         await self.bot.wait_until_ready()
 
     async def force_guild_account_names(self, guild):
