@@ -1,9 +1,11 @@
+"""/wizardsvault: the account's Wizard's Vault objectives."""
 import datetime
 
 import discord
 from discord import app_commands
 
-from .utils.chat import embed_list_lines
+from .base import GW2Cog
+from .guildwars2.utils.chat import embed_list_lines
 
 ASTRAL_ACCLAIM = 63
 WEEKLY_RESET = datetime.timedelta(hours=7, minutes=30)  # Mondays, UTC
@@ -51,7 +53,7 @@ def next_weekly_reset(now):
     return reset
 
 
-class WizardsVaultMixin:
+class WizardsVault(GW2Cog):
 
     @app_commands.command(name="wizardsvault")
     async def wizards_vault(self, interaction: discord.Interaction):
@@ -96,3 +98,7 @@ class WizardsVaultMixin:
         embed.set_footer(text="AA = Astral Acclaim",
                          icon_url=self.bot.user.display_avatar.url)
         await interaction.followup.send(embed=embed)
+
+
+async def setup(bot):
+    await bot.add_cog(WizardsVault(bot))

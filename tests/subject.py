@@ -790,3 +790,18 @@ def pvp_extremes(stats, professions):
     from gw2bot.cogs.pvp import extremes, profession_records
 
     return extremes(profession_records(stats, professions))
+
+
+async def wizards_vault(daily, weekly, special, *, wallet=None, now, permissions=("account", "progression")):
+    """Run /wizardsvault at `now`; `wallet` is served if the key has the
+    wallet permission."""
+    responses = [(200, daily), (200, weekly), (200, special)]
+    if "wallet" in permissions:
+        responses.append((200, wallet or []))
+    from gw2bot.cogs.wizardsvault import WizardsVault
+
+    def cog_for(session, users):
+        return WizardsVault(_fake_bot(session, users))
+
+    with _at(now):
+        return await run_command(cog_for, WizardsVault.wizards_vault, responses, permissions=permissions)
