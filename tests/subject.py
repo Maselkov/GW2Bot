@@ -1192,6 +1192,7 @@ class MemoryUsers:
 
     async def update(self, user_id, fields, op="set"):
         self.writes.append((user_id, op, fields))
+        return SimpleNamespace(modified_count=1)
 
     async def find(self, query):
         """By account name ({"$or": [{"key.account_name": name}, ...]}), or
@@ -1207,7 +1208,9 @@ class MemoryUsers:
         for user_id, doc in list(self.docs.items()):
             def matches(field, condition):
                 if isinstance(condition, dict):
-                    return doc.get(field) != condition["$ne"]
+                    if condition.get("$exists") and field not in doc:
+                        return False
+                    return "$ne" not in condition or doc.get(field) != condition["$ne"]
                 return doc.get(field) == condition
 
             if all(matches(f, c) for f, c in query.items()):
@@ -1780,3 +1783,134 @@ async def notifier_daily(*, choose=None, enabled=True, already_enabled=False, **
         edit = interactions[0].edit_original_response.await_args
         final.append((edit.kwargs.get("content"), None) if edit else None)
     return sent, final[0] if final else None, guilds.writes
+
+
+
+# --- Event timers and reminders -------------------------------------------------
+
+def _events_cog(session=None, users=None):
+    cog = _Harness(session, users)
+    cog.boss_schedule = cog.generate_schedule()
+    return cog
+
+
+class RecordingChannel:
+    """A channel, or a user's DMs: messages it sends are recorded in
+    `sent` as (content, embed dict or None, view), and what happens to them
+    in `edited` / `deleted` (message ids). Message ids start at 1001;
+    `existing` are ids of messages already there."""
+
+    def __init__(self, channel_id=5, guild_id=10, *, existing=(), can_send=True, can_embed=True):
+        import discord
+
+        self.id = channel_id
+        self.guild = MagicMock(id=guild_id)
+        self.can_send, self.can_embed = can_send, can_embed
+        self.sent, self.edited, self.deleted = [], [], []
+        self.messages = {message_id: self._message(message_id) for message_id in existing}
+        self._discord = discord
+
+    def permissions_for(self, member):
+        return SimpleNamespace(send_messages=self.can_send, embed_links=self.can_embed, read_message_history=True)
+
+    def _message(self, message_id):
+        import datetime as dt
+        from unittest.mock import AsyncMock
+
+        message = MagicMock(id=message_id, created_at=dt.datetime(2024, 3, 6, 12, tzinfo=UTC))
+
+        async def edit(**kwargs):
+            self.edited.append(message_id)
+
+        async def delete():
+            self.deleted.append(message_id)
+            del self.messages[message_id]
+
+        message.edit = AsyncMock(side_effect=edit)
+        message.delete = AsyncMock(side_effect=delete)
+        return message
+
+    async def send(self, content=None, *, embed=None, view=None, **kwargs):
+        forbidden = self._discord.Forbidden(MagicMock(status=403), "Missing Permissions")
+        if not self.can_send or (embed and not self.can_embed):
+            raise forbidden
+        message = self._message(1001 + len(self.sent))
+        self.messages[message.id] = message
+        self.sent.append((content, embed.to_dict() if embed else None, view))
+        return message
+
+    async def fetch_message(self, message_id):
+        if message_id not in self.messages:
+            raise self._discord.NotFound(MagicMock(status=404), "Unknown Message")
+        return self.messages[message_id]
+
+
+async def run_reminder(reminder, now, *, existing=()):
+    """process_reminder for user 1's first reminder at `now`. Returns (the
+    user's DMs as a RecordingChannel, users' settings writes)."""
+    dms = RecordingChannel(existing=existing)
+    dms.mention = "<@1>"
+    users = MemoryUsers({1: {"event_reminders": [reminder]}})
+    with _at(now):
+        cog = _events_cog(users=users)
+        await cog.process_reminder(SimpleNamespace(id=1, send=dms.send, fetch_message=dms.fetch_message),
+                                   dict(reminder), 0)
+    return dms, users.writes
+
+
+async def press_unsubscribe(message_id):
+    """Press a reminder DM's Unsubscribe button. Returns (reply, settings
+    writes, whether the DM was deleted)."""
+    from unittest.mock import AsyncMock
+
+    from gw2bot.cogs.guildwars2.events import EventTimerReminderUnsubscribeView
+
+    users = MemoryUsers({1: {}})
+    cog = _events_cog(users=users)
+    view = EventTimerReminderUnsubscribeView(cog)
+    interaction = MagicMock()
+    interaction.user.id = 1
+    interaction.message.id = message_id
+    interaction.message.delete = AsyncMock()
+    interaction.response.send_message = AsyncMock()
+    button = next(item for item in view.children if item.custom_id == "et:unsubscribe")
+    await button.callback(interaction)
+    return (interaction.response.send_message.await_args.args[0], users.writes,
+            interaction.message.delete.await_count == 1)
+
+
+async def run_boss_notifier(servers, channels, now):
+    """One boss notifier run at `now` (the run first sleeps until the next
+    boss; that sleep is skipped). `servers` are settings by server id,
+    `channels` RecordingChannels. Returns server settings writes."""
+    from unittest.mock import patch
+
+    guilds = MemoryGuilds(servers)
+    with _at(now):
+        cog = _events_cog()
+        from gw2bot.cogs.guildwars2.notifiers import NotiifiersMixin
+
+        class Cog(NotiifiersMixin, _Harness):
+            pass
+
+        notifier = Cog()
+        notifier.boss_schedule = cog.boss_schedule
+        notifier.bot.data.guilds = guilds
+        notifier.bot.get_channel = {c.id: c for c in channels}.get
+
+        async def no_sleep(delay):
+            pass
+
+        with patch.object(asyncio, "sleep", no_sleep):
+            await type(notifier).boss_notifier.coro(notifier)
+    return guilds.writes
+
+
+async def et_command(category, now):
+    """Run /et at `now`; returns the embed."""
+    from gw2bot.cogs.guildwars2.events import EventsMixin
+
+    with _at(now):
+        sent, _ = await run_command(lambda session, users: _events_cog(session, users), EventsMixin.et, [],
+                                    permissions=(), category=category)
+    return sent
