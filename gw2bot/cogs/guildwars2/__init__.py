@@ -8,6 +8,7 @@ from ...errors import error_message
 from ..base import GW2Cog
 from .account import AccountMixin
 from .characters import CharactersMixin
+from .chatlinks import ChatLinksMixin
 from .daily import DailyMixin
 from .database import DatabaseMixin
 from .emojis import EmojiMixin
@@ -19,13 +20,12 @@ from .guildmanage import GuildManageMixin
 from .key import KeyMixin
 from .misc import MiscMixin
 from .notifiers import NotiifiersMixin
-from .skills import SkillsMixin
-from .wvw import WvwMixin
 
 class GuildWars2(
     GW2Cog,
     AccountMixin,
     CharactersMixin,
+    ChatLinksMixin,
     DailyMixin,
     DatabaseMixin,
     EmojiMixin,
@@ -36,8 +36,6 @@ class GuildWars2(
     KeyMixin,
     MiscMixin,
     NotiifiersMixin,
-    SkillsMixin,
-    WvwMixin,
 ):
     """Guild Wars 2 commands"""
 

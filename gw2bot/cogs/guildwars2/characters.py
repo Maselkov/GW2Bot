@@ -2,7 +2,6 @@ import asyncio
 import collections
 import copy
 import datetime
-import hashlib
 import re
 
 import discord
@@ -13,18 +12,12 @@ from discord.ext import commands
 from . import guild
 
 from .exceptions import APIError, APINotFound
-from .skills import Build
+from gw2bot.utils.wiki import profession_icon_url
+
+from .chatlinks import Build
 from gw2bot.utils.chat import embed_list_lines, zero_width_space
 
 LETTERS = ["🇦", "🇧", "🇨", "🇩", "🇪", "🇫", "🇬", "🇭", "🇮", "🇯"]
-
-
-def profession_icon_url(name):
-    """Wiki URL of the tango icon for a profession or elite specialization."""
-    filename = name.title().replace(" ", "_") + "_tango_icon_200px.png"
-    digest = hashlib.md5(filename.encode()).hexdigest()
-    return ("https://wiki.guildwars2.com/images/"
-            f"{digest[0]}/{digest[:2]}/{filename}")
 
 
 class CharacterGearDropdown(discord.ui.Select):

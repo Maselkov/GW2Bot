@@ -17,7 +17,7 @@ API = "https://api.guildwars2.com/v2/"
 KEY = os.environ.get("GW2_API_KEY")
 needs_key = pytest.mark.skipif(not KEY, reason="GW2_API_KEY not set")
 
-# Fact types SkillsMixin.get_skill_fields knows how to order; any other type
+# Fact types skills.skill_fields knows how to order; any other type
 # makes it raise ValueError.
 KNOWN_FACT_TYPES = {
     "Recharge", "ResourceCost", "Damage", "Percent", "AttributeAdjust",

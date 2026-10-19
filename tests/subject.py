@@ -22,9 +22,7 @@ from gw2bot.cogs.guildwars2.daily import DailyMixin
 from gw2bot.cogs.guildwars2.database import DatabaseMixin
 from gw2bot.cogs.guildwars2.events import EventsMixin
 from gw2bot.cogs.guildwars2.misc import MiscMixin
-from gw2bot.cogs.guildwars2.skills import SkillsMixin
 from gw2bot.utils import chat, db
-from gw2bot.cogs.guildwars2.wvw import WvwMixin, match_summary
 
 DATA_DIR = pathlib.Path(__file__).resolve().parent.parent / "gw2bot" / "data"
 UTC = datetime.timezone.utc
@@ -74,8 +72,6 @@ class _Harness(
     DatabaseMixin,
     EventsMixin,
     MiscMixin,
-    SkillsMixin,
-    WvwMixin,
 ):
     """Just enough of the cog's state for its non-Discord logic to run."""
 
@@ -160,18 +156,22 @@ def earned_ap(achievement, progress):
 
 def skill_fields(skill):
     """List of (field, value) shown for a skill's facts."""
-    return [(f["field"], f.get("value")) for f in _Harness().get_skill_fields(skill)]
+    from gw2bot.cogs.skills import skill_fields
+
+    return [(f["field"], f.get("value")) for f in skill_fields(skill)]
 
 
 async def skill_command(command, *, skills=(), traits=(), pages=(), **options):
     """Run /skill or /trait with the cached `skills` and `traits`; `pages`
     are the wiki pages that exist. Returns (what was sent, wiki URLs checked)."""
-    handler = {"skill": SkillsMixin.skillinfo, "trait": SkillsMixin.traitinfo}[command]
+    from gw2bot.cogs.skills import Skills
+
+    handler = {"skill": Skills.skillinfo, "trait": Skills.traitinfo}[command]
     sessions = []
 
     def cog_for(session, users):
         sessions.append(session)
-        cog = _Harness(session, users)
+        cog = Skills(_fake_bot(session, users))
         cog.db = gw2_db(skills=skills, traits=traits)
         return cog
 
@@ -181,7 +181,9 @@ async def skill_command(command, *, skills=(), traits=(), pages=(), **options):
 
 async def skill_search(command, text, *, skills=(), traits=()):
     """The /skill or /trait autocomplete choices for `text`, as (name, value)."""
-    cog = _Harness()
+    from gw2bot.cogs.skills import Skills
+
+    cog = Skills(_fake_bot())
     cog.db = gw2_db(skills=skills, traits=traits)
     autocomplete = {"skill": cog.skill_autocomplete, "trait": cog.trait_autocomplete}[command]
     return [(c.name, c.value) for c in await autocomplete(MagicMock(), text)]
@@ -241,26 +243,34 @@ def cm_instabilities(date):
 # --- WvW --------------------------------------------------------------------
 
 def wvw_match_summary(match, team_id):
+    from gw2bot.cogs.wvw import match_summary
+
     return match_summary(match, team_id)
 
 
 def find_wvw_team(team):
-    return _Harness().find_team(team)
+    from gw2bot.cogs.wvw import find_team
+
+    return find_team(_GAMEDATA, team)
 
 
 def wvw_team_choices(current):
     """[(name, value)] offered by the team autocomplete."""
-    choices = asyncio.run(_Harness().team_autocomplete(None, current))
+    from gw2bot.cogs.wvw import Wvw
+
+    choices = asyncio.run(Wvw(_fake_bot()).team_autocomplete(None, current))
     return [(c.name, c.value) for c in choices]
 
 
 async def wvw_info(responses, *, permissions=("account",), **options):
     """Run /wvw info; `responses`: account (without a team option), then
     wvw/matches."""
-    def cog_for(session, users):
-        return _Harness(session, users)
+    from gw2bot.cogs.wvw import Wvw
 
-    return await run_command(cog_for, WvwMixin.wvw_info, responses, permissions=permissions, **options)
+    def cog_for(session, users):
+        return Wvw(_fake_bot(session, users))
+
+    return await run_command(cog_for, Wvw.wvw_info, responses, permissions=permissions, **options)
 
 
 # --- Event timers ----------------------------------------------------------
@@ -503,7 +513,7 @@ async def render_build(session, specializations, skills):
 
     from PIL import ImageFont
 
-    from gw2bot.cogs.guildwars2.skills import Build
+    from gw2bot.cogs.guildwars2.chatlinks import Build
 
     cog = SimpleNamespace(
         session=session,
@@ -652,9 +662,9 @@ class SettingsCommands:
 
         from gw2bot.cogs.guildwars2.evtc import EvtcMixin
         from gw2bot.cogs.guildwars2.guildmanage import GuildManageMixin
-        from gw2bot.cogs.guildwars2.skills import SkillsMixin
+        from gw2bot.cogs.guildwars2.chatlinks import ChatLinksMixin
 
-        class Cog(GuildManageMixin, SkillsMixin, EvtcMixin):
+        class Cog(GuildManageMixin, ChatLinksMixin, EvtcMixin):
             pass
 
         self.cog = Cog()

@@ -14,7 +14,7 @@ from ..achievements import account_ap, total_possible_ap
 from .exceptions import APIError, APINotFound
 from gw2bot.utils.chat import embed_list_lines
 from gw2bot.utils.db import prepare_search
-from .wvw import WVW_ACCOUNT_SCHEMA
+from ..wvw import WVW_ACCOUNT_SCHEMA, team_name
 
 
 class AccountMixin:
@@ -39,7 +39,7 @@ class AccountMixin:
         wvw = results.get("wvw", {})
         if wvw.get("team_id"):
             embed.add_field(name="WvW team",
-                            value=self.get_team_name(wvw["team_id"]))
+                            value=team_name(self.gamedata, wvw["team_id"]))
         if "progression" in doc["permissions"]:
             endpoints = ["account/achievements", "account"]
             achievements, account = await self.call_multiple(
