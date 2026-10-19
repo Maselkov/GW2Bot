@@ -211,3 +211,51 @@ async def test_rune_healing_power():
 async def test_equipment_missing_from_the_cache_is_skipped():
     panel = await attributes([{"id": 999, "slot": "Helm"}])
     assert panel == naked()
+
+
+# --- Critical chance below level 80, sigils ---------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "level, precision, expected",
+    [
+        # 5% plus (Precision - the level's base) / the level's Precision per 1%:
+        # 1.1 at level 1, up by 0.1 a level to 20, 0.2 to 40, 0.3 to 60, 0.4 to 80
+        (1, 0, "5%"),
+        (2, 2, "6.67%"),  # the wiki's example: 46 Precision, 1.2 per 1%
+        (40, 0, "5%"),
+        (40, 20, "7.86%"),
+        (61, 27, "7.01%"),
+        (80, 21, "6%"),
+    ],
+)
+async def test_critical_chance_by_level(level, precision, expected):
+    helm = {"id": 100, "slot": "Helm", "stats": {"id": 1, "attributes": {"Precision": precision}}}
+    panel = await attributes([helm], level=level)
+    assert panel["Critical Chance"] == expected
+
+
+async def test_sigil_critical_chance():
+    weapon = item(300, item_type="Weapon")
+    accuracy = sigil(24618, "+7% Critical Chance")
+    panel = await attributes([{"id": 300, "slot": "WeaponA1", "upgrades": [24618]}], [weapon, accuracy])
+    assert panel["Critical Chance"] == "12%"
+
+
+async def test_sigil_damage_multipliers_are_not_attributes():
+    weapon = item(300, item_type="Weapon")
+    bursting = sigil(44944, "+5% Condition Damage")
+    force = sigil(24615, "+5% Damage")
+    panel = await attributes([{"id": 300, "slot": "WeaponA1", "upgrades": [44944, 24615]}],
+                             [weapon, bursting, force])
+    assert panel == naked()
+
+
+async def test_identical_sigils_dont_stack():
+    weapons = [item(300, item_type="Weapon"), item(301, item_type="Weapon")]
+    malice = sigil(600, "+10% Condition Duration")
+    accuracy = sigil(24618, "+7% Critical Chance")
+    equipment = [{"id": 300, "slot": "WeaponA1", "upgrades": [600, 24618]},
+                 {"id": 301, "slot": "WeaponA2", "upgrades": [600, 24618]}]
+    panel = await attributes(equipment, [*weapons, malice, accuracy])
+    assert (panel["Condition Duration"], panel["Critical Chance"]) == ("10%", "12%")

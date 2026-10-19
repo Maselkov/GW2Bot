@@ -172,6 +172,14 @@ def utcnow():
     return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
 
 
+def precision_per_critical_chance(level):
+    """Precision for 1% critical chance at `level`: 1.1 at level 1, rising
+    by 0.1 a level to 20, 0.2 to 40, 0.3 to 60 and 0.4 to 80 (21)."""
+    steps = (0.1 if lvl <= 20 else 0.2 if lvl <= 40 else 0.3 if lvl <= 60
+             else 0.4 for lvl in range(1, level + 1))
+    return round(1 + sum(steps), 1)
+
+
 def readable_attribute(attribute_name):
     """An API attribute name as the game shows it ("CritDamage" is
     "Critical Damage")."""
@@ -766,6 +774,9 @@ class Characters(GW2Cog):
         ]
         attr_dict = {key: 0 for (key) in attr_list}
         runes = {}
+        # Identical sigils don't stack
+        sigils = set()
+        sigil_critical_chance = 0
         level = character["level"]
         for piece in eq:
             # Without its document, only selectable stats are known
@@ -824,6 +835,9 @@ class Characters(GW2Cog):
                             else:
                                 runes[upgrade] = 1
                         elif item_upgrade["details"]["type"] == "Sigil":
+                            if upgrade in sigils:
+                                continue
+                            sigils.add(upgrade)
                             pattern_percentage = re.compile(r"^\+\d{1,}% ")
                             bonus = item_upgrade["details"]["infix_upgrade"][
                                 "buff"]["description"]
@@ -844,7 +858,9 @@ class Characters(GW2Cog):
                                     '^.* ', '', attribute_name)
                                 attribute_name = re.sub(
                                     r'\.', '', attribute_name)
-                                if attribute_name in attr_dict:
+                                if attribute_name == "CriticalChance":
+                                    sigil_critical_chance += int(modifier)
+                                elif attribute_name in attr_dict:
                                     attr_dict[attribute_name] += int(modifier)
             # Infusions
             if "infusions" in piece:
@@ -935,12 +951,10 @@ class Characters(GW2Cog):
                 attr_dict["ConditionDuration"])
         # Base value of 1000 on lvl 80 doesn't get calculated,
         # if below lvl 80 dont subtract it
-        if attr_dict["Precision"] < 1000:
-            base_prec = 0
-        else:
-            base_prec = 1000
+        # 5% at the level's base Precision
         attr_dict["Critical Chance"] = round(
-            5 + ((attr_dict["Precision"] - base_prec) / 21), 2)
+            5 + (attr_dict["Precision"] - basevalue) /
+            precision_per_critical_chance(level) + sigil_critical_chance, 2)
         attr_dict["defense"] += attr_dict["Toughness"]
 
         # Calculate base health
