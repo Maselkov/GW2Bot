@@ -1,14 +1,44 @@
+"""Miscellaneous commands: /wiki and /chatcode."""
 import codecs
 import struct
 
 import discord
 from bs4 import BeautifulSoup
-from gw2bot.utils.db import prepare_search
 from discord import app_commands
 from discord.app_commands import Choice
 
+from gw2bot.utils.db import prepare_search
 
-class MiscMixin:
+from .base import GW2Cog
+
+
+def generate_chat_code(item_id, count, skin_id, upgrades):
+    """An item chat link (https://wiki.guildwars2.com/wiki/Chat_link_format)."""
+
+    def little_endian(_id):
+        return [int(x) for x in struct.pack("<i", _id)]
+
+    def upgrade_flag():
+        flag = 0
+        if skin_id:
+            flag |= 0x80
+        if len(upgrades) >= 1:
+            flag |= 0x40
+        if len(upgrades) >= 2:
+            flag |= 0x20
+        return flag
+
+    link = [2, count]
+    link.extend(little_endian(item_id))
+    link = link[:5]
+    link.append(upgrade_flag())
+    for x in filter(None, (skin_id, *upgrades)):
+        link.extend(little_endian(x))
+    output = codecs.encode(bytes(link), 'base64').decode('utf-8')
+    return "[&{}]".format(output.strip())
+
+
+class Misc(GW2Cog):
 
     @app_commands.command()
     @app_commands.describe(
@@ -50,7 +80,7 @@ class MiscMixin:
         # given the lack of any other verification, I don't think it's anything too bad.
         # That being said, if anyone takes an issue with this, I will contact the wiki
         # and get an exemption for GW2bot too.
-        async with self.session.get(url, headers=headers) as r:
+        async with self.bot.session.get(url, headers=headers) as r:
             if r.history:  # Redirected
                 embed = await self.search_results_embed(interaction,
                                                         "Wiki",
@@ -169,32 +199,11 @@ class MiscMixin:
             upgrades.append(upgrade_1)
         if upgrade_2:
             upgrades.append(upgrade_2)
-        chat_code = self.generate_chat_code(item, quantity, skin, upgrades)
+        chat_code = generate_chat_code(item, quantity, skin, upgrades)
         output = "Here's your chatcode. No refunds. ```\n{}```".format(
             chat_code)
         await interaction.response.send_message(output, ephemeral=True)
 
-    def generate_chat_code(self, item_id, count, skin_id, upgrades):
 
-        def little_endian(_id):
-            return [int(x) for x in struct.pack("<i", _id)]
-
-        def upgrade_flag():
-            # https://wiki.guildwars2.com/wiki/Chat_link_format
-            flag = 0
-            if skin_id:
-                flag |= 0x80
-            if len(upgrades) >= 1:
-                flag |= 0x40
-            if len(upgrades) >= 2:
-                flag |= 0x20
-            return flag
-
-        link = [2, count]
-        link.extend(little_endian(item_id))
-        link = link[:5]
-        link.append(upgrade_flag())
-        for x in filter(None, (skin_id, *upgrades)):
-            link.extend(little_endian(x))
-        output = codecs.encode(bytes(link), 'base64').decode('utf-8')
-        return "[&{}]".format(output.strip())
+async def setup(bot):
+    await bot.add_cog(Misc(bot))

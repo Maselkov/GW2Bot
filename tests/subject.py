@@ -20,7 +20,6 @@ from gw2bot.cogs.guildwars2 import daily
 from gw2bot.cogs.guildwars2.daily import DailyMixin
 from gw2bot.cogs.guildwars2.database import DatabaseMixin
 from gw2bot.cogs.guildwars2.events import EventsMixin
-from gw2bot.cogs.guildwars2.misc import MiscMixin
 from gw2bot.utils import chat, db
 
 DATA_DIR = pathlib.Path(__file__).resolve().parent.parent / "gw2bot" / "data"
@@ -69,7 +68,6 @@ class _Harness(
     DailyMixin,
     DatabaseMixin,
     EventsMixin,
-    MiscMixin,
 ):
     """Just enough of the cog's state for its non-Discord logic to run."""
 
@@ -89,7 +87,9 @@ def _at(when):
 # --- Items and coins -------------------------------------------------------
 
 def chat_code(item_id, count=1, skin_id=None, upgrades=()):
-    return _Harness().generate_chat_code(item_id, count, skin_id, list(upgrades))
+    from gw2bot.cogs.misc import generate_chat_code
+
+    return generate_chat_code(item_id, count, skin_id, list(upgrades))
 
 
 def format_coins(copper):
@@ -1276,30 +1276,32 @@ class FakeWikiSession:
 
 
 def _misc_cog(session=None, users=None, items=(), skins=()):
-    cog = _Harness(session, users)
+    from gw2bot.cogs.misc import Misc
+
+    cog = Misc(_fake_bot(session, users))
     cog.db = gw2_db(items=items, skins=skins)
     return cog
 
 
 async def wiki(wiki_session, **options):
     """Run /wiki. Returns (what was sent, (url, headers) requested)."""
-    from gw2bot.cogs.guildwars2.misc import MiscMixin
+    from gw2bot.cogs.misc import Misc
 
     def cog_for(session, users):
         cog = _misc_cog(session, users)
-        cog.session = cog.bot.session = wiki_session
+        cog.bot.session = wiki_session
         return cog
 
-    sent, _ = await run_command(cog_for, MiscMixin.wiki, [], permissions=(), **options)
+    sent, _ = await run_command(cog_for, Misc.wiki, [], permissions=(), **options)
     return sent, wiki_session.requests
 
 
 async def chatcode(*, items=(), skins=(), **options):
     """Run /chatcode with the cached `items` and `skins`; returns its reply."""
-    from gw2bot.cogs.guildwars2.misc import MiscMixin
+    from gw2bot.cogs.misc import Misc
 
     sent, _ = await run_command(lambda session, users: _misc_cog(session, users, items, skins),
-                                MiscMixin.chatcode, [], permissions=(), **options)
+                                Misc.chatcode, [], permissions=(), **options)
     return sent
 
 

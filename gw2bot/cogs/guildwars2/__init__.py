@@ -15,7 +15,6 @@ from .guild import GuildSync
 from .guild.sync import GuildSyncPromptUserConfirmView
 from .guildmanage import GuildManageMixin
 from .key import KeyMixin
-from .misc import MiscMixin
 from .notifiers import NotiifiersMixin
 
 class GuildWars2(
@@ -29,7 +28,6 @@ class GuildWars2(
     GuildSync,
     GuildManageMixin,
     KeyMixin,
-    MiscMixin,
     NotiifiersMixin,
 ):
     """Guild Wars 2 commands"""
