@@ -309,7 +309,12 @@ class EventsMixin:
         return tz or UTC_TZ
 
     def get_time_until_event(self, reminder):
+        """Seconds until the reminder's event, or None if it isn't in the
+        schedule (e.g. renamed in the game data since)."""
         if reminder["type"] == "boss":
+            if not any(boss["name"] == reminder["name"]
+                       for boss in self.boss_schedule):
+                return None
             time = datetime.datetime.now(UTC_TZ)
             day = 0
             done = False
@@ -356,7 +361,8 @@ class EventsMixin:
     # TODO
     async def process_reminder(self, user, reminder, i):
         time = self.get_time_until_event(reminder)
-
+        if time is None:
+            return
         if time < reminder["time"] + 30:
             last_reminded = reminder.get("last_reminded")
             if (last_reminded and
