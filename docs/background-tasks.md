@@ -36,17 +36,17 @@ A behaviour that changes on purpose is called out in the PR. Anything else that 
 
 | Section | Trigger | Writes | Messages | Worst known issue |
 |---|---|---|---|---|
-| [Daily notifier](#daily-notifier) | 23:40 UTC daily; dailies refresh every 15 min | `daily.message`, dailies cache | channel posts, pins | Autopin only works with "edit" |
-| [Event reminders](#event-reminders) | every 10 s | `event_reminders` | DMs | A stale boss reminder freezes the bot |
+| [Daily notifier](#daily-notifier) | 23:40 UTC daily; dailies refresh every 15 min | `daily.message`, dailies cache | channel posts, pins | `/notifier daily` times out with an error |
+| [Event reminders](#event-reminders) | every 10 s | `event_reminders` | DMs | Users with closed DMs are retried forever |
 | [Boss notifier](#boss-notifier) | before each world boss | `bossnotifs.message` | channel posts | Failures are silent |
 | [Chat link previews](#chat-link-previews) | every message | `statistics.link_previews` | replies | Undecodable links raise in `finally` |
-| [News](#news) | every 3 min | `cache.news`, `news.on` | channel posts | A non-XML feed response stops the loop |
-| [Game updates](#game-updates) | every 1 min | `cache.build`, game data caches, `updates` | channel posts | Missing config stops the loop |
-| [Gem tracker](#gem-tracker) | every 5 min | `gemtrack` | DMs | One API error stops the loop |
+| [News](#news) | every 3 min | `cache.news`, `news.on` | channel posts | Items whose title changes are posted again |
+| [Game updates](#game-updates) | every 1 min | `cache.build`, game data caches, `updates` | channel posts | The rebuild runs inside the loop |
+| [Gem tracker](#gem-tracker) | every 5 min | `gemtrack` | DMs | Undeliverable users are retried forever |
 | [EVTC autopost](#evtc-autopost-and-uploads) | every 5 s; uploads on message | `evtc.notifications`, `encounters` | channel posts | "name#0" in footers |
-| [API key role](#api-key-role-and-key) | every 5 min; `/key add` | member roles | — | Can't be disabled without picking a role |
+| [API key role](#api-key-role-and-key) | every 5 min; `/key add` | member roles | — | `/key remove` for legacy users |
 | [Forced account names](#forced-account-names) | every 5 min | member nicknames | — | Failures are silent |
-| [Guild sync](#guild-sync) | every 60 s; member join | roles, kicks, `guildsyncs` | DMs, prompts | **Purge kicks everyone when the API fails** |
+| [Guild sync](#guild-sync) | every 60 s; member join | roles, kicks, `guildsyncs` | DMs, prompts | Heavy: a database read per member per minute |
 
 ## Daily notifier
 
@@ -69,16 +69,14 @@ Set up with `/notifier daily` (channel, categories dropdown, pin, behaviour: non
   - **Autopin:** pins, deletes the bot's "pinned a message" notice, and unpins the previous message.
 - **Errors.** The loop's error handler logs and restarts it. Each server's task swallows its own errors.
 - **Known issues.**
-  - **Autopin pins the wrong message.** After posting a new message it pins `old_message`. That's `None`
-    without a behaviour (nothing pinned) and already deleted with autodelete (nothing pinned). It only works with
-    autoedit.
+  - *Fixed:* autopin pinned the previous message instead of a newly posted one, so it only worked with autoedit.
   - The per-server tasks are untracked (see Shared facts).
   - `/notifier daily` waits 60 s for the dropdown, then calls `followup.edit_message` without a message id, which
     fails.
 - **Tests.**
-  - Existing: rotation, categories and the embed (`test_logic.py`).
-  - To write: a run against fake servers covering each behaviour (none, autodelete, autoedit with and without the
-    old message) and autopin, missing permissions, and the cache refresh failing.
+  - Existing: rotation, categories and the embed (`test_logic.py`); each behaviour and autopin
+    (`test_daily_notifier.py`).
+  - To write: missing permissions, and the cache refresh failing.
 
 ## Event reminders
 
@@ -96,22 +94,16 @@ Set up with `/notifier daily` (channel, categories dropdown, pin, behaviour: non
   reminder whose `last_message` is this message, and deletes the DM if one was removed.
 - **Errors.** Per-user errors are swallowed. A DM that fails to send is skipped and retried 10 s later.
 - **Known issues.**
-  - **A boss reminder whose name isn't in the schedule freezes the whole bot.** The `while not done` loop in
-    `get_time_until_event` never ends and never awaits, and the boss notifier is affected too. Reminders store
-    the boss name from the game data, so renaming or removing a boss there triggers it 10 s after startup.
-  - **SotO events can't be reminded.** The autocomplete offers them, but `reminder_event` only searches hot,
-    pof, day, ibs and eod, so they get "No event found matching that name".
+  - *Fixed:* a boss reminder whose name isn't in the schedule froze the whole bot, because
+    `get_time_until_event` searched forever without awaiting. It now returns None, and the reminder is skipped.
+  - *Fixed:* SotO events couldn't be reminded. `reminder_event` now searches every map event group.
   - Reminders saved by index (`event_reminders.{i}`) can overwrite the wrong one if the list changed meanwhile
     (an unsubscribe from another reminder's DM).
   - Users with closed DMs are retried every 10 s, forever.
 - **Tests.**
-  - Existing: event timing (`test_logic.py`: upcoming bosses, time until a boss or phase).
-  - To write:
-    - when a reminder fires and when it's held back;
-    - the DM and its saved fields;
-    - Unsubscribe;
-    - SotO reminders (xfail);
-    - a boss name missing from the schedule, run with a timeout (xfail).
+  - Existing: event timing (`test_logic.py`); `/reminder event` for each kind of event, and a boss missing from
+    the schedule (`test_event_reminders.py`).
+  - To write: when a reminder fires and when it's held back, the DM and its saved fields, and Unsubscribe.
 
 ## Boss notifier
 
@@ -170,13 +162,11 @@ Set up with `/notifier daily` (channel, categories dropdown, pin, behaviour: non
     it).
   - **No permission** (`Forbidden`): turns `news.on` off. Other errors are logged.
 - **Known issues.**
-  - **A feed response that isn't XML** (an error or challenge page) raises `ParseError` and stops the loop. The
-    forum already does this for update notes.
+  - *Fixed:* a feed response that isn't XML (an error or challenge page) stopped the loop. It's logged now.
   - Items whose title changes are posted again.
 - **Tests.**
-  - Existing: none.
-  - To write: the first run posting nothing, new items, filtering, the role mention, `Forbidden` turning news
-    off, and a non-XML response (xfail: it stops the loop).
+  - Existing: the first run posting nothing, new items, filtering, and a non-XML response (`test_notifiers.py`).
+  - To write: the role mention, and `Forbidden` turning news off.
 
 ## Game updates
 
@@ -197,14 +187,14 @@ Set up with `/notifier daily` (channel, categories dropdown, pin, behaviour: non
 - **Errors.**
   - Posting failures are logged per server.
   - `update_notification` failures are logged.
-  - **The build check and the config lookup aren't guarded.** A missing config document (`TypeError`) or an
-    unexpected build page (`IndexError`) stops the loop.
+  - *Fixed:* a missing config document or an unexpected build page stopped the loop. It's logged now.
 - **Known issues.**
   - Legacy `everyone` / `here` mentions are patched at send time ("TODO").
   - The rebuild runs inside the loop, so a slow rebuild delays update notes.
   - The rebuild's `bot.available` flag isn't read anywhere.
 - **Tests.**
-  - Existing: notes parsing and which posts to send (`test_update_notes.py`, 18 tests).
+  - Existing: notes parsing and which posts to send (`test_update_notes.py`, 18 tests); a bad build page or
+    missing config (`test_notifiers.py`).
   - To write: the build check (changed / unchanged / bad page), sending to servers (mention or none, minor
     posts, text without embed permission), and the rebuild's status and owner DM using a fake API.
 
@@ -218,13 +208,12 @@ Set up with `/notifier daily` (channel, categories dropdown, pin, behaviour: non
 - **Errors.** Per-user errors are swallowed: an uncached user (`get_user` is `None`) or closed DMs. Those users
   are retried every 5 minutes, forever.
 - **Known issues.**
-  - **An API error from `gem_price` stops the loop until restart.** `APIError` isn't one of the exceptions the
-    loop retries.
+  - *Fixed:* an API error from `gem_price` stopped the loop until restart. It's logged now.
   - Users the bot can't see or DM are never cleared or told.
 - **Tests.**
-  - Existing: `/gem track` and `gem_price` (`test_commerce.py`).
-  - To write: a user below the price gets a DM and is cleared, one above isn't, closed DMs, and an API error
-    (xfail: it stops the loop).
+  - Existing: `/gem track` and `gem_price` (`test_commerce.py`); notifying and clearing, and an API error
+    (`test_notifiers.py`).
+  - To write: closed DMs and users the bot can't see.
 
 ## EVTC autopost and uploads
 
@@ -265,21 +254,15 @@ Set up with `/notifier daily` (channel, categories dropdown, pin, behaviour: non
   - `/key add` in a server also runs the role sync and guild sync for that member.
 - **Errors.** Swallowed per server. A missing role is skipped. `Forbidden` on a member is skipped.
 - **Known issues.**
-  - **`/server api_key_role enabled:False` without a role crashes** (`role.id` on `None`), so key sync can't be
-    turned off without picking a role.
-  - **`/key switch` checks the previous key's name.** It uses `key["name"]`, where `k["name"]` was meant, so it
-    crashes when no key is active.
+  - *Fixed:* `/server api_key_role enabled:False` without a role crashed, so key sync couldn't be turned off.
+  - *Fixed:* `/key switch` named the previous key, and crashed when no key was active.
   - `/key remove` for a legacy user with only `key` (no `keys` list) says "No keys were removed": the
     `key == key` check is always true.
   - "Valid API key" only means "has a key"; keys aren't re-checked.
   - The role isn't given when a member joins, only on the next 5-minute run.
 - **Tests.**
-  - Existing: none.
-  - To write:
-    - the role given and taken on a fake server;
-    - `/key add`, `remove`, `switch` and `info`;
-    - disabling without a role (xfail);
-    - switching with no active key (xfail).
+  - Existing: `/server api_key_role` and `/key switch` (`test_server_commands.py`).
+  - To write: the role given and taken on a fake server, and `/key add`, `remove` and `info`.
 
 ## Forced account names
 
@@ -324,11 +307,11 @@ Set up with `/notifier daily` (channel, categories dropdown, pin, behaviour: non
 - **Errors.** Exceptions per sync are logged. Role, kick and timeout errors are swallowed. The loop swallows each
   server's errors silently.
 - **Known issues.**
-  - **Purge kicks everyone when a sync can't read its guild's members.** Membership is only recorded for syncs
-    whose member list was fetched. When `fetch_members` fails (the API is down, or the key was deleted or lost
-    leader access), every member without roles counts as "in no guild" and is kicked. That can happen on every
-    60-second run for as long as the API fails.
-  - The limit check allows 9 syncs: `count > GUILDSYNC_LIMIT` where `>=` was meant.
+  - *Fixed in #194:* purge kicked everyone without roles when a sync couldn't read its guild's members, or when
+    no syncs were configured. The original guild sync guarded against this; Guildsync 2.0 lost the guard. Since
+    discord.py 2.0 a `TypeError` stopped the purge before it kicked anyone, and `00d2453` fixed that error,
+    turning the purge back on. It now runs only when every sync read its members.
+  - *Fixed:* the limit check allowed 9 syncs instead of 8.
   - The `APIForbidden` error message reads "Key has in-game leader permissions"; it means the key lacks them.
   - `guildsync_consumer`, `schedule_guildsync` and the queue they use are dead code: nothing starts or calls them,
     and the queue is never created.
@@ -341,9 +324,9 @@ Set up with `/notifier daily` (channel, categories dropdown, pin, behaviour: non
     - role creation and deletion for tag and ranks;
     - membership with several accounts and ranks, and the role hierarchy limit;
     - the member-join sync;
-    - purge, including failed member fetches (xfail: everyone is kicked);
+    - purge: done in #194 (`tests/test_guildsync.py`);
     - the authorization prompt;
-    - the sync limit (xfail).
+    - the sync limit: done (`test_server_commands.py`).
 
 ## Order
 
@@ -357,5 +340,4 @@ Least risky first. Each item is one PR.
 6. `/key` and the API key role.
 7. Guild sync, forced account names and the rest of `/server`.
 
-The guild sync purge issue is the exception: it's worth fixing now, ahead of the order, because it affects live
-servers.
+The guild sync purge issue was the exception, fixed ahead of the order in #194 because it affected live servers.

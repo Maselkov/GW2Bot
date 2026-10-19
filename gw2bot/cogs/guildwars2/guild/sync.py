@@ -713,7 +713,7 @@ class GuildSync:
         if result:
             return False
         count = await self.db.guildsyncs.count_documents({"guild_id": guild.id})
-        if count > GUILDSYNC_LIMIT:
+        if count >= GUILDSYNC_LIMIT:
             return False
         return True
 

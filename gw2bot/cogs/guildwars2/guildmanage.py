@@ -106,7 +106,10 @@ class GuildManageMixin:
                 ephemeral=True,
             )
         guild = interaction.guild
-        await self.bot.data.guilds.update(guild.id, {"key_sync.enabled": enabled, "key_sync.role": role.id})
+        settings = {"key_sync.enabled": enabled}
+        if role:
+            settings["key_sync.role"] = role.id
+        await self.bot.data.guilds.update(guild.id, settings)
         if enabled:
             if not role:
                 return await interaction.response.send_message("Please specify a role.")

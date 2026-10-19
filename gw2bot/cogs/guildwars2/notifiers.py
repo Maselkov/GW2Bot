@@ -373,7 +373,9 @@ class NotiifiersMixin:
                 reminder["type"] = "boss"
                 reminder["name"] = boss["name"]
         if not reminder:
-            for group in "hot", "pof", "day", "ibs", "eod":
+            # Every map event group the timers have (all but world bosses)
+            groups = [g for g in self.gamedata["event_timers"] if g != "bosses"]
+            for group in groups:
                 maps = self.gamedata["event_timers"][group]
                 for location in maps:
                     for phase in location["phases"]:
@@ -598,8 +600,8 @@ class NotiifiersMixin:
                 await self.bot.data.guilds.update(channel.guild.id, {"daily.message": message.id})
             autopin = doc.get("autopin", False)
             if autopin:
-                message = old_message
                 if edited:
+                    message = old_message
                     if message.pinned:
                         return
                 try:
@@ -714,7 +716,13 @@ class NotiifiersMixin:
 
     @tasks.loop(minutes=3)
     async def news_checker(self):
-        to_post = await self.check_news()
+        try:
+            to_post = await self.check_news()
+        except Exception:
+            # E.g. an error page instead of the feed. An escaping exception
+            # would stop the loop for good
+            self.log.exception("Couldn't check the news")
+            return
         if to_post:
             embeds = []
             for item in to_post:
@@ -727,9 +735,13 @@ class NotiifiersMixin:
 
     @tasks.loop(minutes=1)
     async def game_update_checker(self):
-        if await self.game_build_changed():
-            await self.rebuild_database()
-        await self.send_update_notifs()
+        try:
+            if await self.game_build_changed():
+                await self.rebuild_database()
+            await self.send_update_notifs()
+        except Exception:
+            # An escaping exception would stop the loop for good
+            self.log.exception("Couldn't check for game updates")
 
     @game_update_checker.before_loop
     async def before_update_checker(self):
@@ -737,7 +749,12 @@ class NotiifiersMixin:
 
     @tasks.loop(minutes=5)
     async def gem_tracker(self):
-        cost = await gem_price(self.api)
+        try:
+            cost = await gem_price(self.api)
+        except APIError as e:
+            # An escaping exception would stop the loop for good
+            self.log.warning("Couldn't check the gem price: %s", e)
+            return
         cost_coins = self.gold_to_coins(None, cost)
         async for doc in self.bot.data.users.find({"gemtrack": {"$ne": None}}):
             try:

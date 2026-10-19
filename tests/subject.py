@@ -1193,11 +1193,23 @@ class MemoryUsers:
         self.writes.append((user_id, op, fields))
 
     async def find(self, query):
-        names = {next(iter(condition.values())) for condition in query["$or"]}
-        for user_id, doc in self.docs.items():
-            accounts = [doc.get("key", {}).get("account_name")]
-            accounts += [k.get("account_name") for k in doc.get("keys", [])]
-            if names & set(accounts):
+        """By account name ({"$or": [{"key.account_name": name}, ...]}), or
+        top-level fields equal to a value or {"$ne": value}."""
+        if "$or" in query:
+            names = {next(iter(condition.values())) for condition in query["$or"]}
+            for user_id, doc in self.docs.items():
+                accounts = [doc.get("key", {}).get("account_name")]
+                accounts += [k.get("account_name") for k in doc.get("keys", [])]
+                if names & set(accounts):
+                    yield {**doc, "_id": user_id}
+            return
+        for user_id, doc in list(self.docs.items()):
+            def matches(field, condition):
+                if isinstance(condition, dict):
+                    return doc.get(field) != condition["$ne"]
+                return doc.get(field) == condition
+
+            if all(matches(f, c) for f, c in query.items()):
                 yield {**doc, "_id": user_id}
 
 
@@ -1372,3 +1384,285 @@ async def run_guildsync(members, accounts, responses, *, syncs=1, purge=True):
     cog.bot.data.guilds.get = AsyncMock(return_value={"guildsync": {"enabled": True, "purge": purge}})
     await cog.run_guildsyncs(guild)
     return [call.kwargs["user"].id for call in guild.kick.await_args_list]
+async def set_event_reminder(**options):
+    """Run /reminder event. Returns (reply, users' settings writes)."""
+    from gw2bot.cogs.guildwars2.notifiers import NotiifiersMixin
+
+    users = MemoryUsers({1: {}})
+
+    def cog_for(session, _):
+        class Cog(NotiifiersMixin, _Harness):
+            pass
+
+        cog = Cog(session, users)
+        cog.boss_schedule = cog.generate_schedule()
+        return cog
+
+    sent, _ = await run_command(cog_for, NotiifiersMixin.reminder_event, [], permissions=(), users=users, **options)
+    return sent, users.writes
+
+
+
+def _notifier_cog(session=None, users=None):
+    from gw2bot.cogs.guildwars2.notifiers import NotiifiersMixin
+
+    class Cog(NotiifiersMixin, _Harness):
+        pass
+
+    return Cog(session, users)
+
+
+async def run_gem_tracker(responses, tracked):
+    """One run of the gem tracker. `tracked` is {user id: gemtrack copper};
+    users 9xx can't be DMed. Returns (DMs as (user id, text), settings
+    writes, anything the run raised)."""
+    from unittest.mock import AsyncMock
+
+    import discord
+
+    users = MemoryUsers({user_id: {"gemtrack": price} for user_id, price in tracked.items()})
+    cog = _notifier_cog(FakeSession(*responses), users)
+    sent = []
+
+    def get_user(user_id):
+        user = MagicMock(id=user_id, mention=f"<@{user_id}>")
+
+        async def send(text):
+            if user_id >= 900:
+                raise discord.Forbidden(MagicMock(status=403), "Cannot send messages to this user")
+            sent.append((user_id, text))
+
+        user.send = AsyncMock(side_effect=send)
+        return user
+
+    cog.bot.get_user = get_user
+    try:
+        await type(cog).gem_tracker.coro(cog)
+        error = None
+    except Exception as e:
+        error = e
+    return sent, users.writes, error
+
+
+class MemoryGuilds:
+    """bot.data.guilds: server settings by id, find() with equality and
+    {"$ne": value} on dotted fields, update() recorded."""
+
+    def __init__(self, docs):
+        self.docs = docs
+        self.writes = []
+
+    async def get(self, guild_id):
+        return self.docs.get(guild_id, {})
+
+    async def update(self, guild_id, fields, op="set"):
+        self.writes.append((guild_id, op, fields))
+
+    async def find(self, query=None, **kwargs):
+        def value(doc, name):
+            for part in name.split("."):
+                doc = doc.get(part) if isinstance(doc, dict) else None
+            return doc
+
+        def matches(doc, field, condition):
+            if isinstance(condition, dict):
+                return value(doc, field) != condition["$ne"]
+            return value(doc, field) == condition
+
+        for guild_id, doc in list(self.docs.items()):
+            if all(matches(doc, f, c) for f, c in (query or {}).items()):
+                yield {**doc, "_id": guild_id}
+
+
+def text_channel(channel_id, guild_id=10, *, can_send=True, can_embed=True):
+    """A channel whose sent messages are recorded in channel.sent as
+    (content, embed dict or None)."""
+    from unittest.mock import AsyncMock
+
+    channel = MagicMock(id=channel_id)
+    channel.guild.id = guild_id
+    permissions = channel.permissions_for.return_value
+    permissions.send_messages = can_send
+    permissions.embed_links = can_embed
+    permissions.read_message_history = True
+    channel.sent = []
+
+    async def send(content=None, *, embed=None, **kwargs):
+        channel.sent.append((content, embed.to_dict() if embed else None))
+        return MagicMock(id=1000 + len(channel.sent))
+
+    channel.send = AsyncMock(side_effect=send)
+    return channel
+
+
+async def run_news_checker(feed, cached_titles, guilds, channels):
+    """One run of the news checker against an RSS `feed` (text). `guilds`
+    are server settings by id, `channels` text_channel()s. Returns
+    (config writes, server settings writes, anything the run raised)."""
+    from unittest.mock import AsyncMock
+
+    cog = _notifier_cog()
+    cog.session = FakeWikiSession({"https://www.guildwars2.com/en/feed/": feed})
+    cog.bot.data.config.get = AsyncMock(return_value={"cache": {"news": cached_titles}})
+    cog.bot.data.config.update = AsyncMock()
+    cog.bot.data.guilds = MemoryGuilds(guilds)
+    by_id = {c.id: c for c in channels}
+    cog.bot.get_channel = by_id.get
+    try:
+        await type(cog).news_checker.coro(cog)
+        error = None
+    except Exception as e:
+        error = e
+    config_writes = [call.args[0] for call in cog.bot.data.config.update.await_args_list]
+    return config_writes, cog.bot.data.guilds.writes, error
+
+
+async def run_game_update_checker(config, build_page):
+    """One run of the game update checker with the bot's `config` document
+    and `build_page` as the build number page. Returns anything it raised."""
+    from unittest.mock import AsyncMock
+
+    cog = _notifier_cog()
+    cog.session = FakeWikiSession({"http://assetcdn.101.arenanetworks.com/latest/101": build_page})
+    cog.bot.data.config.get = AsyncMock(return_value=config)
+    cog.bot.data.config.update = AsyncMock()
+    cog.rebuild_database = AsyncMock()
+    cog.update_notification = AsyncMock(return_value=None)
+    try:
+        await type(cog).game_update_checker.coro(cog)
+    except Exception as e:
+        return e
+    return None
+
+
+async def run_daily_notifier(settings, *, previous_message_exists=True):
+    """One 23:40 daily notifier run for a server whose `daily` settings
+    are `settings` (channel 5; the previous post is message 999). Returns
+    {"sent", "edited", "deleted", "pinned", "unpinned": [message ids],
+    "writes": server settings writes}."""
+    from unittest.mock import AsyncMock
+
+    import discord
+
+    events = {"sent": [], "edited": [], "deleted": [], "pinned": [], "unpinned": []}
+    messages = {}
+
+    def message(message_id):
+        msg = MagicMock(id=message_id, pinned=False)
+
+        async def act(name):
+            if message_id in events["deleted"]:
+                raise discord.NotFound(MagicMock(status=404), "Unknown Message")
+            events[name].append(message_id)
+
+        def recorder(name):
+            async def record(*args, **kwargs):
+                await act(name)
+
+            return AsyncMock(side_effect=record)
+
+        msg.edit, msg.delete = recorder("edited"), recorder("deleted")
+        msg.pin, msg.unpin = recorder("pinned"), recorder("unpinned")
+        messages[message_id] = msg
+        return msg
+
+    if previous_message_exists:
+        message(999)
+    channel = MagicMock(id=5)
+    channel.guild.id = 10
+    permissions = channel.permissions_for.return_value
+    permissions.send_messages = permissions.embed_links = permissions.read_message_history = True
+
+    async def send(*args, **kwargs):
+        msg = message(1000 + len(events["sent"]) + 1)
+        events["sent"].append(msg.id)
+        return msg
+
+    async def fetch_message(message_id):
+        if message_id not in messages or message_id in events["deleted"]:
+            raise discord.NotFound(MagicMock(status=404), "Unknown Message")
+        return messages[message_id]
+
+    async def history(**kwargs):
+        return
+        yield
+
+    channel.send = AsyncMock(side_effect=send)
+    channel.fetch_message = AsyncMock(side_effect=fetch_message)
+    channel.history = history
+
+    cog = _notifier_cog()
+    cog.cache_dailies = AsyncMock()
+    cog.bot.data.config.get = AsyncMock(return_value={"cache": {"dailies_tomorrow": {"raids": [], "fractals": []}}})
+    cog.bot.data.guilds = MemoryGuilds({10: {"daily": {"on": True, "channel": 5, "categories": ["psna"],
+                                                       "message": 999, **settings}}})
+    cog.bot.get_channel = {5: channel}.get
+    await type(cog).send_daily_notifs.coro(cog)
+    for _ in range(50):
+        await asyncio.sleep(0)
+    return {**events, "writes": cog.bot.data.guilds.writes}
+
+
+async def api_key_role(**options):
+    """Run /server api_key_role on server 10. Returns (reply, settings
+    writes, whether a sync of the server's roles started)."""
+    from unittest.mock import AsyncMock
+
+    from gw2bot.cogs.guildwars2.guildmanage import GuildManageMixin
+
+    guilds = MemoryGuilds({})
+    cogs = []
+
+    def cog_for(session, users):
+        class Cog(GuildManageMixin, _Harness):
+            pass
+
+        cog = Cog(session, users)
+        cog.bot.data.guilds = guilds
+        cog.key_sync_guild = AsyncMock()
+        cogs.append(cog)
+        return cog
+
+    def in_server(interaction):
+        interaction.guild.id = 10
+
+    sent, _ = await run_command(cog_for, GuildManageMixin.server_key_sync, [], permissions=(),
+                                on_interaction=in_server, **options)
+    return sent, guilds.writes, cogs[0].key_sync_guild.await_count == 1
+
+
+async def switch_key(stored, token):
+    """Run /key switch for a user whose settings are `stored`. Returns
+    (reply, settings writes)."""
+    from gw2bot.cogs.guildwars2.key import KeyMixin
+
+    users = MemoryUsers({1: stored})
+
+    def cog_for(session, _):
+        class Cog(KeyMixin, _Harness):
+            pass
+
+        return Cog(session, users)
+
+    sent, _ = await run_command(cog_for, KeyMixin.key_switch, [], permissions=(), users=users, token=token)
+    return sent, users.writes
+
+
+async def can_add_guildsync(existing, in_game_guild_id="NEW"):
+    """Whether a server with `existing` guild syncs (in-game guild ids) can
+    add one for `in_game_guild_id`."""
+    from gw2bot.cogs.guildwars2.guild import GuildSync
+
+    class Syncs:
+        async def find_one(self, query):
+            return {"gid": query["gid"]} if query["gid"] in existing else None
+
+        async def count_documents(self, query):
+            return len(existing)
+
+    class Cog(GuildSync, _Harness):
+        pass
+
+    cog = Cog()
+    cog.db = SimpleNamespace(guildsyncs=Syncs())
+    return await cog.can_add_sync(MagicMock(id=10), in_game_guild_id)
