@@ -20,7 +20,8 @@ Configuration is read from environment variables:
 | `MONGO_URI` | Full MongoDB connection string. When set, the `MONGO_HOST`/`PORT`/`USER`/`PASSWORD`/`AUTH_DB` variables are ignored. |
 | `MONGO_HOST`, `MONGO_PORT` | Default `localhost:27017`. |
 | `MONGO_USER`, `MONGO_PASSWORD`, `MONGO_AUTH_DB` | Optional credentials. The auth database defaults to `admin`. |
-| `MONGO_DB` | Database name (default `toothy`, for compatibility with data from the Toothy days). |
+| `MONGO_DB` | GW2Bot's database (default `gw2bot`). |
+| `MIGRATE_FROM_DB` | The Toothy-era database to copy data from on first start (default `toothy`). It must differ from `MONGO_DB`. |
 | `LOG_DIR` | Where `gw2bot.log` is written (default `logs`). |
 | `DEBUG` | `true` for debug logging. |
 
@@ -62,7 +63,18 @@ To use the Guild Wars 2 font, place `GWTwoFont1p1.ttf` in the directory you run 
 
 ### Moving from Toothy
 
-GW2Bot used to run as an extension of [Toothy](https://github.com/Maselkov/Toothy). It now runs on its own, and reads the same MongoDB data. Point it at the database Toothy used: set `MONGO_DB` to the `DATABASE.name` from Toothy's `config.json` (`toothy` unless you changed it).
+GW2Bot used to run as an extension of [Toothy](https://github.com/Maselkov/Toothy), and stored its data in Toothy's database: settings inside Toothy's shared `users`/`guilds`/`channels` documents, and its own collections under a `gw2.` prefix.
+
+It now has a database of its own. On its first start, the bot copies everything it uses from the Toothy database (`MIGRATE_FROM_DB`, `toothy` unless you changed `DATABASE.name` in Toothy's `config.json`) into `MONGO_DB`, with plain collection names: `users`, `guilds`, `channels`, `config`, `items`, `guildsyncs`, and so on. Indexes are copied too. Collections left over from removed features (boss kills, WvW worlds and population) stay in the old database. The copy is recorded in the new database's `state` collection, so it happens once. A failed copy stops the bot from starting, and the next start tries again.
+
+The Toothy database is only ever read. To roll back, run the previous version, which still uses it. Anything changed since the copy is lost from the rollback's point of view. If you then upgrade again, re-copy so the new database isn't stale:
+
+```bash
+python -m gw2bot.db.migrate --dry-run   # what would be copied
+python -m gw2bot.db.migrate --force     # copy again over the existing copy
+```
+
+The command reads the same `MONGO_*` and `MIGRATE_FROM_DB` settings as the bot. Once you're confident in the new database, the Toothy database can be dropped by hand.
 
 ## Dependencies
 

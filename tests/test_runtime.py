@@ -20,8 +20,9 @@ def test_settings_defaults():
     assert settings.debug is False
     assert settings.owner_id is None
     assert settings.mongo_uri == "mongodb://localhost:27017"
-    # Matches Toothy's default so existing data is found
-    assert settings.mongo_db == "toothy"
+    assert settings.mongo_db == "gw2bot"
+    # Toothy's default database name, copied from on first start
+    assert settings.migrate_from_db == "toothy"
 
 
 def test_settings_from_env():
@@ -34,6 +35,7 @@ def test_settings_from_env():
         "MONGO_HOST": "mongo",
         "MONGO_PORT": "27018",
         "MONGO_DB": "gw2",
+        "MIGRATE_FROM_DB": "old",
         "LOG_DIR": "/tmp/logs",
     })
     assert settings.owner_id == 123
@@ -42,7 +44,14 @@ def test_settings_from_env():
     assert settings.debug is True
     assert settings.mongo_uri == "mongodb://mongo:27018"
     assert settings.mongo_db == "gw2"
+    assert settings.migrate_from_db == "old"
     assert settings.log_dir == "/tmp/logs"
+
+
+def test_settings_refuse_migrating_a_database_into_itself():
+    # E.g. an old .env that still names Toothy's database in MONGO_DB
+    with pytest.raises(ConfigError, match="MIGRATE_FROM_DB"):
+        Settings.from_env({"DISCORD_TOKEN": "tok", "MONGO_DB": "toothy"})
 
 
 def test_settings_blank_values_use_defaults():

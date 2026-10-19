@@ -1007,6 +1007,6 @@ class SkillsMixin:
             pass
         finally:
             field_id = link_type.replace(" ", "_").lower()
-            await self.bot.data.db["statistics.gw2"].update_one(
+            await self.bot.data.statistics.update_one(
                 {"_id": "link_previews"}, {"$inc": {field_id: 1}}, upsert=True
             )

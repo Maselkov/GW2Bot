@@ -31,8 +31,18 @@ class Settings:
     debug: bool = False
     auto_sync: bool = True
     mongo_uri: str = "mongodb://localhost:27017"
-    mongo_db: str = "toothy"
+    # GW2Bot's database, and the Toothy-era database it's copied from once
+    mongo_db: str = "gw2bot"
+    migrate_from_db: str = "toothy"
     log_dir: str = "logs"
+
+    def __post_init__(self):
+        if self.mongo_db == self.migrate_from_db:
+            raise ConfigError(
+                f"MONGO_DB and MIGRATE_FROM_DB are both {self.mongo_db!r}. MONGO_DB is now "
+                "GW2Bot's own database (default 'gw2bot'); MIGRATE_FROM_DB names the "
+                "Toothy database to copy from (default 'toothy')"
+            )
 
     @classmethod
     def from_env(cls, env=None):
@@ -50,6 +60,7 @@ class Settings:
             auto_sync=_get(env, "AUTO_SYNC", _bool, True),
             mongo_uri=_get(env, "MONGO_URI") or _mongo_uri(env),
             mongo_db=_get(env, "MONGO_DB", default=cls.mongo_db),
+            migrate_from_db=_get(env, "MIGRATE_FROM_DB", default=cls.migrate_from_db),
             log_dir=_get(env, "LOG_DIR", default=cls.log_dir),
         )
 
