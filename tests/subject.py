@@ -1516,19 +1516,59 @@ async def run_news_checker(feed, cached_titles, guilds, channels):
 async def run_game_update_checker(config, build_page):
     """One run of the game update checker with the bot's `config` document
     and `build_page` as the build number page. Returns anything it raised."""
+    return (await check_game_updates(config, build_page))["error"]
+
+
+async def check_game_updates(config, build_page, *, notes=None, servers=None, channels=()):
+    """One run of the game update checker. `notes` are what the update
+    notes check finds, [(embed, text, minor)]; `servers` settings by id,
+    `channels` RecordingChannels. Returns {"error", "rebuilt", "config"
+    (writes)}."""
     from unittest.mock import AsyncMock
 
     cog = _notifier_cog()
     cog.session = FakeWikiSession({"http://assetcdn.101.arenanetworks.com/latest/101": build_page})
     cog.bot.data.config.get = AsyncMock(return_value=config)
     cog.bot.data.config.update = AsyncMock()
+    cog.bot.data.guilds = MemoryGuilds(servers or {})
+    cog.bot.get_channel = {c.id: c for c in channels}.get
     cog.rebuild_database = AsyncMock()
-    cog.update_notification = AsyncMock(return_value=None)
+    cog.update_notification = AsyncMock(return_value=notes)
     try:
         await type(cog).game_update_checker.coro(cog)
+        error = None
     except Exception as e:
-        return e
-    return None
+        error = e
+    return {
+        "error": error,
+        "rebuilt": cog.rebuild_database.await_count == 1,
+        "config": [call.args[0] for call in cog.bot.data.config.update.await_args_list],
+    }
+
+
+async def notifier_command(command, *, settings=None, channel=None, **options):
+    """Run /notifier news, update or bosses on server 10 with its saved
+    `settings`. `channel` is a RecordingChannel (or None). Returns (reply,
+    server settings writes)."""
+    from gw2bot.cogs.guildwars2.notifiers import NotiifiersMixin
+
+    handler = {"news": NotiifiersMixin.newsfeed, "update": NotiifiersMixin.updatenotifier,
+               "bosses": NotiifiersMixin.bossnotifier}[command]
+    guilds = MemoryGuilds({10: settings or {}})
+
+    def cog_for(session, users):
+        cog = _notifier_cog(session, users)
+        cog.bot.data.guilds = guilds
+        return cog
+
+    def in_server(interaction):
+        interaction.guild.id = 10
+
+    if channel is not None:
+        channel.mention = f"<#{channel.id}>"
+    sent, _ = await run_command(cog_for, handler, [], permissions=(), on_interaction=in_server, channel=channel,
+                                **options)
+    return sent, guilds.writes
 
 
 async def run_daily_notifier(settings, *, previous_message_exists=True, channel_exists=True, can_send=True,
