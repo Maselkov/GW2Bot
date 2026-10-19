@@ -197,14 +197,14 @@ class Notifiers(GW2Cog):
             )
         doc = await self.bot.data.guilds.get(interaction.guild.id)
         already_enabled = doc.get("news", {}).get("on", False)
-        if not already_enabled and not channel:
+        if not enabled and not already_enabled:
             return await interaction.response.send_message(
                 "News notifier is aleady disabled. If "
                 "you were trying to enable it, make sure to fill out "
                 "the `channel` argument.",
                 ephemeral=True,
             )
-        if already_enabled and not channel:
+        if not enabled:
             await self.bot.data.guilds.update(interaction.guild.id, {"news.on": False})
             return await interaction.response.send_message(
                 "News notifier disabled.", ephemeral=True
@@ -315,14 +315,14 @@ class Notifiers(GW2Cog):
             return await interaction.followup.send("You must specify a channel.")
         key = "bossnotifs"
         doc = await self.bot.data.guilds.get(interaction.guild.id)
-        enabled = doc.get(key, {}).get("on", False)
-        if not enabled and not channel:
+        already_enabled = doc.get(key, {}).get("on", False)
+        if not enabled and not already_enabled:
             return await interaction.followup.send(
                 "Boss notifier is aleady disabled. If "
                 "you were trying to enable it, make sure to fill out "
                 "the `channel` argument."
             )
-        if enabled and not channel:
+        if not enabled:
             await self.bot.data.guilds.update(interaction.guild.id, {f"{key}.on": False})
             return await interaction.followup.send("Boss notifier disabled.")
         settings = {
@@ -521,7 +521,7 @@ class Notifiers(GW2Cog):
                             channel.permissions_for(channel.guild.me).embed_links
                             and embed_available
                         ):
-                            message = mention + " Guild Wars 2 has just updated!"
+                            message = f"{mention} Guild Wars 2 has just updated!".strip()
                             await channel.send(message, embed=embed)
                         else:
                             await channel.send(text)

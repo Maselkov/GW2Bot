@@ -63,10 +63,9 @@ async def test_bosses_enable_and_disable():
     assert (sent, writes) == ("Boss notifier disabled.", [(10, "set", {"bossnotifs.on": False})])
 
 
-# --- Known bugs ------------------------------------------------------------------------------------
+# --- Fixes -----------------------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="enabled:False with a channel enables the notifier")
 @pytest.mark.parametrize("command, key, message", [
     ("news", "news", "News notifier disabled."),
     ("bosses", "bossnotifs", "Boss notifier disabled."),

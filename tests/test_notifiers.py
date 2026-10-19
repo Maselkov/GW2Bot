@@ -161,7 +161,7 @@ async def test_hotfixes_dont_mention():
     notes = [(update_embed(), "Guild Wars 2 has just updated!", True)]
     await subject.check_game_updates({"cache": {"build": "101"}}, "101", notes=notes, servers=UPDATE_SERVERS,
                                      channels=channels)
-    assert channels[0].sent[0][0] == " Guild Wars 2 has just updated!"
+    assert channels[0].sent[0][0] == "Guild Wars 2 has just updated!"
 
 
 # --- Gem tracker: undeliverable users ------------------------------------------------------------
