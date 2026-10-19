@@ -2,7 +2,7 @@ import asyncio
 import discord
 from discord.ext import tasks
 from discord import app_commands
-from .guild.general import guild_name_autocomplete
+from ..guild import guild_name_autocomplete
 
 
 class GuildManageMixin:

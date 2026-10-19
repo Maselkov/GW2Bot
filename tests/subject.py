@@ -1203,16 +1203,13 @@ async def guild_command(command, responses, *, permissions=("account", "guilds")
     """Run /guild <command>. `users` are other users' settings by Discord
     id (the caller is id 1); `discord_members` the Discord server's members
     by id, as {id: mention}, or None to run it in DMs."""
-    from gw2bot.cogs.guildwars2.guild.general import GeneralGuild
+    from gw2bot.cogs.guild import Guild
 
-    handler = getattr(GeneralGuild, "guild_" + command)
+    handler = getattr(Guild, "guild_" + command)
     repo = MemoryUsers({1: stored_key(permissions), **(users or {})})
 
     def cog_for(session, _):
-        class Cog(GeneralGuild, _Harness):
-            pass
-
-        cog = Cog(session, repo)
+        cog = Guild(_fake_bot(session, repo))
         cog.db = gw2_db(items=items)
         return cog
 
@@ -1234,7 +1231,7 @@ async def guild_choices(current, stored, responses=(), *, server_default=None, n
     refresh finished."""
     from unittest.mock import AsyncMock
 
-    from gw2bot.cogs.guildwars2.guild.general import guild_name_autocomplete
+    from gw2bot.cogs.guild import guild_name_autocomplete
 
     session = FakeSession(*(responses or [(500, {})]))
     users = FakeUserRepo(stored)

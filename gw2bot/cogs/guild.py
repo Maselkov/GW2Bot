@@ -1,17 +1,21 @@
+"""Guild commands: /guild info, members, treasury and log."""
 import asyncio
-from code import interact
 import datetime
 
 import discord
 from discord import app_commands
 from discord.app_commands import Choice
 
-from ..exceptions import APIError, APIForbidden, APINotFound
 from gw2bot.utils.chat import embed_list_lines, zero_width_space
+
+from ..gw2api.errors import APIError, APIForbidden, APINotFound
+from .base import GW2Cog
 
 
 async def guild_name_autocomplete(interaction: discord.Interaction,
                                   current: str):
+    """The server's default guild, then the user's guilds matching
+    `current` (cached for a week). Also used by /server default_guild."""
     cog = interaction.command.binding
     bot = cog.bot
     doc = await bot.data.users.get(interaction.user.id)
@@ -114,7 +118,7 @@ class PaginatedEmbeds(discord.ui.View):
         await self.response.edit(view=self)
 
 
-class GeneralGuild:
+class Guild(GW2Cog):
 
     guild_group = app_commands.Group(name="guild",
                                      description="Guild related commands")
@@ -410,3 +414,7 @@ class GeneralGuild:
         data = embed_list_lines(data, lines,
                                 "> **{0} Log**".format(log_type.capitalize()))
         await interaction.followup.send(embed=data)
+
+
+async def setup(bot):
+    await bot.add_cog(Guild(bot))
