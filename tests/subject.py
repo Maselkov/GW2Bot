@@ -16,7 +16,6 @@ from unittest.mock import MagicMock
 import time_machine
 
 from gw2bot.cogs.base import GW2Cog
-from gw2bot.cogs.guildwars2.characters import CharactersMixin
 from gw2bot.cogs.guildwars2 import daily
 from gw2bot.cogs.guildwars2.daily import DailyMixin
 from gw2bot.cogs.guildwars2.database import DatabaseMixin
@@ -67,7 +66,6 @@ def _fake_bot(session=None, users=None):
 
 class _Harness(
     GW2Cog,
-    CharactersMixin,
     DailyMixin,
     DatabaseMixin,
     EventsMixin,
@@ -107,11 +105,15 @@ def format_age(seconds, short=False):
 
 
 def profession_icon(name):
-    return CharactersMixin.get_profession_icon(None, name)
+    from gw2bot.utils.wiki import profession_icon_url
+
+    return profession_icon_url(name)
 
 
 def readable_attribute(name):
-    return _Harness().readable_attribute(name)
+    from gw2bot.cogs.characters import readable_attribute
+
+    return readable_attribute(name)
 
 
 def format_timedelta(td):
@@ -522,17 +524,9 @@ async def render_build(session, specializations, skills):
     specializations: [{"spec_doc", "active_traits", "trait_docs"}] as stored
     by the bot; skills: skill docs with an "icon" URL.
     """
-    from types import SimpleNamespace
+    from gw2bot.builds import Build
 
-    from PIL import ImageFont
-
-    from gw2bot.cogs.guildwars2.chatlinks import Build
-
-    cog = SimpleNamespace(
-        session=session,
-        bot=SimpleNamespace(loop=asyncio.get_running_loop()),
-        font=ImageFont.load_default(),
-    )
+    cog = SimpleNamespace(bot=SimpleNamespace(loop=asyncio.get_running_loop(), session=session))
     file = await Build(cog, None, specializations, skills, "[&code]").render()
     return file.fp.read() if file else None
 
@@ -1111,12 +1105,9 @@ def _characters_cog(session=None, users=None, db=None, public=(), config=None, c
     channel (id 5)."""
     from unittest.mock import AsyncMock
 
-    from gw2bot.cogs.guildwars2.emojis import EmojiMixin
+    from gw2bot.cogs.characters import Characters
 
-    class Cog(EmojiMixin, _Harness):
-        pass
-
-    cog = Cog(session, users)
+    cog = Characters(_fake_bot(session, users))
     cog.db = db or gw2_db()
     cog.db.characters = MemoryCollection()
     cog.db.characters.docs = [dict(doc) for doc in public]
@@ -1127,11 +1118,11 @@ def _characters_cog(session=None, users=None, db=None, public=(), config=None, c
 
 
 def _character_handler(command):
-    from gw2bot.cogs.guildwars2.characters import CharactersMixin
+    from gw2bot.cogs.characters import Characters
 
     if command.startswith("sab "):
-        return getattr(CharactersMixin, "sab_" + command[4:])
-    return getattr(CharactersMixin, "character_" + command)
+        return getattr(Characters, "sab_" + command[4:])
+    return getattr(Characters, "character_" + command)
 
 
 async def character_command(command, responses, *, permissions=("account", "characters", "builds"), db=None,

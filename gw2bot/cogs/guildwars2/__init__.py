@@ -2,11 +2,9 @@ import datetime
 import logging
 
 import discord
-from PIL import ImageFont
 
 from ...errors import error_message
 from ..base import GW2Cog
-from .characters import CharactersMixin
 from .chatlinks import ChatLinksMixin
 from .daily import DailyMixin
 from .database import DatabaseMixin
@@ -22,7 +20,6 @@ from .notifiers import NotiifiersMixin
 
 class GuildWars2(
     GW2Cog,
-    CharactersMixin,
     ChatLinksMixin,
     DailyMixin,
     DatabaseMixin,
@@ -45,10 +42,6 @@ class GuildWars2(
         self.tasks = []
         self.waiting_for = []
         self.chatcode_preview_opted_out_guilds = set()
-        try:
-            self.font = ImageFont.truetype("GWTwoFont1p1.ttf", size=30)
-        except IOError:
-            self.font = ImageFont.load_default()
         self.tasks = [
             self.game_update_checker,
             self.news_checker,

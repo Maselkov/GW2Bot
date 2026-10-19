@@ -1,3 +1,4 @@
+"""Character commands: the /character and /sab groups."""
 import asyncio
 import collections
 import copy
@@ -9,13 +10,12 @@ from discord import app_commands
 from discord.app_commands import Choice
 from discord.ext import commands
 
-from . import guild
-
-from .exceptions import APIError, APINotFound
+from gw2bot.builds import Build, profession_info
+from gw2bot.utils.chat import embed_list_lines, format_age, zero_width_space
 from gw2bot.utils.wiki import profession_icon_url
 
-from .chatlinks import Build
-from gw2bot.utils.chat import embed_list_lines, format_age, zero_width_space
+from ..gw2api.errors import APIError, APINotFound
+from .base import GW2Cog
 
 LETTERS = ["🇦", "🇧", "🇨", "🇩", "🇪", "🇫", "🇬", "🇭", "🇮", "🇯"]
 
@@ -166,7 +166,17 @@ class Character:
         return info
 
 
-class CharactersMixin:
+def readable_attribute(attribute_name):
+    """An API attribute name as the game shows it ("CritDamage" is
+    "Critical Damage")."""
+    attribute_sub = re.sub(r"(\w)([A-Z])", r"\1 \2", attribute_name)
+    attribute_sub = re.sub('Crit ', 'Critical ', attribute_sub)
+    attribute_sub = re.sub('Healing', 'Healing Power', attribute_sub)
+    attribute_sub = re.sub('defense', 'Armor', attribute_sub)
+    return attribute_sub
+
+
+class Characters(GW2Cog):
 
     character_group = app_commands.Group(
         name="character", description="Character related commands")
@@ -389,12 +399,6 @@ class CharactersMixin:
                              character: str):
         """Displays the gear, attributes and build of given character"""
         await interaction.response.defer()
-        if not self.check_emoji_permission(interaction):
-            return await interaction.followup.send(
-                "The default role in this channel needs to "
-                "have `use external emojis` permission in order to use this command."
-            )
-            # TODO move this to a check
 
         numbers = []
 
@@ -462,7 +466,7 @@ class CharactersMixin:
                                 pass
                         line += stat_name
                         if piece.startswith("Weapon"):
-                            line += " " + self.readable_attribute(
+                            line += " " + readable_attribute(
                                 item_doc["details"]["type"])
                         if upgrades_to_display:
                             line += "\n*{}*".format(
@@ -492,7 +496,7 @@ class CharactersMixin:
             fields.append(("> **TRINKETS**", "\n".join(trinket_lines), False))
             upgrade_lines = []
             for bonus, count in bonuses.items():
-                bonus = self.readable_attribute(bonus)
+                bonus = readable_attribute(bonus)
                 emoji = self.get_emoji(interaction, f"attribute_{bonus}")
                 upgrade_lines.append(f"{emoji}**{bonus}**: {count}")
             if not upgrade_lines:
@@ -644,13 +648,6 @@ class CharactersMixin:
             embed = embed_list_lines(embed, lines,
                                      "{}{} Birthday".format(k, suffix(k)))
         await interaction.followup.send(embed=embed)
-
-    def readable_attribute(self, attribute_name):
-        attribute_sub = re.sub(r"(\w)([A-Z])", r"\1 \2", attribute_name)
-        attribute_sub = re.sub('Crit ', 'Critical ', attribute_sub)
-        attribute_sub = re.sub('Healing', 'Healing Power', attribute_sub)
-        attribute_sub = re.sub('defense', 'Armor', attribute_sub)
-        return attribute_sub
 
     async def calculate_character_attributes(self, character, eq):
         # TODO remove redundant database calls from eq
@@ -951,7 +948,7 @@ class CharactersMixin:
             if attribute in percentage_list:
                 attr_dict[attribute] = '{0}%'.format(
                     round(attr_dict[attribute]), 2)
-            attribute_sub = self.readable_attribute(attribute)
+            attribute_sub = readable_attribute(attribute)
             output[attribute_sub.title()] = attr_dict[attribute]
         return output
 
@@ -1151,29 +1148,17 @@ class CharactersMixin:
         for spec in specs:
             spec_doc = await self.db.specializations.find_one({"_id": spec})
             specializations.append(spec_doc)
-        return await self.get_profession(character["profession"],
-                                         specializations)
+        return profession_info(self.gamedata, character["profession"],
+                               specializations)
 
-    async def get_profession(self, profession, specializations):
+    async def fetch_statname(self, item):
+        statset = await self.db.itemstats.find_one({"_id": item})
+        try:
+            name = statset["name"]
+        except KeyError:
+            name = ""
+        return name
 
-        async def get_elite_spec():
-            try:
-                spec = specializations[-1]
-            except IndexError:
-                return None
-            if spec:
-                if not spec["elite"]:
-                    return None
-                return spec["name"]
-            return None
 
-        Profession = collections.namedtuple("Profession",
-                                            ["name", "icon", "color"])
-        color = discord.Color(
-            int(self.gamedata["professions"][profession.lower()]["color"], 0))
-        name = await get_elite_spec() or profession
-        icon = profession_icon_url(name)
-        return Profession(name.title(), icon, color)
-
-    def get_profession_icon(self, prof_name):
-        return profession_icon_url(prof_name)
+async def setup(bot):
+    await bot.add_cog(Characters(bot))

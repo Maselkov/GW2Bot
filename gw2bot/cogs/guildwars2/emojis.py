@@ -1,4 +1,3 @@
-import discord
 from discord.ext import commands
 
 
@@ -26,11 +25,3 @@ class EmojiMixin:
                 len(registered), ", ".join(registered)
             )
         )
-
-    def check_emoji_permission(self, interaction: discord.Interaction):
-        if not interaction.guild:
-            return True
-        return True
-        return interaction.channel.permissions_for(
-            interaction.guild.default_role
-        ).external_emojis
