@@ -20,7 +20,6 @@ from gw2bot.cogs.guildwars2 import daily
 from gw2bot.cogs.guildwars2.daily import DailyMixin
 from gw2bot.cogs.guildwars2.database import DatabaseMixin
 from gw2bot.cogs.guildwars2.events import EventsMixin
-from gw2bot.cogs.guildwars2.misc import MiscMixin
 from gw2bot.utils import chat, db
 
 DATA_DIR = pathlib.Path(__file__).resolve().parent.parent / "gw2bot" / "data"
@@ -69,7 +68,6 @@ class _Harness(
     DailyMixin,
     DatabaseMixin,
     EventsMixin,
-    MiscMixin,
 ):
     """Just enough of the cog's state for its non-Discord logic to run."""
 
@@ -89,7 +87,9 @@ def _at(when):
 # --- Items and coins -------------------------------------------------------
 
 def chat_code(item_id, count=1, skin_id=None, upgrades=()):
-    return _Harness().generate_chat_code(item_id, count, skin_id, list(upgrades))
+    from gw2bot.cogs.misc import generate_chat_code
+
+    return generate_chat_code(item_id, count, skin_id, list(upgrades))
 
 
 def format_coins(copper):
@@ -907,6 +907,9 @@ class MemoryItems:
                 if field == "name":
                     if not condition.search(value):
                         return False
+                elif not isinstance(condition, dict):
+                    if value != condition:
+                        return False
                 elif "$nin" in condition and set(value or []) & set(condition["$nin"]):
                     return False
                 elif "$ne" in condition and value == condition["$ne"]:
@@ -1246,3 +1249,65 @@ async def guild_choices(current, stored, responses=(), *, server_default=None, n
             await asyncio.sleep(0)
     return ([(c.name, c.value) for c in choices], users.writes,
             [(url, params) for url, params, _ in session.requests])
+
+
+
+# --- Misc -------------------------------------------------------------------------
+
+class FakeWikiSession:
+    """Serves wiki pages, {url: html}; `redirects` maps a search URL to the
+    page it lands on (an exact match). Records (url, headers)."""
+
+    def __init__(self, pages=None, redirects=None):
+        self.pages = pages or {}
+        self.redirects = redirects or {}
+        self.requests = []
+
+    def get(self, url, headers=None, **kwargs):
+        self.requests.append((url, dict(headers or {})))
+        target = self.redirects.get(url)
+        response = MagicMock(history=[MagicMock()] if target else [], url=target or url)
+
+        async def text():
+            return self.pages[target or url]
+
+        response.text = text
+        return _AsyncContext(response)
+
+
+def _misc_cog(session=None, users=None, items=(), skins=()):
+    from gw2bot.cogs.misc import Misc
+
+    cog = Misc(_fake_bot(session, users))
+    cog.db = gw2_db(items=items, skins=skins)
+    return cog
+
+
+async def wiki(wiki_session, **options):
+    """Run /wiki. Returns (what was sent, (url, headers) requested)."""
+    from gw2bot.cogs.misc import Misc
+
+    def cog_for(session, users):
+        cog = _misc_cog(session, users)
+        cog.bot.session = wiki_session
+        return cog
+
+    sent, _ = await run_command(cog_for, Misc.wiki, [], permissions=(), **options)
+    return sent, wiki_session.requests
+
+
+async def chatcode(*, items=(), skins=(), **options):
+    """Run /chatcode with the cached `items` and `skins`; returns its reply."""
+    from gw2bot.cogs.misc import Misc
+
+    sent, _ = await run_command(lambda session, users: _misc_cog(session, users, items, skins),
+                                Misc.chatcode, [], permissions=(), **options)
+    return sent
+
+
+async def chatcode_choices(option, text, *, items=(), skins=()):
+    """The /chatcode autocomplete for `option` (item, skin or upgrade), as
+    (name, value)."""
+    cog = _misc_cog(items=items, skins=skins)
+    autocomplete = getattr(cog, f"chatcode_{option}_autocomplete")
+    return [(c.name, c.value) for c in await autocomplete(MagicMock(), text)]
