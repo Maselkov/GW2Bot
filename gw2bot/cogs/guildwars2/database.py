@@ -111,14 +111,6 @@ class DatabaseMixin:
         result = await self.bot.data.users.count({"key": {"$ne": None}})
         await ctx.send("{} registered users".format(result))
 
-    async def get_title(self, title_id):
-        try:
-            results = await self.db.titles.find_one({"_id": title_id})
-            title = results["name"]
-        except (KeyError, TypeError):
-            return ""
-        return title
-
     async def fetch_statname(self, item):
         statset = await self.db.itemstats.find_one({"_id": item})
         try:

@@ -91,6 +91,15 @@ class GW2Cog(commands.Cog):
         """The cached item document."""
         return await self.db.items.find_one({"_id": item})
 
+    async def get_title(self, title_id):
+        """A title's name, or "" if it isn't cached."""
+        try:
+            results = await self.db.titles.find_one({"_id": title_id})
+            title = results["name"]
+        except (KeyError, TypeError):
+            return ""
+        return title
+
     def rarity_to_color(self, rarity):
         return int(self.gamedata["items"]["rarity_colors"][rarity], 0)
 

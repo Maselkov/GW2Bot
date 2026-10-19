@@ -16,7 +16,6 @@ from unittest.mock import MagicMock
 import time_machine
 
 from gw2bot.cogs.base import GW2Cog
-from gw2bot.cogs.guildwars2.achievements import AchievementsMixin
 from gw2bot.cogs.guildwars2.characters import CharactersMixin
 from gw2bot.cogs.guildwars2 import daily
 from gw2bot.cogs.guildwars2.daily import DailyMixin
@@ -69,7 +68,6 @@ def _fake_bot(session=None, users=None):
 
 class _Harness(
     GW2Cog,
-    AchievementsMixin,
     CharactersMixin,
     DailyMixin,
     DatabaseMixin,
@@ -140,15 +138,21 @@ def search_pattern(text):
 # --- Achievements ----------------------------------------------------------
 
 def tier_progress(tiers, progress):
-    return _Harness().tier_progress(tiers, progress)
+    from gw2bot.cogs.achievements import tier_progress
+
+    return tier_progress(tiers, progress)
 
 
 def max_ap(achievement, repeatable=False):
-    return _Harness().max_ap(achievement, repeatable)
+    from gw2bot.cogs.achievements import max_ap
+
+    return max_ap(achievement, repeatable)
 
 
 def earned_ap(achievement, progress):
-    return _Harness().earned_ap(achievement, progress)
+    from gw2bot.cogs.achievements import earned_ap
+
+    return earned_ap(achievement, progress)
 
 
 # --- Skills ----------------------------------------------------------------
@@ -471,16 +475,16 @@ async def render_build(session, specializations, skills):
 
 async def total_possible_ap(db):
     """Maximum achievement points, from the cached achievements in `db`."""
-    harness = _Harness()
-    harness.db = db
-    return await harness.total_possible_ap()
+    from gw2bot.cogs.achievements import total_possible_ap
+
+    return await total_possible_ap(db.achievements)
 
 
 async def account_ap(db, progress, account):
     """A user's AP from /account/achievements progress and /account."""
-    harness = _Harness()
-    harness.db = db
-    return await harness.calculate_user_ap(progress, account)
+    from gw2bot.cogs.achievements import account_ap
+
+    return await account_ap(db.achievements, progress, account)
 
 
 # --- Update notes from the forum -------------------------------------------
@@ -882,24 +886,24 @@ def gw2_db(**collections):
 
 async def achievement(responses, achievement_name, *, db, permissions=("account", "progression")):
     """Run /achievement with the cached game data in `db` (see gw2_db)."""
-    from gw2bot.cogs.guildwars2.achievements import AchievementsMixin
+    from gw2bot.cogs.achievements import Achievements
 
     def cog_for(session, users):
-        cog = _Harness(session, users)
+        cog = Achievements(_fake_bot(session, users))
         cog.db = db
         return cog
 
     return await run_command(
-        cog_for, AchievementsMixin.achievementinfo, responses, permissions=permissions,
+        cog_for, Achievements.achievementinfo, responses, permissions=permissions,
         achievement_name=achievement_name,
     )
 
 
 async def achievement_search(text, db):
     """The /achievement autocomplete choices for `text`, as (name, value)."""
-    from gw2bot.cogs.guildwars2.achievements import AchievementsMixin
+    from gw2bot.cogs.achievements import Achievements
 
-    cog = _Harness()
+    cog = Achievements(_fake_bot())
     cog.db = db
-    choices = await AchievementsMixin.achievement_autocomplete(cog, MagicMock(), text)
+    choices = await Achievements.achievement_autocomplete(cog, MagicMock(), text)
     return [(c.name, c.value) for c in choices]

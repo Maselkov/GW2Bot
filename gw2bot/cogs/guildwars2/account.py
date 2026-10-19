@@ -10,6 +10,7 @@ import pymongo
 from discord import app_commands
 from discord.app_commands import Choice
 
+from ..achievements import account_ap, total_possible_ap
 from .exceptions import APIError, APINotFound
 from gw2bot.utils.chat import embed_list_lines
 from gw2bot.utils.db import prepare_search
@@ -43,8 +44,8 @@ class AccountMixin:
             endpoints = ["account/achievements", "account"]
             achievements, account = await self.call_multiple(
                 endpoints, user, ["progression"])
-            possible_ap = await self.total_possible_ap()
-            user_ap = await self.calculate_user_ap(achievements, account)
+            possible_ap = await total_possible_ap(self.db.achievements)
+            user_ap = await account_ap(self.db.achievements, achievements, account)
             embed.add_field(name="Achievement Points",
                             value="{} earned out of {} possible".format(
                                 user_ap, possible_ap),
