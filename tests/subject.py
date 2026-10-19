@@ -1311,3 +1311,64 @@ async def chatcode_choices(option, text, *, items=(), skins=()):
     cog = _misc_cog(items=items, skins=skins)
     autocomplete = getattr(cog, f"chatcode_{option}_autocomplete")
     return [(c.name, c.value) for c in await autocomplete(MagicMock(), text)]
+
+
+# --- Guild sync ------------------------------------------------------------------
+
+class FakeGuildsyncs:
+    """gw2.guildsyncs: find by guild_id, update_one, count_documents."""
+
+    def __init__(self, docs):
+        self.docs = docs
+        self.updates = []
+
+    def find(self, query):
+        found = [d for d in self.docs if d["guild_id"] == query["guild_id"]]
+
+        async def iterate():
+            for doc in found:
+                yield doc
+
+        return iterate()
+
+    async def update_one(self, query, update):
+        self.updates.append((query, update))
+
+
+def discord_member(member_id, *, roles=1, days_on_server=3):
+    """A server member with `roles` roles (1 is just @everyone)."""
+    member = MagicMock(id=member_id, bot=False)
+    member.roles = [MagicMock(id=900 + i) for i in range(roles)]
+    member.joined_at = datetime.datetime.now(UTC) - datetime.timedelta(days=days_on_server)
+    return member
+
+
+async def run_guildsync(members, accounts, responses, *, syncs=1, purge=True):
+    """Run a full guild sync on a server with `members` (see
+    discord_member), whose accounts are {member id: account name}, against
+    `syncs` guild syncs with tag and rank roles off. `responses` are each
+    sync's guild/:id/members (see FakeSession). Returns the ids of the
+    members kicked."""
+    from unittest.mock import AsyncMock
+
+    from gw2bot.cogs.guildwars2.guild import GuildSync
+
+    class Cog(GuildSync, _Harness):
+        pass
+
+    users = MemoryUsers({member_id: stored_key(["account", "guilds"], account_name=name)
+                         for member_id, name in accounts.items()})
+    session = FakeSession(*responses)
+    cog = Cog(session, users)
+    guild = MagicMock(id=10, chunked=True, members=members)
+    guild.kick = AsyncMock()
+    guild.get_role = lambda role_id: None
+    for member in members:
+        member.guild = guild
+    docs = [{"_id": f"sync{i}", "guild_id": 10, "gid": f"GUILD-{i}", "key": "LEADER", "rank_roles": {},
+             "tag_role": None, "enabled": {"ranks": False, "tag": False}, "name": f"Guild {i}", "tag": "EX"}
+            for i in range(syncs)]
+    cog.db = SimpleNamespace(guildsyncs=FakeGuildsyncs(docs))
+    cog.bot.data.guilds.get = AsyncMock(return_value={"guildsync": {"enabled": True, "purge": purge}})
+    await cog.run_guildsyncs(guild)
+    return [call.kwargs["user"].id for call in guild.kick.await_args_list]

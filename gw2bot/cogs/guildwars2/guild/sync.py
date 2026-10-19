@@ -827,6 +827,10 @@ class GuildSync:
                 target = await self.SyncTarget.create(self, member)
                 if target:
                     targets.append(target)
+        # Purging is only safe when every sync read its guild's members:
+        # otherwise an API outage or a revoked key looks like everyone left
+        synced = 0
+        complete = True
         async for doc in cursor:
             try:
                 sync = self.SyncGuild(self, doc, guild)
@@ -834,19 +838,25 @@ class GuildSync:
                 if sync.error:
                     await sync.save(error=True)
                     if sync.ranks_enabled and not sync.roles:
+                        complete = False
                         continue
                 try:
                     await sync.fetch_members()
                 except APIError:
                     sync.error = "Couldn't fetch guild members."
-                    print("failed")
                     await sync.save(error=True)
+                    complete = False
                     continue
                 for target in targets:
                     await target.sync_membership(sync)
+                synced += 1
             except Exception as e:
+                complete = False
                 self.log.exception("Exception in guildsync", exc_info=e)
-        if purge:
+        if purge and not complete:
+            self.log.warning(
+                "Guildsync: skipping purge in %s, not every guild's members could be read", guild.id)
+        elif purge and synced:
             for target in targets:
                 member = target.member
                 membership_duration = (
