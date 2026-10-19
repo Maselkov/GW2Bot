@@ -136,8 +136,9 @@ class Character:
         self.color = discord.Color(
             int(self.cog.gamedata["professions"][self.profession]["color"],
                 16))
-        self.created = datetime.datetime.strptime(data["created"],
-                                                  "%Y-%m-%dT%H:%M:%Sz")
+        self.created = datetime.datetime.strptime(
+            data["created"],
+            "%Y-%m-%dT%H:%M:%Sz").replace(tzinfo=datetime.timezone.utc)
         self.age = data["age"]
         self.spec_cache = {}
 
@@ -164,6 +165,11 @@ class Character:
         info = {"name": name, "icon": icon}
         self.spec_cache[mode] = info
         return info
+
+
+def utcnow():
+    """The time in UTC, naive like the dates MongoDB returns."""
+    return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
 
 
 def readable_attribute(attribute_name):
@@ -200,7 +206,7 @@ class Characters(GW2Cog):
             except APIError:
                 return []
             c = {
-                "last_update": datetime.datetime.utcnow(),
+                "last_update": utcnow(),
                 "characters": character_list
             }
             await self.bot.data.users.update(
@@ -211,8 +217,7 @@ class Characters(GW2Cog):
         cache = doc.get("character_cache", {}).get(account_key, {})
         if not cache:
             cache = await cache_characters()
-        elif cache["last_update"] < datetime.datetime.utcnow(
-        ) - datetime.timedelta(days=3):
+        elif cache["last_update"] < utcnow() - datetime.timedelta(days=3):
             asyncio.create_task(cache_characters())
         character_list = cache["characters"]
         current = current.lower()
@@ -266,7 +271,7 @@ class Characters(GW2Cog):
                     gear[slot]["name"] = doc["name"]
                     continue
             doc = await self.db.items.find_one({"_id": item["id"]})
-            gear[slot]["name"] = doc["name"]
+            gear[slot]["name"] = doc["name"] if doc else "Unknown item"
 
         embed = discord.Embed(description="Fashion", colour=profession.color)
         for piece in pieces:
@@ -303,7 +308,8 @@ class Characters(GW2Cog):
         age = format_age(results["age"])
         created = results["created"].split("T", 1)[0]
         deaths = results["deaths"]
-        deathsperhour = round(deaths / (results["age"] / 3600), 1)
+        hours = results["age"] / 3600
+        deathsperhour = round(deaths / hours, 1) if hours else 0.0
         if "title" in results:
             title = await self.get_title(results["title"])
         else:
@@ -354,8 +360,7 @@ class Characters(GW2Cog):
             if info == "age":
                 return lambda k: (-k.age, k.name)
             if info == "created":
-                return lambda k: (-(datetime.datetime.utcnow() - k.created).
-                                  total_seconds(), k.name)
+                return lambda k: (k.created, k.name)
             return lambda k: k.name
 
         def extra_info(char):
@@ -428,6 +433,9 @@ class Characters(GW2Cog):
                 for item in eq:
                     if item["slot"] == piece:
                         item_doc = await self.fetch_item(item["id"])
+                        if not item_doc:
+                            line = "Unknown item"
+                            continue
                         line = self.get_emoji(
                             interaction, f"{item_doc['rarity']}_{piece_name}")
                         for upgrade_type in "infusions", "upgrades":
@@ -625,7 +633,7 @@ class Characters(GW2Cog):
         characters = await self.get_all_characters(interaction.user)
         fields = {}
         for character in characters:
-            age = datetime.datetime.utcnow() - character.created
+            age = datetime.datetime.now(datetime.timezone.utc) - character.created
             days = age.days
             floor = days // 365
             # finds days till next birthday
@@ -760,7 +768,8 @@ class Characters(GW2Cog):
         runes = {}
         level = character["level"]
         for piece in eq:
-            item = await self.fetch_item(piece["id"])
+            # Without its document, only selectable stats are known
+            item = await self.fetch_item(piece["id"]) or {"details": {}}
             # Gear with selectable values
             if "stats" in piece:
                 if piece["slot"] not in ignore_list:
@@ -889,6 +898,8 @@ class Characters(GW2Cog):
                         attribute_name = re.sub(r'\+\d{1,} ', '',
                                                 attribute_name)
                         attribute_name = re.sub(';.*', '', attribute_name)
+                        attribute_name = re.sub('Healing Power', 'Healing',
+                                                attribute_name)
                         if attribute_name in attr_dict:
                             attr_dict[attribute_name] += int(modifier)
                     elif pattern_percentage.match(bonus):
@@ -929,7 +940,7 @@ class Characters(GW2Cog):
         else:
             base_prec = 1000
         attr_dict["Critical Chance"] = round(
-            4 + ((attr_dict["Precision"] - base_prec) / 21), 2)
+            5 + ((attr_dict["Precision"] - base_prec) / 21), 2)
         attr_dict["defense"] += attr_dict["Toughness"]
 
         # Calculate base health
@@ -946,8 +957,8 @@ class Characters(GW2Cog):
         output = {}
         for attribute in ordered_list:
             if attribute in percentage_list:
-                attr_dict[attribute] = '{0}%'.format(
-                    round(attr_dict[attribute]), 2)
+                attr_dict[attribute] = "{:g}%".format(
+                    round(attr_dict[attribute], 2))
             attribute_sub = readable_attribute(attribute)
             output[attribute_sub.title()] = attr_dict[attribute]
         return output
@@ -1146,7 +1157,10 @@ class Characters(GW2Cog):
         specs = active_tab["build"]["specializations"]
         specializations = []
         for spec in specs:
-            spec_doc = await self.db.specializations.find_one({"_id": spec})
+            spec_doc = None
+            if spec:
+                spec_doc = await self.db.specializations.find_one(
+                    {"_id": spec["id"]})
             specializations.append(spec_doc)
         return profession_info(self.gamedata, character["profession"],
                                specializations)
@@ -1155,7 +1169,7 @@ class Characters(GW2Cog):
         statset = await self.db.itemstats.find_one({"_id": item})
         try:
             name = statset["name"]
-        except KeyError:
+        except (KeyError, TypeError):
             name = ""
         return name
 

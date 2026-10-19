@@ -68,7 +68,7 @@ async def test_info(gamedata):
         ("Crafting", "Level 500 Armorsmith\nLevel 150 Chef"),
     ]
     assert embed["author"]["name"] == "example char"
-    assert embed["footer"]["text"] == "A female human guardian"
+    assert embed["footer"]["text"] == "A female human firebrand"
     assert embed["color"] == int(gamedata["professions"]["guardian"]["color"], 0)
     assert requests == [
         (API + "characters/Example%20Char", {"access_token": "KEY"}),
@@ -90,7 +90,7 @@ async def test_info_for_someone_elses_public_character():
     embed, requests, _, _ = await subject.character_command(
         "info", responses, db=cache(), public=public, character="Example Char"
     )
-    assert embed["footer"]["text"] == "A female human guardian"
+    assert embed["footer"]["text"] == "A female human firebrand"
     assert [url for url, _ in requests] == [API + "characters/Example%20Char"] * 2
 
 
@@ -229,7 +229,7 @@ async def test_fashion():
     # Uncached dyes are left out
     assert fields(embed) == [("Fancy Hat", "Channel 1: Abyss\nChannel 3: Celestial"), ("Plain Coat", ZWSP)]
     assert embed["author"]["name"] == "Example Char"
-    assert embed["footer"]["text"] == "A level 80 guardian "
+    assert embed["footer"]["text"] == "A level 80 firebrand "
 
 
 async def test_fashion_unknown_character():
@@ -323,7 +323,6 @@ async def test_autocomplete_without_a_key():
 # --- Fixes ------------------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="looks up the elite specialization by the whole spec, never finding it")
 async def test_info_shows_the_elite_specialization():
     embed, _, _, _ = await subject.character_command("info", [(200, character())], db=cache(), character="Example Char")
     assert embed["footer"]["text"] == "A female human firebrand"
@@ -340,7 +339,6 @@ def helsinki_time(monkeypatch):
     time.tzset()
 
 
-@pytest.mark.xfail(strict=True, reason="creation dates are read as local time")
 async def test_list_by_creation_date(helsinki_time):
     embed, _, _, _ = await subject.character_command("list", [(200, LIST)], db=cache(), info="created")
     assert embed["description"] == "Sorted by date of creation"
@@ -351,7 +349,6 @@ async def test_list_by_creation_date(helsinki_time):
     ]))]
 
 
-@pytest.mark.xfail(strict=True, reason="divides by zero for a character without time played")
 async def test_info_for_a_new_character():
     embed, _, _, _ = await subject.character_command(
         "info", [(200, character(age=0, deaths=0))], db=cache(), character="Example Char"
@@ -359,7 +356,6 @@ async def test_info_for_a_new_character():
     assert dict(fields(embed))["Deaths per hour"] == "0.0"
 
 
-@pytest.mark.xfail(strict=True, reason="crashes on equipment that isn't cached")
 async def test_fashion_with_uncached_item():
     equipment = [{"id": 10, "slot": "Helm", "location": "Equipped", "dyes": []}]
     embed, _, _, _ = await subject.character_command(
@@ -439,7 +435,7 @@ async def test_gear(gamedata):
             "**Agony Resistance**: 0",
         ])),
         (ZWSP, "\n".join([
-            ZWSP, ZWSP, "**Armor**: 1097", "**Health**: 11645", "**Critical Chance**: 6%",
+            ZWSP, ZWSP, "**Armor**: 1097", "**Health**: 11645", "**Critical Chance**: 7.14%",
             "**Critical Damage**: 153%", "**Healing Power**: 0", "**Condition Duration**: 0%",
             "**Boon Duration**: 0%",
         ])),
@@ -464,7 +460,6 @@ async def test_gear_unknown_character():
     assert sent == "Invalid character name"
 
 
-@pytest.mark.xfail(strict=True, reason="crashes on a stat set that isn't cached")
 async def test_gear_with_uncached_stats():
     embed, _, _, _ = await subject.character_command(
         "gear", [(200, geared())], db=gear_cache(itemstats=[]), config={"image_channel": 5},
@@ -472,3 +467,12 @@ async def test_gear_with_uncached_stats():
     )
     # Just the rarity emoji, which the tests don't have
     assert fields(embed)[0][1] == "NONE\nNONE\nNONE\nNONE\nNONE\nNONE\n*Superior Rune of Strength* (1/6)"
+
+
+async def test_gear_with_uncached_equipment():
+    items = [doc for doc in gear_cache().items.docs.values() if doc["_id"] != 300]
+    embed, _, _, _ = await subject.character_command(
+        "gear", [(200, geared())], db=gear_cache(items=items), config={"image_channel": 5},
+        channel=image_channel(), character="Example Char",
+    )
+    assert fields(embed)[1] == ("> **WEAPON SET #1**", "Unknown item")

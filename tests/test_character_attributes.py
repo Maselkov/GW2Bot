@@ -15,7 +15,7 @@ def naked(**changes):
     panel = {
         "Power": 1000, "Toughness": 1000, "Vitality": 1000, "Precision": 1000, "Ferocity": 0,
         "Condition Damage": 0, "Expertise": 0, "Concentration": 0, "Agony Resistance": 0, "Armor": 1000,
-        "Health": 15922, "Critical Chance": "4%", "Critical Damage": "150%", "Healing Power": 0,
+        "Health": 15922, "Critical Chance": "5%", "Critical Damage": "150%", "Healing Power": 0,
         "Condition Duration": "0%", "Boon Duration": "0%",
     }
     return {**panel, **changes}
@@ -103,7 +103,7 @@ async def test_selectable_stats():
     panel = await attributes([helm], items)
     assert panel == naked(
         Power=1063, Precision=1045, Ferocity=45, Armor=1097,
-        **{"Critical Damage": "153%", "Critical Chance": "6%"},
+        **{"Critical Damage": "153%", "Critical Chance": "7.14%"},
     )
 
 
@@ -159,7 +159,7 @@ async def test_rune_all_stats_bonus():
     panel = await attributes([{"id": 100, "slot": "Helm", "upgrades": [501]}], [runes])
     assert panel == naked(
         Power=1025, Vitality=1025, Toughness=1025, Precision=1025, Ferocity=25, Armor=1025, Health=16172,
-        **{"Healing Power": 25, "Condition Damage": 25, "Critical Damage": "152%", "Critical Chance": "5%"},
+        **{"Healing Power": 25, "Condition Damage": 25, "Critical Damage": "151.67%", "Critical Chance": "6.19%"},
     )
 
 
@@ -189,7 +189,6 @@ async def test_upgrades_missing_from_the_cache_are_skipped():
 # --- Fixes -----------------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="base critical chance is 4% instead of 5%, rounded to whole numbers")
 async def test_critical_chance():
     assert (await attributes([]))["Critical Chance"] == "5%"
     helm = {"id": 100, "slot": "Helm", "stats": {"id": 1, "attributes": {"Precision": 45}}}
@@ -197,21 +196,18 @@ async def test_critical_chance():
     assert (await attributes([helm]))["Critical Chance"] == "7.14%"
 
 
-@pytest.mark.xfail(strict=True, reason="durations are rounded to whole percents")
 async def test_durations_keep_two_decimals():
     helm = {"id": 100, "slot": "Helm", "stats": {"id": 1, "attributes": {"BoonDuration": 5, "Ferocity": 1}}}
     panel = await attributes([helm])
     assert (panel["Boon Duration"], panel["Critical Damage"]) == ("0.33%", "150.07%")
 
 
-@pytest.mark.xfail(strict=True, reason="Healing Power rune bonuses are dropped")
 async def test_rune_healing_power():
     runes = rune(502, "+25 Healing Power")
     panel = await attributes([{"id": 100, "slot": "Helm", "upgrades": [502]}], [runes])
     assert panel["Healing Power"] == 25
 
 
-@pytest.mark.xfail(strict=True, reason="crashes on equipment that isn't cached")
 async def test_equipment_missing_from_the_cache_is_skipped():
     panel = await attributes([{"id": 999, "slot": "Helm"}])
     assert panel == naked()
