@@ -894,7 +894,9 @@ class MemoryItems:
     async def find_one(self, query):
         return self.docs.get(query["_id"])
 
-    def find(self, query):
+    def find(self, query=None):
+        query = query or {}
+
         def matches(doc):
             for field, condition in query.items():
                 value = doc.get(field)
@@ -1020,3 +1022,75 @@ async def items_in_account(responses, item_ids, *, permissions=("account", "inve
     if options.get("flatten"):
         return dict(result)
     return {item: dict(places) for item, places in result.items()}
+
+
+class MemoryEncounters:
+    """In-memory stand-in for the EVTC encounters collection, for the
+    /bosses report links: boss_id $in, a player, a date range and success;
+    newest first."""
+
+    def __init__(self, docs=()):
+        self.docs = list(docs)
+
+    def find(self, query):
+        found = [
+            doc for doc in self.docs
+            if doc["boss_id"] in query["boss_id"]["$in"]
+            and query["players"] in doc["players"]
+            and query["date"]["$gte"] <= doc["date"] < query["date"]["$lt"]
+            and doc["success"] == query["success"]
+        ]
+
+        class Cursor:
+            def sort(self, field, direction):
+                found.sort(key=lambda doc: doc[field], reverse=direction == -1)
+                return self
+
+            def limit(self, length):
+                del found[length:]
+                return self
+
+            async def to_list(self, length):
+                return found
+
+        return Cursor()
+
+
+def _account_cog(session=None, users=None, db=None, raids=None):
+    from unittest.mock import AsyncMock
+
+    from gw2bot.cogs.guildwars2.account import AccountMixin
+
+    class Cog(AccountMixin, _Harness):
+        pass
+
+    cog = Cog(session, users)
+    cog.db = db or gw2_db()
+    if not hasattr(cog.db, "encounters"):
+        cog.db.encounters = MemoryEncounters()
+    cog.bot.data.config.get = AsyncMock(return_value={"cache": {"raids": raids}})
+    return cog
+
+
+async def account_command(command, responses, *, permissions=("account",), db=None, raids=None, now=None,
+                          **options):
+    """Run /account, /li, /kp, /bosses, /search, /cats or /nodes. `db` is
+    the game data cache (see gw2_db), `raids` the cached raid wings, and
+    `now` freezes the clock."""
+    import contextlib
+
+    from gw2bot.cogs.guildwars2.account import AccountMixin
+
+    handler = getattr(AccountMixin, command)
+
+    def cog_for(session, users):
+        return _account_cog(session, users, db=db, raids=raids)
+
+    with _at(now) if now else contextlib.nullcontext():
+        return await run_command(cog_for, handler, responses, permissions=permissions, **options)
+
+
+async def account_item_search(text, items):
+    """The /search autocomplete choices for `text`, as (name, value)."""
+    cog = _account_cog(db=gw2_db(items=items))
+    return [(c.name, c.value) for c in await cog.item_autocomplete(MagicMock(), text)]
