@@ -89,9 +89,6 @@ class NotiifiersMixin:
         pass
 
     notifier_group = NotifierGroup()
-    reminder_group = app_commands.Group(
-        name="reminder", description="Commands for setting various personal reminders."
-    )
 
     @notifier_group.command(name="daily")
     @app_commands.checks.has_permissions(manage_guild=True)
@@ -321,84 +318,6 @@ class NotiifiersMixin:
         await self.bot.data.guilds.update(interaction.guild.id, settings)
         await interaction.followup.send(
             f"I will now send boss notifications to {channel.mention}."
-        )
-
-    async def event_name_autocomplete(self, interaction: discord.Interaction, current):
-        if not current:
-            return []
-        current = current.lower()
-        names = set()
-        timers = self.gamedata["event_timers"]
-        for category in timers:
-            if category == "bosses":
-                subtypes = "normal", "hardcore"
-                for subtype in subtypes:
-                    for boss in timers[category][subtype]:
-                        name = boss["name"]
-                        if current in name.lower():
-                            names.add(Choice(name=name, value=name))
-            else:
-                for subcategory in timers[category]:
-                    map_name = subcategory["name"]
-                    for event in subcategory["phases"]:
-                        if event["name"]:
-                            name = f"{map_name} - {event['name']}"
-                            if current in name.lower():
-                                names.add(Choice(name=name, value=event["name"]))
-        return sorted(list(names)[:25], key=lambda c: c.name)
-
-    @reminder_group.command(name="event")
-    @app_commands.describe(
-        event_name="Event name. Examples: Shadow Behemoth. Gerent Preparation",
-        minutes_before_event="The number of minutes before "
-        "the event that you'll be notified at",
-    )
-    @app_commands.autocomplete(event_name=event_name_autocomplete)
-    async def reminder_event(
-        self,
-        interaction: discord.Interaction,
-        event_name: str,
-        minutes_before_event: int = 5,
-    ):
-        """Make the bot automatically notify you before an event starts"""
-        if minutes_before_event < 0:
-            return await interaction.response.send_message(
-                "That's not how time works!", ephemeral=True
-            )
-        if minutes_before_event > 60:
-            return await interaction.response.send_message(
-                "Time can't be greater than one hour", ephemeral=True
-            )
-        event_name = event_name.lower()
-        reminder = {}
-        for boss in self.boss_schedule:
-            if boss["name"].lower() == event_name:
-                reminder["type"] = "boss"
-                reminder["name"] = boss["name"]
-        if not reminder:
-            # Every map event group the timers have (all but world bosses)
-            groups = [g for g in self.gamedata["event_timers"] if g != "bosses"]
-            for group in groups:
-                maps = self.gamedata["event_timers"][group]
-                for location in maps:
-                    for phase in location["phases"]:
-                        if not phase["name"]:
-                            continue
-                        if phase["name"].lower() == event_name:
-                            reminder["type"] = "phase"
-                            reminder["name"] = phase["name"]
-                            reminder["group"] = group
-                            reminder["map_name"] = location["name"]
-        if not reminder:
-            return await interaction.response.send_message(
-                "No event found matching that name", ephemeral=True
-            )
-        reminder["time"] = minutes_before_event * 60
-        await self.bot.data.users.update(
-            interaction.user.id, {"event_reminders": reminder}, op="push"
-        )
-        await interaction.response.send_message(
-            "Reminder set succesfully", ephemeral=True
         )
 
     async def update_notification(self, new_build):
@@ -660,54 +579,6 @@ class NotiifiersMixin:
 
     @gem_tracker.before_loop
     async def before_gem_tracker(self):
-        await self.bot.wait_until_ready()
-
-    @tasks.loop(minutes=5)
-    async def boss_notifier(self):
-        boss = self.get_upcoming_bosses(1)[0]
-        await asyncio.sleep(boss["diff"].total_seconds() + 1)
-        cursor = self.bot.data.guilds.find({"bossnotifs.on": True, "bossnotifs.channel": {"$ne": None}})
-        async for doc in cursor:
-            try:
-                doc = doc["bossnotifs"]
-                edit = doc.get("edit", False)
-                channel = self.bot.get_channel(doc["channel"])
-                embed = self.schedule_embed(2)
-                old_message_id = doc.get("message")
-                edited = False
-                try:
-                    if edit and old_message_id:
-                        old_message = await channel.fetch_message(old_message_id)
-                        if old_message:
-                            try:
-                                await old_message.edit(embed=embed)
-                                edited = True
-                                continue
-                            except discord.HTTPException:
-                                pass
-                    message = await channel.send(embed=embed)
-                except discord.Forbidden:
-                    message = await channel.send(
-                        "Need permission to "
-                        "embed links in order "
-                        "to send boss "
-                        "notifs!"
-                    )
-                    continue
-                if not edited:
-                    await self.bot.data.guilds.update(channel.guild.id, {"bossnotifs.message": message.id})
-                    old_message_id = doc.get("message")
-                    if old_message_id:
-                        to_delete = await channel.fetch_message(old_message_id)
-                        await to_delete.delete()
-            except asyncio.CancelledError:
-                return
-            except Exception:
-                pass
-            await asyncio.sleep(0.1)
-
-    @boss_notifier.before_loop
-    async def before_boss_notifier(self):
         await self.bot.wait_until_ready()
 
     @tasks.loop(minutes=5)

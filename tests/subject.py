@@ -18,7 +18,6 @@ import time_machine
 from gw2bot.cogs.base import GW2Cog
 from gw2bot.cogs import daily
 from gw2bot.cogs.guildwars2.database import DatabaseMixin
-from gw2bot.cogs.guildwars2.events import EventsMixin
 from gw2bot.utils import chat, db
 
 DATA_DIR = pathlib.Path(__file__).resolve().parent.parent / "gw2bot" / "data"
@@ -65,7 +64,6 @@ def _fake_bot(session=None, users=None):
 class _Harness(
     GW2Cog,
     DatabaseMixin,
-    EventsMixin,
 ):
     """Just enough of the cog's state for its non-Discord logic to run."""
 
@@ -115,7 +113,7 @@ def readable_attribute(name):
 
 
 def format_timedelta(td):
-    return _Harness().format_timedelta(td)
+    return _events_cog().format_timedelta(td)
 
 
 def embed_list_lines(lines, field_name="Field", **kwargs):
@@ -290,9 +288,7 @@ async def wvw_info(responses, *, permissions=("account",), **options):
 def upcoming_bosses(now, limit=8):
     """[(boss name, datetime)] for the next `limit` world bosses."""
     with _at(now):
-        harness = _Harness()
-        harness.boss_schedule = harness.generate_schedule()
-        bosses = harness.get_upcoming_bosses(limit)
+        bosses = _events_cog().get_upcoming_bosses(limit)
     return [
         (b["name"], datetime.datetime.fromtimestamp(int(b["time"][3:-3]), UTC))
         for b in bosses
@@ -301,15 +297,13 @@ def upcoming_bosses(now, limit=8):
 
 def seconds_until_boss(name, now):
     with _at(now):
-        harness = _Harness()
-        harness.boss_schedule = harness.generate_schedule()
-        return harness.get_time_until_event({"type": "boss", "name": name})
+        return _events_cog().get_time_until_event({"type": "boss", "name": name})
 
 
 def seconds_until_phase(group, map_name, phase, now):
     reminder = {"type": "event", "group": group, "map_name": map_name, "name": phase}
     with _at(now):
-        return _Harness().get_time_until_event(reminder)
+        return _events_cog().get_time_until_event(reminder)
 
 
 def timer_titles():
@@ -317,7 +311,7 @@ def timer_titles():
     groups = [g for g in _GAMEDATA["event_timers"] if g != "bosses"]
     titles = {}
     for group in groups:
-        embed = asyncio.run(_Harness().timer_embed(None, group))
+        embed = asyncio.run(_events_cog().timer_embed(None, group))
         titles[group] = embed.title
     return titles
 
@@ -325,7 +319,7 @@ def timer_titles():
 def timer_state(group, now):
     """{map name: (current phase or None, next phase, datetime of next phase)}."""
     with _at(now):
-        embed = asyncio.run(_Harness().timer_embed(None, group))
+        embed = asyncio.run(_events_cog().timer_embed(None, group))
     state = {}
     for field in embed.fields:
         current = re.search(r"Current phase: \*\*(.+?)\*\*", field.value)
@@ -1390,19 +1384,11 @@ async def run_guildsync(members, accounts, responses, *, syncs=1, purge=True):
     return [call.kwargs["user"].id for call in guild.kick.await_args_list]
 async def set_event_reminder(**options):
     """Run /reminder event. Returns (reply, users' settings writes)."""
-    from gw2bot.cogs.guildwars2.notifiers import NotiifiersMixin
+    from gw2bot.cogs.events import Events
 
     users = MemoryUsers({1: {}})
-
-    def cog_for(session, _):
-        class Cog(NotiifiersMixin, _Harness):
-            pass
-
-        cog = Cog(session, users)
-        cog.boss_schedule = cog.generate_schedule()
-        return cog
-
-    sent, _ = await run_command(cog_for, NotiifiersMixin.reminder_event, [], permissions=(), users=users, **options)
+    sent, _ = await run_command(lambda session, _: _events_cog(session, users), Events.reminder_event, [],
+                                permissions=(), users=users, **options)
     return sent, users.writes
 
 
@@ -1789,9 +1775,9 @@ async def notifier_daily(*, choose=None, enabled=True, already_enabled=False, **
 # --- Event timers and reminders -------------------------------------------------
 
 def _events_cog(session=None, users=None):
-    cog = _Harness(session, users)
-    cog.boss_schedule = cog.generate_schedule()
-    return cog
+    from gw2bot.cogs.events import Events
+
+    return Events(_fake_bot(session, users))
 
 
 class RecordingChannel:
@@ -1863,7 +1849,7 @@ async def press_unsubscribe(message_id):
     writes, whether the DM was deleted)."""
     from unittest.mock import AsyncMock
 
-    from gw2bot.cogs.guildwars2.events import EventTimerReminderUnsubscribeView
+    from gw2bot.cogs.events import EventTimerReminderUnsubscribeView
 
     users = MemoryUsers({1: {}})
     cog = _events_cog(users=users)
@@ -1888,29 +1874,22 @@ async def run_boss_notifier(servers, channels, now):
     guilds = MemoryGuilds(servers)
     with _at(now):
         cog = _events_cog()
-        from gw2bot.cogs.guildwars2.notifiers import NotiifiersMixin
-
-        class Cog(NotiifiersMixin, _Harness):
-            pass
-
-        notifier = Cog()
-        notifier.boss_schedule = cog.boss_schedule
-        notifier.bot.data.guilds = guilds
-        notifier.bot.get_channel = {c.id: c for c in channels}.get
+        cog.bot.data.guilds = guilds
+        cog.bot.get_channel = {c.id: c for c in channels}.get
 
         async def no_sleep(delay):
             pass
 
         with patch.object(asyncio, "sleep", no_sleep):
-            await type(notifier).boss_notifier.coro(notifier)
+            await type(cog).boss_notifier.coro(cog)
     return guilds.writes
 
 
 async def et_command(category, now):
     """Run /et at `now`; returns the embed."""
-    from gw2bot.cogs.guildwars2.events import EventsMixin
+    from gw2bot.cogs.events import Events
 
     with _at(now):
-        sent, _ = await run_command(lambda session, users: _events_cog(session, users), EventsMixin.et, [],
+        sent, _ = await run_command(lambda session, users: _events_cog(session, users), Events.et, [],
                                     permissions=(), category=category)
     return sent
