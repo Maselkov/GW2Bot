@@ -458,7 +458,7 @@ class EvtcMixin:
                 return await interaction.followup.send(
                     "You don't have an EVTC API key generated."
                 )
-            await self.db.evtc.api_keys.delete_one({"_id": interaction.user.id})
+            await self.db.evtc.api_keys.delete_many({"user": interaction.user.id})
             return await interaction.followup.send(
                 "Your EVTC API key has been deleted."
             )
@@ -473,12 +473,14 @@ class EvtcMixin:
             )
         if operation == "generate":
             key = self.generate_evtc_api_key()
+            # Revoke every older key, so only the new one is accepted
+            await self.db.evtc.api_keys.delete_many({"user": interaction.user.id})
             await self.db.evtc.api_keys.insert_one(
                 {"user": interaction.user.id, "token": key}
             )
             new = "new " if existing_key else ""
             return await interaction.followup.send(
-                f"Your {new}new EVTC API key is:\n```{key}```You may use "
+                f"Your {new}EVTC API key is:\n```{key}```You may use "
                 "it with utilities that automatically upload logs to link "
                 "them with your account, and potentially post them to "
                 "certain channels. See `/evtc_automation` for more\n\nYou may "

@@ -18,6 +18,8 @@ INDEXES = {
         "force_account_names",
         "link_preview_disabled",
     ],
+    # The EVTC upload API looks keys up by token
+    "evtc.api_keys": ["token"],
 }
 
 

@@ -652,3 +652,62 @@ class EvtcUploads:
         self.cog.process_evtc.reset_mock()
         await type(self.cog).on_message(self.cog, message)
         return self.cog.process_evtc.await_count == 1, message.delete.await_count == 1
+
+
+class MemoryCollection:
+    """In-memory stand-in for a Mongo collection (equality filters only).
+    Like Mongo, inserted documents get a generated _id."""
+
+    def __init__(self):
+        self.docs = []
+        self._next_id = 0
+
+    def _matches(self, doc, query):
+        return all(doc.get(k) == v for k, v in query.items())
+
+    async def find_one(self, query):
+        return next((dict(d) for d in self.docs if self._matches(d, query)), None)
+
+    async def insert_one(self, doc):
+        self._next_id += 1
+        doc.setdefault("_id", f"oid{self._next_id}")
+        self.docs.append(dict(doc))
+
+    async def delete_one(self, query):
+        for i, doc in enumerate(self.docs):
+            if self._matches(doc, query):
+                del self.docs[i]
+                return
+
+    async def delete_many(self, query):
+        self.docs = [d for d in self.docs if not self._matches(d, query)]
+
+
+class EvtcApiKeys:
+    """Runs /evtc api_key against an in-memory key collection."""
+
+    def __init__(self):
+        from gw2bot.cogs.guildwars2.evtc import EvtcMixin
+
+        class Cog(EvtcMixin):
+            pass
+
+        self.keys = MemoryCollection()
+        self.cog = Cog()
+        self.cog.db = MagicMock()
+        self.cog.db.evtc.api_keys = self.keys
+
+    async def run(self, operation, user_id=1):
+        """The reply to `/evtc api_key <operation>`."""
+        from unittest.mock import AsyncMock
+
+        interaction = MagicMock()
+        interaction.user.id = user_id
+        interaction.response.defer = AsyncMock()
+        interaction.followup.send = AsyncMock()
+        await type(self.cog).evtc_api_key.callback(self.cog, interaction, operation)
+        return interaction.followup.send.await_args.args[0]
+
+    def accepted_tokens(self, user_id=1):
+        """The tokens the upload API would accept for this user."""
+        return {d["token"] for d in self.keys.docs if d["user"] == user_id}
