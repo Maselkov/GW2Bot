@@ -10,6 +10,7 @@ import json
 import logging
 import pathlib
 import re
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import time_machine
@@ -740,25 +741,32 @@ def stored_key(permissions, account_name="Example.1234"):
     return {"key": key, "keys": [key]}
 
 
-async def run_command(cog_for, command, responses, *, permissions, **options):
+async def run_command(cog_for, command, responses, *, permissions, users=None, **options):
     """Run a slash command's handler with a fake interaction.
 
     cog_for(session, users) builds the cog; `responses` are the API
-    responses in request order (see FakeSession). Returns (what was sent,
-    API requests). What was sent is the followup's embed as a dict, or its
-    content if there's no embed.
+    responses in request order (see FakeSession); `users` is the users
+    repository (default: one user with a key with `permissions`). Returns
+    (what was sent, API requests). What was sent is the reply's embed as a
+    dict, or its content if there's no embed: the followup's if the command
+    deferred, else the direct response's.
     """
     from unittest.mock import AsyncMock
 
     session = FakeSession(*responses)
-    cog = cog_for(session, FakeUserRepo(stored_key(permissions)))
+    users = users or FakeUserRepo(stored_key(permissions))
+    cog = cog_for(session, users)
     interaction = MagicMock()
     interaction.user.id = 1
     interaction.response.defer = AsyncMock()
+    interaction.response.send_message = AsyncMock()
     interaction.followup.send = AsyncMock()
     await command.callback(cog, interaction, **options)
-    interaction.response.defer.assert_awaited_once()
-    call = interaction.followup.send.await_args
+    reply = interaction.followup.send if interaction.followup.send.await_count else interaction.response.send_message
+    if interaction.followup.send.await_count:
+        # A followup needs a deferred (or answered) interaction first
+        assert interaction.response.defer.await_count or interaction.response.send_message.await_count
+    call = reply.await_args
     embed = call.kwargs.get("embed")
     sent = embed.to_dict() if embed else call.args[0] if call.args else call.kwargs.get("content")
     return sent, [(url, params) for url, params, _ in session.requests]
@@ -805,3 +813,53 @@ async def wizards_vault(daily, weekly, special, *, wallet=None, now, permissions
 
     with _at(now):
         return await run_command(cog_for, WizardsVault.wizards_vault, responses, permissions=permissions)
+
+
+class MemoryCollection:
+    """In-memory stand-in for a collection: find_one by _id, and find with
+    a regex on name plus an optional $nin on flags (the item searches)."""
+
+    def __init__(self, docs=()):
+        self.docs = {doc["_id"]: doc for doc in docs}
+
+    async def find_one(self, query):
+        return self.docs.get(query["_id"])
+
+    def find(self, query):
+        def matches(doc):
+            if "name" in query and not query["name"].search(doc["name"]):
+                return False
+            excluded = query.get("flags", {}).get("$nin", [])
+            return not set(doc.get("flags", [])) & set(excluded)
+
+        found = [doc for doc in self.docs.values() if matches(doc)]
+
+        class Cursor:
+            async def to_list(self, length):
+                return found[:length] if length else found
+
+        return Cursor()
+
+
+async def commerce(command, responses, *, items=(), permissions=("account", "tradingpost"), users=None, **options):
+    """Run a /tp or /gem command; `items` are the cached item documents."""
+    from gw2bot.cogs.guildwars2.commerce import CommerceMixin
+
+    handler = getattr(CommerceMixin, command)
+
+    def cog_for(session, users):
+        cog = _Harness(session, users)
+        cog.db = SimpleNamespace(items=MemoryCollection(items))
+        return cog
+
+    return await run_command(cog_for, handler, responses, permissions=permissions, users=users, **options)
+
+
+async def tp_item_search(text, items):
+    """The /tp price autocomplete choices for `text`, as (name, value)."""
+    from gw2bot.cogs.guildwars2.commerce import CommerceMixin
+
+    cog = _Harness()
+    cog.db = SimpleNamespace(items=MemoryCollection(items))
+    choices = await CommerceMixin.tp_autocomplete(cog, MagicMock(), text)
+    return [(c.name, c.value) for c in choices]
