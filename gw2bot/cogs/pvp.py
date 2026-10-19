@@ -111,6 +111,8 @@ class Pvp(GW2Cog):
         results = await self.call_api("pvp/stats", key=doc["key"])
         if not profession:
             records = profession_records(results, self.gamedata["professions"].keys())
+            if not records:
+                return await interaction.followup.send("You haven't played any PvP games yet.")
             top = extremes(records)
             most_played, most_played_games = top["most_played"]
             data = discord.Embed(description="Professions",
@@ -129,6 +131,10 @@ class Pvp(GW2Cog):
                                                          top["lowest_ratio"][1]))
             data.set_author(name=doc["account_name"])
             return await interaction.followup.send(embed=data)
+        if profession not in results["professions"]:
+            return await interaction.followup.send(
+                f"You haven't played {profession.capitalize()} in PvP yet."
+            )
         wins, total, winratio = win_ratio(results["professions"][profession])
         color = int(self.gamedata["professions"][profession]["color"], 0)
         data = discord.Embed(description=f"Stats for {profession}",
