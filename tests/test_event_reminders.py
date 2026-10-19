@@ -155,7 +155,6 @@ async def test_boss_notifier_edits():
     assert (channel.sent, channel.edited, channel.deleted, writes) == ([], [999], [], [])
 
 
-@pytest.mark.xfail(strict=True, reason="a deleted message stops edit mode for good")
 async def test_boss_notifier_edit_posts_anew_when_the_message_is_gone():
     channel = subject.RecordingChannel()
     writes = await subject.run_boss_notifier(boss_servers(message=999, edit=True), [channel], BASE)

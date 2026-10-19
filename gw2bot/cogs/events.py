@@ -436,14 +436,16 @@ class Events(GW2Cog):
                 edited = False
                 try:
                     if edit and old_message_id:
-                        old_message = await channel.fetch_message(old_message_id)
-                        if old_message:
-                            try:
-                                await old_message.edit(embed=embed)
-                                edited = True
-                                continue
-                            except discord.HTTPException:
-                                pass
+                        try:
+                            old_message = await channel.fetch_message(old_message_id)
+                            await old_message.edit(embed=embed)
+                            edited = True
+                            continue
+                        except discord.NotFound:
+                            # Deleted: post a new one to edit from now on
+                            old_message_id = None
+                        except discord.HTTPException:
+                            pass
                     message = await channel.send(embed=embed)
                 except discord.Forbidden:
                     message = await channel.send(
@@ -455,10 +457,12 @@ class Events(GW2Cog):
                     continue
                 if not edited:
                     await self.bot.data.guilds.update(channel.guild.id, {"bossnotifs.message": message.id})
-                    old_message_id = doc.get("message")
                     if old_message_id:
-                        to_delete = await channel.fetch_message(old_message_id)
-                        await to_delete.delete()
+                        try:
+                            to_delete = await channel.fetch_message(old_message_id)
+                            await to_delete.delete()
+                        except discord.HTTPException:
+                            pass
             except asyncio.CancelledError:
                 return
             except Exception:
