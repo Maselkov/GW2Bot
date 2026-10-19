@@ -6,7 +6,6 @@ import discord
 from ...errors import error_message
 from ..base import GW2Cog
 from .chatlinks import ChatLinksMixin
-from .daily import DailyMixin
 from .database import DatabaseMixin
 from .emojis import EmojiMixin
 from .events import EventsMixin, EventTimerReminderUnsubscribeView
@@ -20,7 +19,6 @@ from .notifiers import NotiifiersMixin
 class GuildWars2(
     GW2Cog,
     ChatLinksMixin,
-    DailyMixin,
     DatabaseMixin,
     EmojiMixin,
     EventsMixin,
@@ -50,8 +48,6 @@ class GuildWars2(
             self.event_reminder_task,
             self.post_evtc_notifications,
             self.key_sync_task,
-            self.refresh_dailies,
-            self.send_daily_notifs,
         ]
         for task in self.tasks:
             task.start()

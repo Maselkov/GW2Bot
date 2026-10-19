@@ -14,7 +14,7 @@ from discord.ext import tasks
 
 from ..commerce import gem_price
 from . import update_notes
-from .daily import DAILY_CATEGORIES
+from ..daily import DAILY_CATEGORIES
 from .exceptions import APIError
 from gw2bot.utils.markdown import html_to_markdown
 
@@ -47,8 +47,11 @@ class DailyCategoriesDropdown(discord.ui.Select):
         self.view.selected_options = self.values
         await interaction.response.defer(ephemeral=True)
         categories = self.values
+        # The Daily cog builds the example until /notifier moves out of this
+        # cog too (a command group can't span cogs)
+        daily = self.cog.bot.get_cog("Daily")
         try:
-            embed = await self.cog.daily_embed(categories, interaction=interaction)
+            embed = await daily.daily_embed(categories, interaction=interaction) if daily else None
         except ValueError:
             embed = None
         autodelete = False
@@ -156,7 +159,7 @@ class NotiifiersMixin:
         )
         await interaction.response.send_message("** **", view=view, ephemeral=True)
         if await view.wait():
-            return await interaction.followup.edit_message(
+            return await interaction.edit_original_response(
                 content="No response in time.", view=None
             )
 
@@ -398,14 +401,6 @@ class NotiifiersMixin:
             "Reminder set succesfully", ephemeral=True
         )
 
-    async def guild_subdocs(self, field, query):
-        """Each matching guild's `field` settings, with the guild's _id and
-        the discord.Guild (or None) as _obj."""
-        async for doc in self.bot.data.guilds.find(query):
-            settings = doc.get(field)
-            if isinstance(settings, dict):
-                yield {**settings, "_id": doc["_id"], "_obj": self.bot.get_guild(doc["_id"])}
-
     async def update_notification(self, new_build):
         """[(embed, text, minor)] for update-notes posts not announced yet.
 
@@ -527,113 +522,6 @@ class NotiifiersMixin:
         else:
             return False
 
-    @tasks.loop(time=[datetime.time(hour=23, minute=40, tzinfo=datetime.timezone.utc)])
-    async def send_daily_notifs(self):
-        try:
-            await self.cache_dailies()
-        except Exception:
-            # Post from the cache the refresh loop keeps
-            self.log.exception("Exception caching dailies before posting them")
-        cursor = self.guild_subdocs("daily", {"daily.on": True, "daily.channel": {"$ne": None}})
-        daily_doc = await self.bot.data.config.get()
-
-        async def notify_guild(doc):
-            categories = doc.get("categories")
-            channel = self.bot.get_channel(doc["channel"])
-
-            if not channel:
-                return
-            can_embed = channel.permissions_for(channel.guild.me).embed_links
-            can_send = channel.permissions_for(channel.guild.me).send_messages
-            can_see_history = channel.permissions_for(
-                channel.guild.me
-            ).read_message_history
-            if not can_send:
-                return
-            if not can_embed:
-                return await channel.send(
-                    "Need permission to "
-                    "embed links in order "
-                    "to send daily "
-                    "notifs!"
-                )
-            try:
-                embed = await self.daily_embed(
-                    categories, doc=daily_doc, interaction=channel, tomorrow=True
-                )
-            except ValueError:
-                return
-            embed.title = "Dailies"
-            tomorrow = datetime.datetime.now(
-                datetime.timezone.utc
-            ) + datetime.timedelta(days=1)
-            tomorrow = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
-            embed.timestamp = tomorrow
-            edit = doc.get("autoedit", False)
-            autodelete = doc.get("autodelete", False)
-            old_message = None
-            if (autodelete or edit) and can_see_history:
-                try:
-                    old_message_id = doc.get("message")
-                    if old_message_id:
-                        old_message = await channel.fetch_message(old_message_id)
-                except discord.HTTPException:
-                    pass
-            edited = False
-            embed.set_thumbnail(
-                url="https://wiki.guildwars2.com/images/" "1/14/Daily_Achievement.png"
-            )
-            if old_message and edit:
-                try:
-                    await old_message.edit(embed=embed)
-                    edited = True
-                except discord.HTTPException:
-                    pass
-            if not edited:
-                message = await channel.send(embed=embed)
-            if old_message and autodelete and not edited:
-                try:
-                    await old_message.delete()
-                except discord.HTTPException:
-                    pass
-            if not edited:
-                await self.bot.data.guilds.update(channel.guild.id, {"daily.message": message.id})
-            autopin = doc.get("autopin", False)
-            if autopin:
-                if edited:
-                    message = old_message
-                    if message.pinned:
-                        return
-                try:
-                    await message.pin()
-                    try:
-                        if can_see_history:
-                            async for m in channel.history(after=message, limit=3):
-                                if (
-                                    m.type == discord.MessageType.pins_add
-                                    and m.author == self.bot.user
-                                ):
-                                    await m.delete()
-                                    break
-                    except Exception:
-                        pass
-                    if not edited:
-                        old_message = doc.get("message")
-                        if old_message:
-                            to_unpin = await channel.fetch_message(old_message)
-                            await to_unpin.unpin()
-                except Exception:
-                    pass
-
-        async for doc in cursor:
-            asyncio.create_task(notify_guild(doc))
-            await asyncio.sleep(0.1)
-
-    @send_daily_notifs.error
-    async def swap_daily_tomorrow_and_today_error(self, error):
-        self.log.exception("Error while sending dailies", exc_info=error)
-        self.send_daily_notifs.restart()
-
     async def send_news(self, embeds):
         cursor = self.guild_subdocs("news", {"news.on": True, "news.channel": {"$ne": None}})
         to_filter = ["the arenanet streaming schedule", "community showcase"]
@@ -709,10 +597,6 @@ class NotiifiersMixin:
                 self.log.info("Update notifs: sent {}".format(sent))
         except Exception as e:
             self.log.exception(e)
-
-    @send_daily_notifs.before_loop
-    async def before_daily_checker(self):
-        await self.bot.wait_until_ready()
 
     @tasks.loop(minutes=3)
     async def news_checker(self):

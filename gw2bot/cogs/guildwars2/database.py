@@ -5,9 +5,7 @@ import discord
 from discord.ext import commands
 from pymongo import ReplaceOne
 from pymongo.errors import BulkWriteError
-from discord.ext import tasks
 
-from .daily import ACHIEVEMENT_CATEGORIES, CATEGORY_SCHEMA, daily_rotation
 from .exceptions import APIError
 
 
@@ -107,25 +105,6 @@ class DatabaseMixin:
         """Some statistics   """
         result = await self.bot.data.users.count({"key": {"$ne": None}})
         await ctx.send("{} registered users".format(result))
-
-    async def cache_dailies(self):
-        """Cache today's and tomorrow's dailies from achievement categories."""
-        ids = ",".join(str(i) for i in ACHIEVEMENT_CATEGORIES.values())
-        categories = await self.call_api(f"achievements/categories?ids={ids}",
-                                         schema_string=CATEGORY_SCHEMA)
-        achievement_ids = {
-            entry["id"]
-            for category in categories
-            for entry in category["achievements"] + (category.get("tomorrow") or [])
-        }
-        achievements = await self.call_api(
-            "achievements?ids=" + ",".join(str(i) for i in sorted(achievement_ids)))
-        names = {achievement["id"]: achievement["name"] for achievement in achievements}
-        rotation = daily_rotation(categories, names)
-        await self.bot.data.config.update({
-            "cache.dailies": rotation["today"],
-            "cache.dailies_tomorrow": rotation["tomorrow"]
-        })
 
     async def cache_raids(self):
         raids = []
@@ -237,18 +216,3 @@ class DatabaseMixin:
         print("Done")
         self.log.info("Database done! Time elapsed: {} seconds".format(end -
                                                                        start))
-
-    @tasks.loop(minutes=15)
-    async def refresh_dailies(self):
-        # Often enough to pick up the new rotation soon after reset
-        try:
-            await self.cache_dailies()
-        except APIError as e:
-            self.log.warning("Couldn't cache dailies: %s", e)
-        except Exception:
-            # An escaping exception would stop the loop for good
-            self.log.exception("Exception caching dailies")
-
-    @refresh_dailies.before_loop
-    async def before_refresh_dailies(self):
-        await self.bot.wait_until_ready()
