@@ -140,3 +140,24 @@ async def test_delivery_box_with_tradingpost_permission():
         responses, [RUBY], permissions=("account", "inventories", "characters", "tradingpost")
     )
     assert counts[RUBY]["TP delivery"] == 4
+
+
+# --- Fixes ---------------------------------------------------------------------------
+
+
+async def test_currency_not_in_the_cache():
+    sent, requests = await subject.wallet([], currencies=CURRENCIES, items=ITEMS, currency="999")
+    assert sent == "No results found for 999"
+    assert requests == []
+
+
+async def test_currency_with_an_empty_wallet():
+    embed, _ = await subject.wallet([(200, [])], currencies=CURRENCIES, items=ITEMS, currency="28")
+    assert fields(embed) == [("Amount in wallet", "0")]
+
+
+async def test_overview_with_currencies_missing_from_the_cache():
+    # E.g. a currency added to the game since the cache was last rebuilt
+    cached = [c for c in CURRENCIES if c["_id"] != 4]
+    embed, _ = await subject.wallet(OVERVIEW, currencies=cached, items=ITEMS)
+    assert section(embed, "CURRENCIES")[:2] == [" 123 gold 45 silver 67 copper  Coin", " 500 Unknown currency"]

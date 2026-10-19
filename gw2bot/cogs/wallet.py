@@ -23,6 +23,9 @@ class Wallet(GW2Cog):
             found_ids.append(c["id"])
         for id in flattened_ids:
             c_doc = await self.db.currencies.find_one({"_id": id})
+            if not c_doc:
+                # Not cached yet, e.g. new since the cache was last rebuilt
+                c_doc = {"name": "Unknown currency"}
             emoji = self.get_emoji(interaction, c_doc["name"])
             for i in range(0, len(lines)):
                 if id in ids[i]:
@@ -94,16 +97,20 @@ class Wallet(GW2Cog):
                         "No results found for {}".format(currency.title()),
                         ephemeral=True)
                 currency = int(results[0].value)
+            choice = await self.db.currencies.find_one({"_id": currency})
+            if not choice:
+                return await interaction.response.send_message(
+                    "No results found for {}".format(currency), ephemeral=True)
         await interaction.response.defer()
         doc = await self.fetch_key(interaction.user, ["wallet"])
         if currency is not None:
             results = await self.call_api("account/wallet", key=doc["key"])
-            choice = await self.db.currencies.find_one({"_id": currency})
             embed = discord.Embed(title=choice["name"].title(),
                                   description=choice["description"],
                                   colour=await
                                   self.get_embed_color(interaction))
             currency_id = choice["_id"]
+            count = 0
             for item in results:
                 if item["id"] == currency_id == 1:
                     count = self.gold_to_coins(interaction, item["value"])
