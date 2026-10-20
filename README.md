@@ -28,7 +28,7 @@ Configuration is read from environment variables:
 On startup the bot syncs its slash commands with Discord, but only if they changed since the last sync. It stores a hash of the commands in MongoDB to tell. Owner text commands, sent to the bot in a direct message:
 
 - `>sync`: sync slash commands now, for example after commands were synced from somewhere else. `>sync true` syncs them to `TEST_GUILD` only.
-- `>reload`: reload the GW2 cog after a code change. Run `>sync` afterwards if its commands changed.
+- `>reload <cog>`: reload one cog after a code change, e.g. `>reload keys` (the module names in `gw2bot/cogs/`). Run `>sync` afterwards if its commands changed.
 
 ### With Docker
 
@@ -76,6 +76,39 @@ python -m gw2bot.db.migrate --force     # copy again over the existing copy
 
 The command reads the same `MONGO_*` and `MIGRATE_FROM_DB` settings as the bot. Once you're confident in the new database, the Toothy database can be dropped by hand.
 
+## Code Layout
+
+```
+gw2bot/
+  __main__.py, config.py   entry point; settings from environment variables
+  bot.py                   the bot: startup, the cache defaults, command sync, error messages
+  owner.py                 owner text commands (>sync, >reload, >emojis)
+  cogs/                    one cog per feature, each loaded as an extension
+    base.py                GW2Cog: what every cog shares
+    account.py, characters.py, guildsync.py, ...
+  gw2api/                  the GW2 API client (retries, rate limits, errors)
+  db/                      MongoDB: settings repositories, indexes, the Toothy migration
+  keys.py, emojis.py, errors.py, builds.py, gamedata.py
+                           services the cogs share: users' API keys, emojis,
+                           API error messages, build templates, game data
+  utils/                   small helpers (chat formatting, searches, wiki links, ...)
+  data/                    game data the bot ships with (bosses, timers, ...)
+docs/background-tasks.md   what each loop and listener does, its known issues and tests
+```
+
+Each feature is a cog in `gw2bot/cogs/`, a subclass of `GW2Cog` with an `async def setup(bot)`. The bot loads every module there except `base.py`, so a new feature is a new module. `GW2Cog` gives a cog:
+
+- the API (`call_api`, `call_multiple`);
+- users' keys (`fetch_key`);
+- the game data cache (`self.db`, `fetch_item`);
+- emojis and the item search across an account;
+- `run_in_background` for work a loop doesn't wait for;
+- `users_by_id` for reading many users' settings in one query.
+
+Cogs that run loops start them in `cog_load` and cancel them in `cog_unload`, so `>reload` restarts them.
+
+A slash command group has to live in one cog. So where a command belongs to another cog's group, for example `/server preview_chat_links`, it calls the owning cog through `bot.get_cog(...)`.
+
 ## Dependencies
 
 `pyproject.toml` lists the dependencies; `requirements.txt` (runtime) and `requirements-dev.txt` (runtime plus test tools) pin them with hashes. The Docker image, CI and the commands above install from the pins, so every build gets the same versions.
@@ -99,16 +132,31 @@ python -m venv .venv-test
 .venv-test/bin/pytest
 ```
 
-Tests don't need Discord. The tests in `tests/test_database.py` run against a real MongoDB, and are skipped unless `MONGO_TEST_URI` is set. Each test creates its own database and drops it afterwards. CI runs them with a MongoDB service.
+Tests don't need Discord. The tests that use the `mongo` fixture (the database layer, the Toothy migration and the command tree check) run against a real MongoDB, and are skipped unless `MONGO_TEST_URI` is set. Each test creates its own database and drops it afterwards. CI runs them with a MongoDB service.
 
 ```bash
 docker run -d --rm -p 127.0.0.1:27017:27017 mongo:9
 MONGO_TEST_URI=mongodb://localhost:27017 .venv-test/bin/pytest
 ```
 
-Tests only check inputs and outputs, so they survive a restructure of the code. They never call the cog's mixins directly. Instead they go through the plain functions in `tests/subject.py`. When logic moves, point the matching function in `subject.py` at its new home and the tests stay the same.
+Tests only check inputs and outputs, so they survive a restructure of the code. They don't call cogs directly; they go through the plain functions in `tests/subject.py`, which run a command, a loop or a listener and return what it sent and wrote. When logic moves, point the matching function in `subject.py` at its new home and the tests stay the same.
+
+The stand-ins those functions use are in `tests/fakes/`:
+
+- `bot.py`: the bot, the clock, and `run_command`.
+- `http.py`: the GW2 API and other sites.
+- `db.py`: MongoDB collections and settings, with Mongo-style queries.
+- `servers.py`: Discord servers, roles, members and channels that record what the bot does to them.
+
+Background tasks are tested one run at a time, through the loop's coroutine, with these fakes.
 
 Known bugs are marked `xfail(strict=True)`. Fixing one makes its test report XPASS, which fails the run until the marker is removed.
+
+CI also runs `ruff check`, set up in `pyproject.toml` to catch mistakes such as unused imports, undefined names and asyncio tasks nobody keeps, not style. Run it before pushing:
+
+```bash
+.venv-test/bin/ruff check
+```
 
 ### Live API tests
 
