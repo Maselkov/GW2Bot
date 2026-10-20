@@ -7,7 +7,7 @@ import re
 import discord
 from discord import app_commands
 from discord.app_commands import Choice
-from discord.ext import tasks
+from discord.ext import commands, tasks
 
 from ..gw2api.errors import APIError, APIInactiveError
 from .base import GW2Cog
@@ -147,19 +147,24 @@ class Keys(GW2Cog):
         await interaction.response.defer(ephemeral=True)
         doc = await self.bot.data.users.get(interaction.user.id)
         keys = doc.get("keys", [])
-        key = doc.get("key", {})
-        to_keep = []
-        if key.get("key") == token:
-            key = {}
-        for k in keys:
-            if k["key"] != token:
-                to_keep.append(k)
-        if key == key and to_keep == keys:
+        active = doc.get("key", {})
+        to_keep = [k for k in keys if k["key"] != token]
+        removed_active = active.get("key") == token
+        if not removed_active and to_keep == keys:
             return await interaction.followup.send(
                 "No keys were removed. Invalid token"
             )
-        await self.bot.data.users.update(interaction.user.id, {"key": key, "keys": to_keep})
-        await interaction.followup.send("Key removed.")
+        message = "Key removed."
+        if removed_active:
+            # Keep a key active while there are any left
+            active = to_keep[0] if to_keep else {}
+            if active:
+                name = active["account_name"]
+                if active.get("name"):
+                    name += " - " + active["name"]
+                message += f" Your active key is now {name}."
+        await self.bot.data.users.update(interaction.user.id, {"key": active, "keys": to_keep})
+        await interaction.followup.send(message)
 
     @key_group.command(name="info")
     async def key_info(self, interaction: discord.Interaction):
@@ -316,6 +321,13 @@ class Keys(GW2Cog):
                     )
         except discord.Forbidden:
             return
+
+    @commands.Cog.listener()
+    async def on_member_join(self, member):
+        """Give the API key role right away, not on the next run."""
+        if member.bot:
+            return
+        await self.key_sync_user(member)
 
     @key_sync_task.before_loop
     async def before_key_sync_task(self):

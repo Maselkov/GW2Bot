@@ -2370,3 +2370,18 @@ async def run_key_role_sync(members, users, *, settings=None, role_exists=True, 
 
 
 KEY_ROLE = MagicMock(id=77)
+
+
+async def member_joins(member, users, *, settings=None):
+    """A member joins server 10 (API key role 77 per `settings`). Returns
+    their role changes."""
+    from gw2bot.cogs.keys import Keys
+
+    cog = Keys(_fake_bot(None, MemoryUsers(users)))
+    guild = MagicMock(id=10)
+    guild.get_role = lambda role_id: KEY_ROLE if role_id == 77 else None
+    guild.me.guild_permissions.manage_roles = True
+    member.guild = guild
+    cog.bot.data.guilds = MemoryGuilds({10: {"key_sync": settings or {"enabled": True, "role": 77}}})
+    await type(cog).on_member_join(cog, member)
+    return member.changes

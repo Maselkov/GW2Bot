@@ -125,19 +125,33 @@ async def test_key_role_sync_skips_servers_it_cant_manage():
     assert await subject.run_key_role_sync(members, users, settings={"enabled": False, "role": 77}) == {1: []}
 
 
-# --- Known bugs -----------------------------------------------------------------------------------
+# --- Fixes ----------------------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="a key saved before the keys list existed can't be removed")
 async def test_remove_a_legacy_key():
     sent, writes, _ = await subject.key_command("remove", {"key": key("A")}, token="A")
     assert sent == "Key removed."
     assert writes == [(1, "set", {"key": {}, "keys": []})]
 
 
-@pytest.mark.xfail(strict=True, reason="removing the active key leaves no active key")
 async def test_remove_the_active_key_activates_another():
     stored = {"key": key("A"), "keys": [key("A"), key("B")]}
     sent, writes, _ = await subject.key_command("remove", stored, token="A")
     assert writes == [(1, "set", {"key": key("B"), "keys": [key("B")]})]
     assert sent == "Key removed. Your active key is now Example.1234."
+
+
+async def test_remove_the_last_key():
+    stored = {"key": key("A"), "keys": [key("A")]}
+    sent, writes, _ = await subject.key_command("remove", stored, token="A")
+    assert sent == "Key removed."
+    assert writes == [(1, "set", {"key": {}, "keys": []})]
+
+
+async def test_new_members_get_the_key_role():
+    member = subject.server_member(1)
+    assert await subject.member_joins(member, {1: {"key": key("A")}}) == [("add", [77])]
+    member = subject.server_member(2)
+    assert await subject.member_joins(member, {}) == []
+    member = subject.server_member(3)
+    assert await subject.member_joins(member, {3: {"key": key("A")}}, settings={"enabled": False}) == []
