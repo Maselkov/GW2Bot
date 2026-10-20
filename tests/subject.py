@@ -658,10 +658,10 @@ class SettingsCommands:
         from unittest.mock import AsyncMock
 
         from gw2bot.cogs.chatlinks import ChatLinks
-        from gw2bot.cogs.guildwars2.evtc import EvtcMixin
+        from gw2bot.cogs.evtc import Evtc
         from gw2bot.cogs.guildwars2.guildmanage import GuildManageMixin
 
-        class Cog(GuildManageMixin, EvtcMixin):
+        class Cog(GuildManageMixin):
             pass
 
         bot = MagicMock()
@@ -670,6 +670,7 @@ class SettingsCommands:
         self.cog = Cog()
         self.cog.bot = bot
         self.cog.force_guild_account_names = AsyncMock()
+        self.evtc = Evtc(bot)
         self.previews = ChatLinks(bot)
         bot.get_cog = {"ChatLinks": self.previews}.get
 
@@ -687,7 +688,8 @@ class SettingsCommands:
         interaction = MagicMock()
         interaction.guild.id = guild_id
         interaction.response.send_message = AsyncMock()
-        await getattr(type(self.cog), command).callback(self.cog, interaction, **options)
+        cog = self.cog if hasattr(type(self.cog), command) else self.evtc
+        await getattr(type(cog), command).callback(cog, interaction, **options)
         call = interaction.response.send_message.await_args
         return call.args[0] if call.args else call.kwargs.get("content")
 
@@ -704,14 +706,10 @@ class EvtcUploads:
     def __init__(self):
         from unittest.mock import AsyncMock
 
-        from gw2bot.cogs.guildwars2.evtc import EvtcMixin
-
-        class Cog(EvtcMixin):
-            pass
+        from gw2bot.cogs.evtc import Evtc
 
         self.channels = MemorySettingsRepo()
-        self.cog = Cog()
-        self.cog.bot = MagicMock()
+        self.cog = Evtc(MagicMock())
         self.cog.bot.data.channels = self.channels
         self.cog.process_evtc = AsyncMock()
 
@@ -797,13 +795,10 @@ class EvtcApiKeys:
     """Runs /evtc api_key against an in-memory key collection."""
 
     def __init__(self):
-        from gw2bot.cogs.guildwars2.evtc import EvtcMixin
-
-        class Cog(EvtcMixin):
-            pass
+        from gw2bot.cogs.evtc import Evtc
 
         self.keys = MemoryCollection()
-        self.cog = Cog()
+        self.cog = Evtc(MagicMock())
         self.cog.db = MagicMock()
         self.cog.db.evtc.api_keys = self.keys
 
@@ -2057,13 +2052,10 @@ def log_file(filename="20240305-200000.zevtc", content=b"EVTC"):
 
 def _evtc_cog(session=None, users=None, *, dps_report=None, encounters=(), destinations=(), notifications=(),
               api_keys=()):
-    from gw2bot.cogs.guildwars2.evtc import EvtcMixin
+    from gw2bot.cogs.evtc import Evtc
 
-    class Cog(EvtcMixin, _Harness):
-        pass
-
-    cog = Cog(session, users)
-    cog.session = cog.bot.session = dps_report
+    cog = Evtc(_fake_bot(session, users))
+    cog.bot.session = dps_report
     cog.bot.user.display_avatar.url = "https://cdn/bot.png"
     cog.bot.data.channels = MemorySettingsRepo()
     cog.db = SimpleNamespace(
@@ -2088,12 +2080,12 @@ async def upload_logs(files, dps_report, *, stored=None, encounters=(), anonymou
 
 async def evtc_command(file, dps_report, **options):
     """Run /evtc with `file`. Returns what was sent."""
-    from gw2bot.cogs.guildwars2.evtc import EvtcMixin
+    from gw2bot.cogs.evtc import Evtc
 
     def cog_for(session, users):
         return _evtc_cog(session, users, dps_report=dps_report)
 
-    sent, _ = await run_command(cog_for, EvtcMixin.evtc, [], permissions=(), file=file, **options)
+    sent, _ = await run_command(cog_for, Evtc.evtc, [], permissions=(), file=file, **options)
     return sent
 
 
@@ -2130,9 +2122,9 @@ async def evtc_destination_command(command, *, api_key=True, destinations=(), ac
 
     import discord
 
-    from gw2bot.cogs.guildwars2.evtc import EvtcMixin
+    from gw2bot.cogs.evtc import Evtc
 
-    handler = {"add": EvtcMixin.evtc_autoupload_add, "remove": EvtcMixin.evtc_autoupload_remove}[command]
+    handler = {"add": Evtc.evtc_autoupload_add, "remove": Evtc.evtc_autoupload_remove}[command]
     replies = []
     cogs = []
     responses = [(200, account or {"name": "Example.1234", "guilds": [g["id"] for g in guilds]})]

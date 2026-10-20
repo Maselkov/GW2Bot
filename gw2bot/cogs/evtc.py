@@ -1,15 +1,21 @@
+"""EVTC combat logs: /evtc, processing uploads, and autoposting logs uploaded
+through the EVTC API."""
 import asyncio
 import datetime
+import logging
 import secrets
 from typing import Union
 
 import aiohttp
 import discord
-from discord.ext import commands, tasks
 from discord import app_commands
 from discord.app_commands import Choice
-from .exceptions import APIError
+from discord.ext import commands, tasks
+
 from gw2bot.utils.chat import embed_list_lines, en_space, magic_space, zero_width_space
+
+from ..gw2api.errors import APIError
+from .base import GW2Cog
 
 UTC_TZ = datetime.timezone.utc
 
@@ -104,14 +110,7 @@ class EvtcAutouploadDestinationsSelect(discord.ui.Select):
         self.view.stop()
 
 
-# class EvtcAutouploadRemoveDestinationsView(discord.ui.View):
-#     def __init__(self, cog, channels, destinations):
-#         self.destinations = destinations
-#         self.add_item())
-#         super().__init__(timeout=60)
-
-
-class EvtcMixin:
+class Evtc(GW2Cog):
 
     evtc_automation_group = app_commands.Group(
         name="evtc_automation",
@@ -125,12 +124,22 @@ class EvtcMixin:
         parent=evtc_automation_group,
     )
 
+    def __init__(self, bot):
+        super().__init__(bot)
+        self.log = logging.getLogger(__name__)
+
+    async def cog_load(self):
+        self.post_evtc_notifications.start()
+
+    async def cog_unload(self):
+        self.post_evtc_notifications.cancel()
+
     async def get_dpsreport_usertoken(self, user):
         doc = await self.bot.data.users.get(user.id)
         token = doc.get("dpsreport_token")
         if not token:
             try:
-                async with self.session.get(TOKEN_URL) as r:
+                async with self.bot.session.get(TOKEN_URL) as r:
                     data = await r.json()
                     token = data["userToken"]
                     await self.bot.data.users.update(user.id, {"dpsreport_token": token})
@@ -147,7 +156,7 @@ class EvtcMixin:
             params["userToken"] = token
         data = aiohttp.FormData()
         data.add_field("file", await file.read(), filename=file.filename)
-        async with self.session.post(UPLOAD_URL, data=data, params=params) as r:
+        async with self.bot.session.post(UPLOAD_URL, data=data, params=params) as r:
             resp = await r.json()
             error = resp["error"]
             if error:
@@ -173,7 +182,7 @@ class EvtcMixin:
         return True if doc else False
 
     async def get_encounter_data(self, encounter_id):
-        async with self.session.get(JSON_URL, params={"id": encounter_id}) as r:
+        async with self.bot.session.get(JSON_URL, params={"id": encounter_id}) as r:
             return await r.json()
 
     async def upload_embed(self, destination, data, permalink):
@@ -491,9 +500,6 @@ class EvtcMixin:
                 "still append the report links to `/bosses` results"
             )
 
-    async def get_evtc_notification_channel(self, id, user):
-        await self.db.evtc.channels.find_one({"channel_id": id, "user": user.id})
-
     @autopost_group.command(name="add_destination")
     @app_commands.checks.has_permissions(embed_links=True, use_external_emojis=True)
     @app_commands.checks.bot_has_permissions(embed_links=True, use_external_emojis=True)
@@ -702,3 +708,7 @@ class EvtcMixin:
                     await message.delete()
             except discord.Forbidden:
                 pass
+
+
+async def setup(bot):
+    await bot.add_cog(Evtc(bot))
