@@ -1,11 +1,16 @@
+"""Server settings: the /server group, and forced account names."""
 import asyncio
+import logging
+
 import discord
-from discord.ext import tasks
 from discord import app_commands
-from ..guild import guild_name_autocomplete
+from discord.ext import tasks
+
+from .base import GW2Cog
+from .guild import guild_name_autocomplete
 
 
-class GuildManageMixin:
+class Server(GW2Cog):
 
     @app_commands.guild_only()
     @app_commands.default_permissions(
@@ -17,6 +22,16 @@ class GuildManageMixin:
         pass
 
     server_group = ServerGroup(guild_only=True)
+
+    def __init__(self, bot):
+        super().__init__(bot)
+        self.log = logging.getLogger(__name__)
+
+    async def cog_load(self):
+        self.forced_account_names.start()
+
+    async def cog_unload(self):
+        self.forced_account_names.cancel()
 
     @server_group.command(name="force_account_names")
     @app_commands.checks.has_permissions(manage_nicknames=True)
@@ -41,12 +56,14 @@ class GuildManageMixin:
                 "Forced account names disabled"
             )
         await self.bot.data.guilds.update(guild.id, {"force_account_names": True})
-        await self.force_guild_account_names(guild)
+        # Reply first: renaming a big server takes longer than an
+        # interaction may wait
         await interaction.response.send_message(
             content="Automatic account names enabled. To disable, use "
-            "`/server forceaccountnames false`\nPlease note that the "
+            "`/server force_account_names enabled:False`\nPlease note that the "
             "bot cannot change nicknames for roles above the bot."
         )
+        await self.force_guild_account_names(guild)
 
     @server_group.command(name="preview_chat_links")
     @app_commands.checks.has_permissions(manage_guild=True)
@@ -64,8 +81,7 @@ class GuildManageMixin:
             return await interaction.response.send_message(
                 "Chat link preview is aleady enabled.", ephemeral=True
             )
-        # The previews live in the ChatLinks cog until /server moves too (a
-        # command group can't span cogs)
+        # The previews are the ChatLinks cog's
         previews = self.bot.get_cog("ChatLinks")
         if not disabled and not enabled:
             await self.bot.data.guilds.update(guild.id, {"link_preview_disabled": True})
@@ -87,7 +103,9 @@ class GuildManageMixin:
     async def sync_now(self, interaction: discord.Interaction):
         """Force a sync for any Guildsyncs you have"""
         await interaction.response.send_message("Syncs scheduled!")
-        await self.guildsync_now(interaction)
+        guild_sync = self.bot.get_cog("GuildSync")
+        if guild_sync:
+            await guild_sync.guildsync_now(interaction)
 
     @server_group.command(name="api_key_role")
     @app_commands.checks.has_permissions(manage_roles=True)
@@ -167,3 +185,7 @@ class GuildManageMixin:
                     await member.edit(nick=name, reason="Force account names - /server")
             except Exception:
                 pass
+
+
+async def setup(bot):
+    await bot.add_cog(Server(bot))

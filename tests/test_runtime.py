@@ -258,7 +258,9 @@ def test_every_cog_module_is_loaded():
 
     names = extensions()
     assert names[0] == "gw2bot.owner"
-    assert {"gw2bot.cogs.guildwars2", "gw2bot.cogs.pvp", "gw2bot.cogs.wizardsvault"} <= set(names)
+    assert {"gw2bot.cogs.guildsync", "gw2bot.cogs.pvp", "gw2bot.cogs.server"} <= set(names)
+    # Every feature has its own cog now
+    assert "gw2bot.cogs.guildwars2" not in names
     assert "gw2bot.cogs.base" not in names
     for name in names:
         assert callable(getattr(importlib.import_module(name), "setup", None)), name

@@ -1,10 +1,10 @@
 # Background tasks: behaviour checklist
 
-What the old `GuildWars2` cog (`gw2bot/cogs/guildwars2/`) does without anyone running a command: timed loops,
-event listeners and persistent buttons. Written from the code as of the misc cog move (#192), before any of it
-moves to its own cog.
+What GW2Bot does without anyone running a command: timed loops, event listeners and persistent buttons. Written
+from the old `GuildWars2` cog as of the misc cog move (#192), and kept up to date as each section moved to its own
+cog in Phase 6. The old cog is gone now; each section names the cog that owns it.
 
-**How to use it.** Each Phase 6 PR moves one section below. In order:
+**How it was used.** Each Phase 6 PR moved one section below. In order:
 
 1. Write the section's **Tests to write** first, against the current code. Known bugs are strict xfails.
 2. Move the code. The tests must pass unchanged.
@@ -15,9 +15,9 @@ A behaviour that changes on purpose is called out in the PR. Anything else that 
 
 ## Shared facts
 
-- **Start and stop.** `GuildWars2.__init__` starts every loop; `cog_unload` cancels them. Each loop waits for
-  `bot.wait_until_ready()` before its first run. `cog_load` registers the two persistent views and loads the chat
-  link opt-out cache.
+- **Start and stop.** Each cog starts its loops in `cog_load` and cancels them in `cog_unload`, so `>reload`
+  restarts them. Each loop waits for `bot.wait_until_ready()` before its first run. The `Events` and `GuildSync`
+  cogs register their persistent views in `cog_load`; `ChatLinks` loads its opt-out set there.
 - **Errors stop loops.** `discord.ext.tasks` retries an iteration after network errors (`OSError`,
   `aiohttp.ClientError`, `asyncio.TimeoutError`, gateway errors). **Any other exception stops the loop until the
   bot restarts**, after logging "Unhandled exception in internal background task". `APIError` is a plain
@@ -45,8 +45,8 @@ A behaviour that changes on purpose is called out in the PR. Anything else that 
 | [Gem tracker](#gem-tracker) (moved) | every 5 min | `gemtrack` | DMs | Undeliverable users are retried forever |
 | [EVTC autopost](#evtc-autopost-and-uploads) (moved) | every 5 s; uploads on message | `evtc.notifications`, `encounters` | channel posts | Members who left are skipped noisily |
 | [API key role](#api-key-role-and-key) (moved) | every 5 min; joins; `/key add` | member roles | — | Keys aren't re-checked |
-| [Forced account names](#forced-account-names) | every 5 min | member nicknames | — | Failures are silent |
-| [Guild sync](#guild-sync) | every 60 s; member join | roles, kicks, `guildsyncs` | DMs, prompts | Heavy: a database read per member per minute |
+| [Forced account names](#forced-account-names) (moved) | every 5 min | member nicknames | — | Failures are silent |
+| [Guild sync](#guild-sync) (moved) | every 60 s; member join | roles, kicks, `guildsyncs` | DMs, prompts | Heavy: a database read per member per minute |
 
 ## Daily notifier
 
@@ -133,8 +133,8 @@ behaviour: delete (default) / edit), in the `Notifiers` cog. *Fixed:* `enabled:F
 ## Chat link previews
 
 **Moved** to `gw2bot/cogs/chatlinks.py` (`ChatLinks`): `find_chatcodes` (an `on_message` listener) and the
-opt-out set, loaded in `cog_load`. `/server preview_chat_links` stays in the old cog's `/server` group until it
-moves, and updates the cog through `set_previews_enabled()`.
+opt-out set, loaded in `cog_load`. `/server preview_chat_links` (in `Server`) updates it through
+`set_previews_enabled()`.
 
 - **Trigger.** Any message containing a chat link (`[&...]`), from a human, in a server that hasn't opted out.
   Opt-outs are cached in memory, loaded at startup from `link_preview_disabled`.
@@ -264,8 +264,8 @@ moves, and updates the cog through `set_previews_enabled()`.
 ## API key role, and /key
 
 **Moved** to `gw2bot/cogs/keys.py` (`Keys`): `/key`, `key_sync_task` (started in `cog_load`), `key_sync_guild`,
-`key_sync_user` and an `on_member_join` listener. `/server api_key_role` stays in the old cog's `/server` group and
-asks the `Keys` cog to sync; `/key add` reaches guild sync through the old cog until guild sync moves.
+`key_sync_user` and an `on_member_join` listener. `/server api_key_role` (in `Server`) asks the `Keys` cog to sync;
+`/key add` in a server asks the `GuildSync` cog to sync the member.
 
 - **Schedule.**
   - Every 5 minutes, for each server with `key_sync.enabled`: chunks the member list, then gives `key_sync.role`
@@ -285,24 +285,26 @@ asks the `Keys` cog to sync; `/key add` reaches guild sync through the old cog u
 
 ## Forced account names
 
-`guildmanage.py: forced_account_names, force_guild_account_names`,
-`/server force_account_names`.
+**Moved** to `gw2bot/cogs/server.py` (`Server`): `forced_account_names` (started in `cog_load`),
+`force_guild_account_names` and the `/server` group.
 
 - **Schedule.** Every 5 minutes, for each server with `force_account_names`: every cached member with a key whose
   display name doesn't contain their account name gets that account name as their nickname.
 - **Errors.** All swallowed: members without keys, members above the bot's role, missing permissions.
 - **Known issues.**
   - Relies on the member lists loaded at startup; unlike key sync, it never chunks a server itself.
-  - Enabling runs the rename before replying, so on big servers the interaction can time out.
-  - The reply tells people to use `/server forceaccountnames false`; the command is `force_account_names`.
+  - *Fixed:* enabling renamed everyone before replying, so on big servers the interaction could time out; the reply
+    named a command that doesn't exist.
 - **Tests.**
-  - Existing: "already enabled" (`test_settings_commands.py`).
-  - To write: renames, skipped members (no key, name already contained), and errors.
+  - Existing: "already enabled" (`test_settings_commands.py`); enabling, renames and skipped members
+    (`test_guildsync_commands.py`).
 
 ## Guild sync
 
-`guild/sync.py`: `guild_synchronizer`, `run_guildsyncs`, `SyncGuild`, `SyncTarget`, `guildsync_on_member_join`,
-`GuildSyncPromptUserConfirmView`, `/guildsync add / edit / toggle / purge / diagnose`, `/server sync_now`.
+**Moved** to `gw2bot/cogs/guildsync.py` (`GuildSync`): `guild_synchronizer` (started in `cog_load`),
+`run_guildsyncs`, `SyncGuild`, `SyncTarget`, `guildsync_on_member_join`, `GuildSyncPromptUserConfirmView`
+(registered in `cog_load`), `/guildsync add / edit / toggle / purge / diagnose`. `/server sync_now` (in `Server`)
+asks it to sync.
 
 - **Schedule.**
   - Every 60 s, for each server with `guildsync.enabled`, a full sync with a 200 s timeout.
@@ -331,21 +333,15 @@ asks the `Keys` cog to sync; `/key add` reaches guild sync through the old cog u
     discord.py 2.0 a `TypeError` stopped the purge before it kicked anyone, and `00d2453` fixed that error,
     turning the purge back on. It now runs only when every sync read its members.
   - *Fixed:* the limit check allowed 9 syncs instead of 8.
-  - The `APIForbidden` error message reads "Key has in-game leader permissions"; it means the key lacks them.
-  - `guildsync_consumer`, `schedule_guildsync` and the queue they use are dead code: nothing starts or calls them,
-    and the queue is never created.
-  - A `print("failed")` is left over.
-  - Messages still mention `$guildsync`, the old prefix command.
+  - *Fixed:* `/guildsync diagnose` checked only a user's first key, and passed users without keys.
+  - *Fixed:* `/guildsync edit` "Change API key" never asked for a missing key.
+  - *Fixed:* answering an expired authorization prompt crashed.
+  - *Fixed:* stale text: "name#0", `$guildsync`, reactions, and "Key has in-game leader permissions" for a key
+    without them. The dead `guildsync_consumer` queue and a leftover `print` are gone.
   - One users-collection read per server member per minute, per server.
 - **Tests.**
-  - Existing: none.
-  - To write:
-    - role creation and deletion for tag and ranks;
-    - membership with several accounts and ranks, and the role hierarchy limit;
-    - the member-join sync;
-    - purge: done in #194 (`tests/test_guildsync.py`);
-    - the authorization prompt;
-    - the sync limit: done (`test_server_commands.py`).
+  - Existing: the purge (`test_guildsync.py`), roles and membership (`test_guildsync_roles.py`), the commands and
+    the authorization prompt (`test_guildsync_commands.py`), and the sync limit (`test_server_commands.py`).
 
 ## Order
 
@@ -359,6 +355,7 @@ Least risky first. Each item is one PR.
 6. The game data cache: `>database` and `rebuild_database` (done: `gw2bot/cogs/cache.py`; `>emojis` moved to
    `gw2bot/owner.py`).
 7. `/key` and the API key role (done: `gw2bot/cogs/keys.py`).
-8. Guild sync, forced account names and the rest of `/server`.
+8. Guild sync, forced account names and the rest of `/server` (done: `gw2bot/cogs/guildsync.py` and
+   `gw2bot/cogs/server.py`). The old `gw2bot/cogs/guildwars2/` package is removed.
 
 The guild sync purge issue was the exception, fixed ahead of the order in #194 because it affected live servers.

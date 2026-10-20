@@ -2,7 +2,7 @@
 import pytest
 
 import subject
-from gw2bot.cogs.guildwars2.exceptions import (
+from gw2bot.gw2api.errors import (
     APIBadRequest,
     APIConnectionError,
     APIForbidden,
@@ -99,7 +99,7 @@ async def test_transient_errors_recover_on_retry(failure):
 
 
 def test_invalid_key_message():
-    from gw2bot.cogs.guildwars2.exceptions import APIInvalidKey
+    from gw2bot.gw2api.errors import APIInvalidKey
 
     assert subject.api_error_message(APIInvalidKey("Invalid key")) == (
         "Your API key is invalid! Remove your key and add a new one"

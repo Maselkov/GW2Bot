@@ -15,8 +15,8 @@ class Owner(commands.Cog):
         return await self.bot.is_owner(ctx.author)
 
     @commands.command(name="reload")
-    async def reload_extension(self, ctx, *, name: str = "guildwars2"):
-        """Reloads an extension (default: guildwars2)"""
+    async def reload_extension(self, ctx, *, name: str):
+        """Reloads an extension, e.g. >reload keys"""
         extension = "gw2bot.cogs." + name.strip()
         try:
             await self.bot.reload_extension(extension)
