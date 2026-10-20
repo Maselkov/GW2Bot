@@ -1681,8 +1681,11 @@ async def api_key_role(**options):
 
         cog = Cog(session, users)
         cog.bot.data.guilds = guilds
-        cog.key_sync_guild = AsyncMock()
-        cogs.append(cog)
+        # The role sync is the Keys cog's
+        keys = MagicMock()
+        keys.key_sync_guild = AsyncMock()
+        cog.bot.get_cog = {"Keys": keys}.get
+        cogs.append(keys)
         return cog
 
     def in_server(interaction):
@@ -1696,17 +1699,11 @@ async def api_key_role(**options):
 async def switch_key(stored, token):
     """Run /key switch for a user whose settings are `stored`. Returns
     (reply, settings writes)."""
-    from gw2bot.cogs.guildwars2.key import KeyMixin
+    from gw2bot.cogs.keys import Keys
 
     users = MemoryUsers({1: stored})
-
-    def cog_for(session, _):
-        class Cog(KeyMixin, _Harness):
-            pass
-
-        return Cog(session, users)
-
-    sent, _ = await run_command(cog_for, KeyMixin.key_switch, [], permissions=(), users=users, token=token)
+    sent, _ = await run_command(lambda session, _: Keys(_fake_bot(session, users)), Keys.key_switch, [],
+                                permissions=(), users=users, token=token)
     return sent, users.writes
 
 
@@ -2292,17 +2289,14 @@ async def key_command(command, stored, responses=(), *, in_guild=False, **option
     for the user: ["guildsync", "key role"])."""
     from unittest.mock import AsyncMock
 
-    from gw2bot.cogs.guildwars2.key import KeyMixin
+    from gw2bot.cogs.keys import Keys
 
-    handler = getattr(KeyMixin, "key_" + command)
+    handler = getattr(Keys, "key_" + command)
     users = MemoryUsers({1: stored})
     syncs = []
 
     def cog_for(session, _):
-        class Cog(KeyMixin, _Harness):
-            pass
-
-        cog = Cog(session, users)
+        cog = Keys(_fake_bot(session, users))
 
         async def guildsync(member):
             syncs.append("guildsync")
@@ -2310,7 +2304,9 @@ async def key_command(command, stored, responses=(), *, in_guild=False, **option
         async def key_role(member, role=None):
             syncs.append("key role")
 
-        cog.guildsync_on_member_join = guildsync
+        # Guild sync is the old cog's
+        guild_sync = SimpleNamespace(guildsync_on_member_join=guildsync)
+        cog.bot.get_cog = {"GuildWars2": guild_sync}.get
         cog.key_sync_user = key_role
         return cog
 
@@ -2325,12 +2321,9 @@ async def key_command(command, stored, responses=(), *, in_guild=False, **option
 
 async def key_choices(stored, current=""):
     """The key autocomplete for a user with settings `stored`, as (name, value)."""
-    from gw2bot.cogs.guildwars2.key import KeyMixin
+    from gw2bot.cogs.keys import Keys
 
-    class Cog(KeyMixin, _Harness):
-        pass
-
-    cog = Cog(None, MemoryUsers({1: stored}))
+    cog = Keys(_fake_bot(None, MemoryUsers({1: stored})))
     interaction = MagicMock()
     interaction.user.id = 1
     return [(c.name, c.value) for c in await cog.key_autocomplete(interaction, current)]
@@ -2361,12 +2354,9 @@ async def run_key_role_sync(members, users, *, settings=None, role_exists=True, 
     settings by member id. Returns {member id: role changes}."""
     from unittest.mock import AsyncMock
 
-    from gw2bot.cogs.guildwars2.guildmanage import GuildManageMixin
+    from gw2bot.cogs.keys import Keys
 
-    class Cog(GuildManageMixin, _Harness):
-        pass
-
-    cog = Cog(None, MemoryUsers(users))
+    cog = Keys(_fake_bot(None, MemoryUsers(users)))
     role = KEY_ROLE
     guild = MagicMock(id=10, chunked=True, members=members)
     guild.get_role = lambda role_id: role if role_exists and role_id == 77 else None

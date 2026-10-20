@@ -119,7 +119,11 @@ class GuildManageMixin:
                 "Key sync enabled. Members with valid API keys "
                 "will now be given the selected role"
             )
-            return await self.key_sync_guild(guild)
+            # The role sync is the Keys cog's
+            keys = self.bot.get_cog("Keys")
+            if keys:
+                await keys.key_sync_guild(guild)
+            return
         await interaction.response.send_message("Key sync disabled.")
 
     @server_group.command(name="default_guild")
@@ -137,72 +141,6 @@ class GuildManageMixin:
             "this guild. To reset, simply invoke this command "
             "without specifying a guild"
         )
-
-    @tasks.loop(minutes=5)
-    async def key_sync_task(self):
-        async for doc in self.bot.data.guilds.find({"key_sync.enabled": True}):
-            try:
-                guild = self.bot.get_guild(doc["_id"])
-                role = guild.get_role(doc["key_sync"]["role"])
-                if not role:
-                    continue
-                await self.key_sync_guild(guild, role)
-            except asyncio.CancelledError:
-                return
-            except Exception:
-                pass
-
-    async def key_sync_guild(self, guild: discord.Guild, role=None):
-        if not role:
-            doc = await self.bot.data.guilds.get(guild.id)
-            enabled = doc.get("key_sync", {}).get("enabled")
-            if not enabled:
-                return
-            role = guild.get_role(doc["key_sync"]["role"])
-        if not role:
-            return
-        doc = await self.bot.data.guilds.get(guild.id)
-        role = guild.get_role(doc["key_sync"]["role"])
-        if not role:
-            return
-        if not guild.chunked:
-            await guild.chunk()
-        for member in guild.members:
-            await self.key_sync_user(member, role)
-
-    async def key_sync_user(self, member, role=None):
-        guild = member.guild
-        if not guild.me.guild_permissions.manage_roles:
-            return
-        if not role:
-            doc = await self.bot.data.guilds.get(guild.id)
-            enabled = doc.get("key_sync", {}).get("enabled")
-            if not enabled:
-                return
-            role = guild.get_role(doc["key_sync"]["role"])
-        if not role:
-            return
-        user_doc = await self.bot.data.users.get(member.id)
-        has_key = False
-        if user_doc.get("key", {}).get("key"):
-            has_key = True
-        try:
-            if has_key:
-                if role not in member.roles:
-                    await member.add_roles(role, reason="/server api_key_role")
-            else:
-                if role in member.roles:
-                    await member.remove_roles(
-                        role,
-                        reason="/server api_key_role is enabled. Member "
-                        "lacks a valid API key.",
-                    )
-        except discord.Forbidden:
-            return
-
-    @key_sync_task.before_loop
-    async def before_key_sync_task(self):
-        await self.bot.wait_until_ready()
 
     @tasks.loop(minutes=5)
     async def forced_account_names(self):
