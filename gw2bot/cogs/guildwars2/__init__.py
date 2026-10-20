@@ -7,7 +7,6 @@ from ...errors import error_message
 from ..base import GW2Cog
 from .database import DatabaseMixin
 from .emojis import EmojiMixin
-from .evtc import EvtcMixin
 from .guild import GuildSync
 from .guild.sync import GuildSyncPromptUserConfirmView
 from .guildmanage import GuildManageMixin
@@ -17,7 +16,6 @@ class GuildWars2(
     GW2Cog,
     DatabaseMixin,
     EmojiMixin,
-    EvtcMixin,
     GuildSync,
     GuildManageMixin,
     KeyMixin,
@@ -33,7 +31,6 @@ class GuildWars2(
         self.tasks = [
             self.guild_synchronizer,
             self.forced_account_names,
-            self.post_evtc_notifications,
             self.key_sync_task,
         ]
         for task in self.tasks:

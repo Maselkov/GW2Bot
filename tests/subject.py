@@ -658,10 +658,10 @@ class SettingsCommands:
         from unittest.mock import AsyncMock
 
         from gw2bot.cogs.chatlinks import ChatLinks
-        from gw2bot.cogs.guildwars2.evtc import EvtcMixin
+        from gw2bot.cogs.evtc import Evtc
         from gw2bot.cogs.guildwars2.guildmanage import GuildManageMixin
 
-        class Cog(GuildManageMixin, EvtcMixin):
+        class Cog(GuildManageMixin):
             pass
 
         bot = MagicMock()
@@ -670,6 +670,7 @@ class SettingsCommands:
         self.cog = Cog()
         self.cog.bot = bot
         self.cog.force_guild_account_names = AsyncMock()
+        self.evtc = Evtc(bot)
         self.previews = ChatLinks(bot)
         bot.get_cog = {"ChatLinks": self.previews}.get
 
@@ -687,7 +688,8 @@ class SettingsCommands:
         interaction = MagicMock()
         interaction.guild.id = guild_id
         interaction.response.send_message = AsyncMock()
-        await getattr(type(self.cog), command).callback(self.cog, interaction, **options)
+        cog = self.cog if hasattr(type(self.cog), command) else self.evtc
+        await getattr(type(cog), command).callback(cog, interaction, **options)
         call = interaction.response.send_message.await_args
         return call.args[0] if call.args else call.kwargs.get("content")
 
@@ -704,14 +706,10 @@ class EvtcUploads:
     def __init__(self):
         from unittest.mock import AsyncMock
 
-        from gw2bot.cogs.guildwars2.evtc import EvtcMixin
-
-        class Cog(EvtcMixin):
-            pass
+        from gw2bot.cogs.evtc import Evtc
 
         self.channels = MemorySettingsRepo()
-        self.cog = Cog()
-        self.cog.bot = MagicMock()
+        self.cog = Evtc(MagicMock())
         self.cog.bot.data.channels = self.channels
         self.cog.process_evtc = AsyncMock()
 
@@ -734,15 +732,46 @@ class EvtcUploads:
 
 
 class MemoryCollection:
-    """In-memory stand-in for a Mongo collection (equality filters only).
-    Like Mongo, inserted documents get a generated _id."""
+    """In-memory stand-in for a Mongo collection: filters on fields equal
+    to a value or with $eq / $gte / $lt; find() with to_list and async
+    iteration; update_one with $set. Like Mongo, inserted documents get a
+    generated _id."""
 
-    def __init__(self):
-        self.docs = []
+    def __init__(self, docs=()):
+        self.docs = [{"_id": f"doc{i}", **d} for i, d in enumerate(docs)]
         self._next_id = 0
 
     def _matches(self, doc, query):
-        return all(doc.get(k) == v for k, v in query.items())
+        def check(value, condition):
+            if not isinstance(condition, dict):
+                return value == condition
+            ops = {"$eq": lambda a, b: a == b, "$gte": lambda a, b: a is not None and a >= b,
+                   "$lt": lambda a, b: a is not None and a < b}
+            return all(ops[op](value, operand) for op, operand in condition.items())
+
+        return all(check(doc.get(k), v) for k, v in query.items())
+
+    def find(self, query=None):
+        found = [dict(d) for d in self.docs if self._matches(d, query or {})]
+
+        class Cursor:
+            async def to_list(self, length):
+                return found
+
+            def __aiter__(self):
+                return self._iterate()
+
+            async def _iterate(self):
+                for doc in found:
+                    yield doc
+
+        return Cursor()
+
+    async def update_one(self, query, update):
+        for doc in self.docs:
+            if self._matches(doc, query):
+                doc.update(update["$set"])
+                return
 
     async def find_one(self, query):
         return next((dict(d) for d in self.docs if self._matches(d, query)), None)
@@ -766,13 +795,10 @@ class EvtcApiKeys:
     """Runs /evtc api_key against an in-memory key collection."""
 
     def __init__(self):
-        from gw2bot.cogs.guildwars2.evtc import EvtcMixin
-
-        class Cog(EvtcMixin):
-            pass
+        from gw2bot.cogs.evtc import Evtc
 
         self.keys = MemoryCollection()
-        self.cog = Cog()
+        self.cog = Evtc(MagicMock())
         self.cog.db = MagicMock()
         self.cog.db.evtc.api_keys = self.keys
 
@@ -1835,7 +1861,11 @@ class RecordingChannel:
         self._discord = discord
 
     def permissions_for(self, member):
-        return SimpleNamespace(send_messages=self.can_send, embed_links=self.can_embed, read_message_history=True)
+        if member is None:
+            # Like discord.py, for someone who isn't on the server
+            raise AttributeError("'NoneType' object has no attribute '_roles'")
+        return SimpleNamespace(send_messages=self.can_send, embed_links=self.can_embed, read_message_history=True,
+                               use_external_emojis=True)
 
     def _message(self, message_id):
         import datetime as dt
@@ -1977,3 +2007,167 @@ async def post_chat_link(content, *, db=None, in_guild=True, opted_out=False, au
             for call in message.channel.send.await_args_list]
     counted = [call.args[1]["$inc"] for call in cog.bot.data.statistics.update_one.await_args_list]
     return sent, counted
+
+
+
+# --- EVTC ---------------------------------------------------------------------------------
+
+class FakeDpsReport:
+    """dps.report: getUserToken gives `token`; uploadContent answers
+    `upload` (an error, or a report whose id getJson serves from
+    `reports`). Records requests as (method, url, params)."""
+
+    def __init__(self, reports=None, *, upload=None, token="DPS-TOKEN"):
+        self.reports = reports or {}
+        self.upload = upload
+        self.token = token
+        self.requests = []
+
+    def _response(self, body):
+        response = MagicMock()
+
+        async def json():
+            return body
+
+        response.json = json
+        return _AsyncContext(response)
+
+    def get(self, url, params=None, **kwargs):
+        self.requests.append(("GET", url, dict(params or {})))
+        if url.endswith("getUserToken"):
+            return self._response({"userToken": self.token})
+        return self._response(self.reports[params["id"]])
+
+    def post(self, url, data=None, params=None, **kwargs):
+        self.requests.append(("POST", url, dict(params or {})))
+        return self._response(self.upload)
+
+
+def log_file(filename="20240305-200000.zevtc", content=b"EVTC"):
+    """A message attachment."""
+    from unittest.mock import AsyncMock
+
+    return MagicMock(filename=filename, read=AsyncMock(return_value=content))
+
+
+def _evtc_cog(session=None, users=None, *, dps_report=None, encounters=(), destinations=(), notifications=(),
+              api_keys=()):
+    from gw2bot.cogs.evtc import Evtc
+
+    cog = Evtc(_fake_bot(session, users))
+    cog.bot.session = dps_report
+    cog.bot.user.display_avatar.url = "https://cdn/bot.png"
+    cog.bot.data.channels = MemorySettingsRepo()
+    cog.db = SimpleNamespace(
+        encounters=MemoryCollection(encounters),
+        evtc=SimpleNamespace(destinations=MemoryCollection(destinations),
+                             notifications=MemoryCollection(notifications),
+                             api_keys=MemoryCollection(api_keys)),
+    )
+    return cog
+
+
+async def upload_logs(files, dps_report, *, stored=None, encounters=(), anonymous=False):
+    """Process `files` as uploaded by user 1 (whose settings are
+    `stored`). Returns (messages sent as (content, embed dict or None), the
+    cog's collections, user settings writes)."""
+    users = MemoryUsers({1: stored or {}})
+    cog = _evtc_cog(users=users, dps_report=dps_report, encounters=encounters)
+    destination = RecordingChannel()
+    await cog.process_evtc(files, SimpleNamespace(id=1), destination, anonymous=anonymous)
+    return [(content, embed) for content, embed, _ in destination.sent], cog.db, users.writes
+
+
+async def evtc_command(file, dps_report, **options):
+    """Run /evtc with `file`. Returns what was sent."""
+    from gw2bot.cogs.evtc import Evtc
+
+    def cog_for(session, users):
+        return _evtc_cog(session, users, dps_report=dps_report)
+
+    sent, _ = await run_command(cog_for, Evtc.evtc, [], permissions=(), file=file, **options)
+    return sent
+
+
+async def run_evtc_autopost(notifications, destinations, reports, channels, *, members=None):
+    """One run of the EVTC autopost loop. `channels` are RecordingChannels;
+    `members` are {channel id: [user ids on that server]} (default: the
+    user is everywhere). Returns the notifications afterwards."""
+    from unittest.mock import AsyncMock
+
+    cog = _evtc_cog(dps_report=FakeDpsReport(reports), destinations=destinations, notifications=notifications)
+    by_id = {c.id: c for c in channels}
+    for channel in channels:
+        on_server = (members or {}).get(channel.id)
+        channel.guild.chunked = True
+        channel.guild.chunk = AsyncMock()
+        channel.guild.get_member = (
+            lambda user_id, on_server=on_server: MagicMock(id=user_id)
+            if on_server is None or user_id in on_server else None
+        )
+    cog.bot.get_channel = by_id.get
+    cog.bot.get_user = lambda user_id: SimpleNamespace(id=user_id, name="example", discriminator="0")
+    await type(cog).post_evtc_notifications.coro(cog)
+    return cog.db.evtc.notifications.docs
+
+
+async def evtc_destination_command(command, *, api_key=True, destinations=(), account=None, guilds=(),
+                                   choose=None, channels=None):
+    """Run /evtc_automation autopost add_destination (in channel 5) or
+    remove_destinations. For adding, `choose` picks guild ids from its
+    dropdown, "next" skips it, None lets it time out. For removing,
+    `choose` picks destinations by index. Returns (replies, destinations
+    afterwards)."""
+    from unittest.mock import AsyncMock, patch
+
+    import discord
+
+    from gw2bot.cogs.evtc import Evtc
+
+    handler = {"add": Evtc.evtc_autoupload_add, "remove": Evtc.evtc_autoupload_remove}[command]
+    replies = []
+    cogs = []
+    responses = [(200, account or {"name": "Example.1234", "guilds": [g["id"] for g in guilds]})]
+    responses += [(200, g) for g in guilds]
+
+    def cog_for(session, users):
+        keys = [{"user": 1, "token": "EVTC-KEY"}] if api_key else []
+        cog = _evtc_cog(session, users, destinations=destinations, api_keys=keys)
+        cog.bot.get_channel = (channels or {}).get
+        cogs.append(cog)
+        return cog
+
+    async def wait(view):
+        if choose is None:
+            return True
+        select = next(item for item in view.children if isinstance(item, discord.ui.Select))
+        interaction = MagicMock()
+        interaction.response.edit_message = AsyncMock()
+        if choose == "next":
+            button = next(item for item in view.children if isinstance(item, discord.ui.Button))
+            await button.callback(interaction)
+        else:
+            select._values = [str(c) for c in choose]
+            await select.callback(interaction)
+        replies.append(interaction.response.edit_message.await_args.kwargs["content"])
+        return False
+
+    interactions = []
+
+    def in_channel(interaction):
+        interaction.channel.id = 5
+        interactions.append(interaction)
+
+    with patch.object(discord.ui.View, "wait", wait):
+        sent, _ = await run_command(cog_for, handler, responses, permissions=("account", "guilds"),
+                                    on_interaction=in_channel)
+    if command == "remove" and choose is not None:
+        # The menu isn't waited on: pick from the one that was sent
+        view = interactions[0].followup.send.await_args.kwargs["view"]
+        select = view.children[0]
+        select._values = [str(c) for c in choose]
+        interaction = MagicMock()
+        interaction.response.edit_message = AsyncMock()
+        await select.callback(interaction)
+        replies.append(interaction.response.edit_message.await_args.kwargs["content"])
+    return [sent] + replies, cogs[0].db.evtc.destinations.docs
