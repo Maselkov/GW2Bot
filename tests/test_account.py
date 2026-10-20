@@ -392,3 +392,27 @@ async def test_li_with_an_uncached_item():
         db=subject.gw2_db(items=[]),
     )
     assert fields(embed) == [("10 Legendary Insights earned", "Unknown item - **10**")]
+
+
+async def test_search_adds_up_identically_named_items():
+    # The autocomplete's value for the merged "Ruby Orb - Masterwork"
+    responses = storage(bank=[{"id": RUBY, "count": 3}, {"id": 1, "count": 4}])
+    embed, _ = await subject.account_command(
+        "search", responses, permissions=SEARCH_PERMISSIONS,
+        db=subject.gw2_db(items=[RUBY_DOC, {**RUBY_DOC, "_id": 1}]), item=f"{RUBY} 1",
+    )
+    assert fields(embed) == [("Ruby Orb", "```ml\n" + "\n".join([
+        "LOCATION   COUNT",
+        "----------|-----",
+        "BANK      | 7",
+        "-----------------",
+        "TOTAL:      7",
+    ]) + "\n```")]
+
+
+async def test_search_for_an_uncached_item():
+    sent, requests = await subject.account_command(
+        "search", [], permissions=SEARCH_PERMISSIONS, db=subject.gw2_db(items=[]), item="99",
+    )
+    assert sent == "Could not find any items with that name."
+    assert requests == []

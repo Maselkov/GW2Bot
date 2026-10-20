@@ -3,9 +3,11 @@ import asyncio
 import logging
 from collections import defaultdict
 
+from discord.app_commands import Choice
 from discord.ext import commands
 
 from ..gw2api.errors import APIError
+from ..utils.db import prepare_search
 
 EMBED_COLOR = 0xC12D2B
 log = logging.getLogger(__name__)
@@ -120,6 +122,24 @@ class GW2Cog(commands.Cog):
         """The cached item document."""
         return await self.db.items.find_one({"_id": item})
 
+    async def name_choices(self, collection, current, **filters):
+        """Autocomplete choices (value: the id) for up to 25 cached
+        documents whose name starts with `current` and that match
+        `filters`."""
+        if not current:
+            return []
+        docs = await collection.find({"name": prepare_search(current), **filters}).to_list(25)
+        return [Choice(name=doc["name"], value=str(doc["_id"])) for doc in docs]
+
+    async def resolve_id(self, interaction, value, autocomplete):
+        """The id an option names: picked from its autocomplete, or else the
+        first of `autocomplete`'s choices for the typed text. None if
+        nothing matches."""
+        if value.isdigit():
+            return int(value)
+        choices = await autocomplete(interaction, value)
+        return int(choices[0].value) if choices else None
+
     async def get_title(self, title_id):
         """A title's name, or "" if it isn't cached."""
         try:
@@ -172,8 +192,8 @@ class GW2Cog(commands.Cog):
             counts = {item_id: defaultdict(int) for item_id in item_ids}
 
         def amounts_in_space(space, name, geared):
-            space_name = name
             for s in space:
+                space_name = name
                 if geared and s["location"].endswith("LegendaryArmory"):
                     if s["id"] in legendary_armory_item_ids:
                         continue
@@ -234,12 +254,16 @@ class GW2Cog(commands.Cog):
             pass
         if flatten:
             if search:
-                flattened = defaultdict(lambda: [])
+                flattened = defaultdict(lambda: [0, 0])
+                for count_dict in counts.values():
+                    for k, (inventory, geared) in count_dict.items():
+                        flattened[k][0] += inventory
+                        flattened[k][1] += geared
             else:
                 flattened = defaultdict(int)
-            for count_dict in counts.values():
-                for k, v in count_dict.items():
-                    flattened[k] += v
+                for count_dict in counts.values():
+                    for k, v in count_dict.items():
+                        flattened[k] += v
             return flattened
         return counts
 

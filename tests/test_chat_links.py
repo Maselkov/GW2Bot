@@ -143,3 +143,10 @@ async def test_uncached_point_of_interest(caplog):
     assert sent == []
     assert counted == [{"map_link": 1}]
     assert "Exception previewing a chat link" in caplog.text
+
+
+async def test_item_whose_first_upgrade_is_uncached():
+    # The second upgrade is read after the first one's id, known or not
+    embed, _ = await preview(subject.chat_code(46762, 1, None, [1, 24615]))
+    assert fields(embed) == [("Upgrades", "Unknown upgrade\nSuperior Sigil of Force")]
+    assert embed["title"] == "Twilight of Force"

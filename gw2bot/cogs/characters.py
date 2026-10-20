@@ -211,7 +211,7 @@ class Characters(GW2Cog):
                                                      key=key["key"],
                                                      scopes=["characters"])
             except APIError:
-                return []
+                return None
             c = {
                 "last_update": utcnow(),
                 "characters": character_list
@@ -224,6 +224,8 @@ class Characters(GW2Cog):
         cache = doc.get("character_cache", {}).get(account_key, {})
         if not cache:
             cache = await cache_characters()
+            if not cache:
+                return []
         elif cache["last_update"] < utcnow() - datetime.timedelta(days=3):
             self.run_in_background(cache_characters(),
                                    f"caching user {interaction.user.id}'s characters")

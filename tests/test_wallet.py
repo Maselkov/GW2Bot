@@ -161,3 +161,27 @@ async def test_overview_with_currencies_missing_from_the_cache():
     cached = [c for c in CURRENCIES if c["_id"] != 4]
     embed, _ = await subject.wallet(OVERVIEW, currencies=cached, items=ITEMS)
     assert section(embed, "CURRENCIES")[:2] == [" 123 gold 45 silver 67 copper  Coin", " 500 Unknown currency"]
+
+
+async def test_equipment_after_a_legendary_armory_item_stays_with_the_character():
+    characters = [{"name": "Character 1", "bags": [], "equipment_tabs": [{"equipment": [
+        {"id": 3, "location": "EquippedFromLegendaryArmory"},
+        {"id": 2, "location": "Equipped", "infusions": [RUBY]},
+    ]}]}]
+    responses = [(200, []), (200, []), (200, []), (200, characters)]
+    assert await subject.items_in_account(responses, [RUBY]) == {RUBY: {"Character 1": 1}}
+
+
+async def test_flattened_search_adds_up_every_item():
+    # /search looks up identically named items together
+    responses = [(200, [{"id": RUBY, "count": 3}, {"id": SHARD, "count": 4}]), (200, []), (200, []),
+                 (200, CHARACTERS)]
+    counts = await subject.items_in_account(responses, [RUBY, SHARD], flatten=True, search=True)
+    assert counts["bank"] == [7, 0]
+    assert counts["Character 1"] == [7, 1]
+
+
+async def test_overview_with_items_missing_from_the_cache():
+    cached = [item for item in ITEMS if item["_id"] != 79280]
+    embed, _ = await subject.wallet(OVERVIEW, currencies=CURRENCIES, items=cached)
+    assert any("Unknown item" in line for line in section(embed, "LIVING SEASON 3"))
