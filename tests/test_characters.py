@@ -470,7 +470,7 @@ async def test_gear_with_uncached_stats():
 
 
 async def test_gear_with_uncached_equipment():
-    items = [doc for doc in gear_cache().items.docs.values() if doc["_id"] != 300]
+    items = [doc for doc in gear_cache().items.docs if doc["_id"] != 300]
     embed, _, _, _ = await subject.character_command(
         "gear", [(200, geared())], db=gear_cache(items=items), config={"image_channel": 5},
         channel=image_channel(), character="Example Char",

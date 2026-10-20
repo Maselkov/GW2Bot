@@ -1,79 +1,38 @@
 """Adapter between the tests and the code under test.
 
-Tests only call the plain functions in this module, never the cog's mixins
-directly. When a piece of logic moves during the rewrite, repoint the
+Tests only call the plain functions in this module (and the fakes it
+exports), never cogs directly. When a piece of logic moves, repoint the
 matching function here; the tests themselves should not need to change.
+The fakes themselves are in the fakes package.
 """
 import asyncio
 import datetime
-import json
 import logging
-import pathlib
 import re
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-import time_machine
-
-from gw2bot.cogs.base import GW2Cog
+from fakes.bot import GAMEDATA, at, client, fake_bot, run_command, stored_key  # noqa: F401
+from fakes.db import FakeUserRepo, MemoryCollection, MemoryDb, MemorySettings, gw2_db  # noqa: F401
+from fakes.http import (  # noqa: F401
+    FakeDpsReport,
+    FakeImageSession,
+    FakePageSession,
+    FakeSession,
+    FakeWikiSession,
+)
+from fakes.servers import FakeMember, FakeRole, FakeServer, RecordingChannel, log_file  # noqa: F401
 from gw2bot.cogs import daily
+from gw2bot.cogs.base import GW2Cog
 from gw2bot.utils import chat, db
 
-DATA_DIR = pathlib.Path(__file__).resolve().parent.parent / "gw2bot" / "data"
 UTC = datetime.timezone.utc
+_GAMEDATA = GAMEDATA
 
 
-def _load(name):
-    with open(DATA_DIR / name, encoding="utf-8") as f:
-        return json.load(f)
-
-
-_GAMEDATA = _load("gamedata.json")
-_INSTABILITIES = _load("instabilities.json")
-
-
-class _StubEmojis:
-    """No registered emojis: get() gives the fallback text, like an emoji
-    the bot can't use."""
-
-    ids = {}
-
-    def get(self, ctx, emoji, *, fallback=False, fallback_fmt="{}", **kwargs):
-        return fallback_fmt.format(emoji) if fallback else ""
-
-
-def _fake_bot(session=None, users=None):
-    """A bot with the services cogs use: game data, the API client (over
-    `session`), users' keys (over the `users` repository) and emojis."""
-    from gw2bot.keys import ApiKeys
-
-    bot = MagicMock()
-    bot.user.name = "GW2Bot"
-    bot.gamedata = _GAMEDATA
-    bot.instabilities = _INSTABILITIES
-    bot.session = session
-    bot.gw2api = _client(session) if session is not None else None
-    if users is not None:
-        bot.data.users = users
-        bot.keys = ApiKeys(users)
-    bot.gw2_emojis = _StubEmojis()
-    return bot
-
-
-class _Harness(GW2Cog):
-    """A cog with what every cog shares, for the shared logic."""
-
-    def __init__(self, session=None, users=None):
-        super().__init__(_fake_bot(session, users))
-        self.log = logging.getLogger("tests")
-        self.session = session
-
-
-def _at(when):
-    """Freeze the clock at `when` (a date means noon UTC that day)."""
-    if not isinstance(when, datetime.datetime):
-        when = datetime.datetime.combine(when, datetime.time(12), tzinfo=UTC)
-    return time_machine.travel(when, tick=False)
+def _shared_cog(session=None, users=None):
+    """A cog with only what every cog shares."""
+    return GW2Cog(fake_bot(session, users))
 
 
 # --- Items and coins -------------------------------------------------------
@@ -85,7 +44,7 @@ def chat_code(item_id, count=1, skin_id=None, upgrades=()):
 
 
 def format_coins(copper):
-    return _Harness().gold_to_coins(None, copper)
+    return _shared_cog().gold_to_coins(None, copper)
 
 
 # --- Formatting ------------------------------------------------------------
@@ -174,7 +133,7 @@ async def skill_command(command, *, skills=(), traits=(), pages=(), wiki_error=N
 
     def cog_for(session, users):
         sessions.append(session)
-        cog = Skills(_fake_bot(session, users))
+        cog = Skills(fake_bot(session, users))
         cog.db = gw2_db(skills=skills, traits=traits)
         return cog
 
@@ -186,7 +145,7 @@ async def skill_search(command, text, *, skills=(), traits=()):
     """The /skill or /trait autocomplete choices for `text`, as (name, value)."""
     from gw2bot.cogs.skills import Skills
 
-    cog = Skills(_fake_bot())
+    cog = Skills(fake_bot())
     cog.db = gw2_db(skills=skills, traits=traits)
     autocomplete = {"skill": cog.skill_autocomplete, "trait": cog.trait_autocomplete}[command]
     return [(c.name, c.value) for c in await autocomplete(MagicMock(), text)]
@@ -195,11 +154,11 @@ async def skill_search(command, text, *, skills=(), traits=()):
 # --- Dailies (all evaluated as of noon UTC on `date`) ----------------------
 
 def _daily():
-    return daily.Daily(_fake_bot())
+    return daily.Daily(fake_bot())
 
 
 def year_day(date):
-    with _at(date):
+    with at(date):
         return _daily().get_year_day(tomorrow=False)
 
 
@@ -215,25 +174,25 @@ def daily_fields(categories, cache, now, tomorrow=False):
     """[(name, value)] of the daily embed, given the cached rotation."""
     harness = _daily()
     doc = {"cache": {"dailies": cache, "dailies_tomorrow": cache}}
-    with _at(now):
+    with at(now):
         embed = asyncio.run(harness.daily_embed(categories, doc=doc, tomorrow=tomorrow))
     return [(f.name, f.value) for f in embed.fields]
 
 
 def pact_supply_agents(date):
-    with _at(date):
+    with at(date):
         return _daily().get_psna()
 
 
 def instabilities(fractal_level, date):
-    with _at(date):
+    with at(date):
         names = _daily().get_instabilities(fractal_level, tomorrow=False)
     return names.split("\n") if names is not None else None
 
 
 def cm_instabilities(date):
     """{CM fractal name: [instability names]}."""
-    with _at(date):
+    with at(date):
         text = _daily().get_cm_instabilities(tomorrow=False)
     result = {}
     current = None
@@ -264,7 +223,7 @@ def wvw_team_choices(current):
     """[(name, value)] offered by the team autocomplete."""
     from gw2bot.cogs.wvw import Wvw
 
-    choices = asyncio.run(Wvw(_fake_bot()).team_autocomplete(None, current))
+    choices = asyncio.run(Wvw(fake_bot()).team_autocomplete(None, current))
     return [(c.name, c.value) for c in choices]
 
 
@@ -274,7 +233,7 @@ async def wvw_info(responses, *, permissions=("account",), **options):
     from gw2bot.cogs.wvw import Wvw
 
     def cog_for(session, users):
-        return Wvw(_fake_bot(session, users))
+        return Wvw(fake_bot(session, users))
 
     return await run_command(cog_for, Wvw.wvw_info, responses, permissions=permissions, **options)
 
@@ -283,7 +242,7 @@ async def wvw_info(responses, *, permissions=("account",), **options):
 
 def upcoming_bosses(now, limit=8):
     """[(boss name, datetime)] for the next `limit` world bosses."""
-    with _at(now):
+    with at(now):
         bosses = _events_cog().get_upcoming_bosses(limit)
     return [
         (b["name"], datetime.datetime.fromtimestamp(int(b["time"][3:-3]), UTC))
@@ -292,13 +251,13 @@ def upcoming_bosses(now, limit=8):
 
 
 def seconds_until_boss(name, now):
-    with _at(now):
+    with at(now):
         return _events_cog().get_time_until_event({"type": "boss", "name": name})
 
 
 def seconds_until_phase(group, map_name, phase, now):
     reminder = {"type": "event", "group": group, "map_name": map_name, "name": phase}
-    with _at(now):
+    with at(now):
         return _events_cog().get_time_until_event(reminder)
 
 
@@ -314,7 +273,7 @@ def timer_titles():
 
 def timer_state(group, now):
     """{map name: (current phase or None, next phase, datetime of next phase)}."""
-    with _at(now):
+    with at(now):
         embed = asyncio.run(_events_cog().timer_embed(None, group))
     state = {}
     for field in embed.fields:
@@ -330,115 +289,13 @@ def timer_state(group, now):
 
 # --- GW2 API ---------------------------------------------------------------
 
-def _client(session):
-    """A Client whose retry waits are recorded in session.delays, not slept."""
-    from gw2bot.gw2api import Client
-
-    async def sleep(delay):
-        session.delays.append(delay)
-
-    return Client(session, sleep=sleep)
-
-
-class FakeResponse:
-    def __init__(self, session, status, body, headers):
-        self.session = session
-        self.status = status
-        self._body = body
-        self.headers = headers
-
-    async def json(self):
-        import aiohttp
-
-        if isinstance(self._body, str):
-            raise aiohttp.ContentTypeError(MagicMock(), ())
-        return self._body
-
-    async def __aenter__(self):
-        self.session.in_flight += 1
-        self.session.max_in_flight = max(self.session.max_in_flight, self.session.in_flight)
-        # Let other requests start, so concurrency limits are observable
-        for _ in range(3):
-            await asyncio.sleep(0)
-        return self
-
-    async def __aexit__(self, *exc):
-        self.session.in_flight -= 1
-        return False
-
-
-class FakeFailure:
-    """Raised when the request is made: a timeout or network error."""
-
-    def __init__(self, error):
-        self.error = error
-
-    async def __aenter__(self):
-        raise self.error
-
-    async def __aexit__(self, *exc):
-        return False
-
-
-class FakeSession:
-    """Serves queued responses to the GW2 API client.
-
-    Each response is (status, body), (status, body, headers) or an
-    exception to raise; a str body is a non-JSON page. The last response
-    repeats once the queue is exhausted. Records requests as (url, query
-    params, headers) and retry waits in `delays`.
-
-    HEAD requests (the bot checking a wiki page exists) are 200 for the
-    URLs in `pages`, else 404, and recorded in `heads`; `head_error` (an
-    exception) makes them all fail.
-    """
-
-    def __init__(self, *responses, pages=(), head_error=None):
-        self.responses = list(responses)
-        self.pages = set(pages)
-        self.head_error = head_error
-        self.heads = []
-        self.requests = []
-        self.delays = []
-        self.in_flight = 0
-        self.max_in_flight = 0
-
-    def get(self, url, headers=None, params=None, timeout=None):
-        self.requests.append((url, dict(params or []), dict(headers or {})))
-        response = self.responses.pop(0) if len(self.responses) > 1 else self.responses[0]
-        if isinstance(response, BaseException):
-            return FakeFailure(response)
-        status, body, *rest = response
-        return FakeResponse(self, status, body, rest[0] if rest else {})
-
-    def head(self, url, **kwargs):
-        self.heads.append(url)
-        if self.head_error:
-            return FakeFailure(self.head_error)
-        return FakeResponse(self, 200 if url in self.pages else 404, None, {})
-
-
 async def api_get(session, endpoint, key=None, schema=None):
     """GET through the bot's GW2 API client, using `session` for HTTP."""
-    return await _client(session).get(endpoint, key=key, schema=schema)
+    return await client(session).get(endpoint, key=key, schema=schema)
 
 
 async def api_get_many(session, endpoints, key=None):
-    return await _client(session).get_many(endpoints, key=key)
-
-
-class FakeUserRepo:
-    """bot.data.users, as used by fetch_key and the rename check."""
-
-    def __init__(self, doc):
-        self.doc = doc
-        self.writes = []
-
-    async def get(self, user_id):
-        return self.doc
-
-    async def update(self, user_id, fields, op="set"):
-        self.writes.append((op, fields))
+    return await client(session).get_many(endpoints, key=key)
 
 
 async def fetch_account(session, stored, user_id=1):
@@ -450,7 +307,7 @@ async def fetch_account(session, stored, user_id=1):
     from unittest.mock import AsyncMock
 
     users = FakeUserRepo(stored)
-    harness = _Harness(session, users)
+    harness = _shared_cog(session, users)
     user = MagicMock(id=user_id)
     user.send = AsyncMock()
     data = await harness.call_api("account", user)
@@ -476,38 +333,6 @@ def patch_notes_markdown(html):
 
 
 # --- Build images ----------------------------------------------------------
-
-class FakeImageSession:
-    """Serves {url: image bytes}; any other URL is a 404. Records requests."""
-
-    def __init__(self, images):
-        self.images = images
-        self.requests = []
-
-    def get(self, url, timeout=None):
-        self.requests.append(url)
-        return _FakeImageResponse(self.images.get(url))
-
-
-class _FakeImageResponse:
-    def __init__(self, body):
-        self.body = body
-
-    def raise_for_status(self):
-        if self.body is None:
-            import aiohttp
-
-            raise aiohttp.ClientResponseError(MagicMock(), (), status=404)
-
-    async def read(self):
-        return self.body
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *exc):
-        return False
-
 
 async def render_build(session, specializations, skills):
     """PNG bytes of a build image, or None when there's nothing to draw.
@@ -540,51 +365,6 @@ async def account_ap(db, progress, account):
 
 # --- Update notes from the forum -------------------------------------------
 
-class FakeCollection:
-    """The find_one/insert_one/update_one subset used on gw2.updates."""
-
-    def __init__(self):
-        self.docs = []
-
-    async def find_one(self, query):
-        return next((d for d in self.docs if all(d.get(k) == v for k, v in query.items())), None)
-
-    async def insert_one(self, doc):
-        self.docs.append(dict(doc))
-
-    async def update_one(self, query, update):
-        doc = await self.find_one(query)
-        doc.update(update["$set"])
-
-
-class FakePageSession:
-    """Serves {url: (status, text)}; anything else is a 404."""
-
-    def __init__(self, pages):
-        self.pages = pages
-
-    def get(self, url, timeout=None):
-        status, text = self.pages.get(url, (404, "Not found"))
-        response = MagicMock(status=status)
-
-        async def read_text():
-            return text
-
-        response.text = read_text
-        return _AsyncContext(response)
-
-
-class _AsyncContext:
-    def __init__(self, value):
-        self.value = value
-
-    async def __aenter__(self):
-        return self.value
-
-    async def __aexit__(self, *exc):
-        return False
-
-
 class UpdateNotesChecker:
     """Runs the update-notes check against a fake forum, keeping state
     (sent counts, blocked flag) between checks like the running bot does."""
@@ -594,7 +374,7 @@ class UpdateNotesChecker:
 
         self.notifier = Notifiers(MagicMock())
         self.notifier.log = logging.getLogger("tests.update_notes")
-        self.updates = FakeCollection()
+        self.updates = MemoryCollection()
         self.notifier.bot.data.gw2.updates = self.updates
         self.pages = pages
         self.notifier.bot.session = FakePageSession(pages)
@@ -609,44 +389,13 @@ class UpdateNotesChecker:
 
 # --- Settings commands ------------------------------------------------------
 
-class MemorySettingsRepo:
-    """In-memory stand-in for a SettingsRepo (set, and equality queries)."""
-
-    def __init__(self):
-        self.docs = {}
-
-    async def get(self, entity_id):
-        doc = self.docs.get(entity_id)
-        return {**doc, "_id": entity_id} if doc else {}
-
-    async def update(self, entity_id, fields, op="set"):
-        assert op in ("set", "$set"), op
-        doc = self.docs.setdefault(entity_id, {})
-        for name, value in fields.items():
-            *parents, last = name.split(".")
-            target = doc
-            for part in parents:
-                target = target.setdefault(part, {})
-            target[last] = value
-
-    async def find(self, query=None, *, batch_size=100):
-        def value(doc, name):
-            for part in name.split("."):
-                doc = doc.get(part) if isinstance(doc, dict) else None
-            return doc
-
-        for entity_id, doc in list(self.docs.items()):
-            if all(value(doc, k) == v for k, v in (query or {}).items()):
-                yield {**doc, "_id": entity_id}
-
-
 class SettingsCommands:
     """Runs server/channel settings commands against in-memory settings,
     which survive a simulated restart."""
 
     def __init__(self):
-        self.guilds = MemorySettingsRepo()
-        self.channels = MemorySettingsRepo()
+        self.guilds = MemorySettings()
+        self.channels = MemorySettings()
         self.start()
 
     def start(self):
@@ -700,7 +449,7 @@ class EvtcUploads:
 
         from gw2bot.cogs.evtc import Evtc
 
-        self.channels = MemorySettingsRepo()
+        self.channels = MemorySettings()
         self.cog = Evtc(MagicMock())
         self.cog.bot.data.channels = self.channels
         self.cog.process_evtc = AsyncMock()
@@ -721,77 +470,6 @@ class EvtcUploads:
         self.cog.process_evtc.reset_mock()
         await type(self.cog).on_message(self.cog, message)
         return self.cog.process_evtc.await_count == 1, message.delete.await_count == 1
-
-
-class MemoryCollection:
-    """In-memory stand-in for a Mongo collection: filters on fields equal
-    to a value or with $eq / $gte / $lt; find() with to_list and async
-    iteration; update_one with $set. Like Mongo, inserted documents get a
-    generated _id."""
-
-    def __init__(self, docs=()):
-        self.docs = [{"_id": f"doc{i}", **d} for i, d in enumerate(docs)]
-        self._next_id = 0
-
-    def _matches(self, doc, query):
-        def check(value, condition):
-            if not isinstance(condition, dict):
-                return value == condition
-            ops = {"$eq": lambda a, b: a == b, "$gte": lambda a, b: a is not None and a >= b,
-                   "$lt": lambda a, b: a is not None and a < b}
-            return all(ops[op](value, operand) for op, operand in condition.items())
-
-        return all(check(doc.get(k), v) for k, v in query.items())
-
-    def find(self, query=None):
-        found = [dict(d) for d in self.docs if self._matches(d, query or {})]
-
-        class Cursor:
-            async def to_list(self, length):
-                return found
-
-            def __aiter__(self):
-                return self._iterate()
-
-            async def _iterate(self):
-                for doc in found:
-                    yield doc
-
-        return Cursor()
-
-    async def update_one(self, query, update):
-        for doc in self.docs:
-            if self._matches(doc, query):
-                for name, value in update["$set"].items():
-                    *parents, last = name.split(".")
-                    target = doc
-                    for part in parents:
-                        target = target.setdefault(part, {})
-                    target[last] = value
-                return
-
-    async def count_documents(self, query):
-        return sum(1 for d in self.docs if self._matches(d, query))
-
-    async def create_index(self, *args, **kwargs):
-        pass
-
-    async def find_one(self, query):
-        return next((dict(d) for d in self.docs if self._matches(d, query)), None)
-
-    async def insert_one(self, doc):
-        self._next_id += 1
-        doc.setdefault("_id", f"oid{self._next_id}")
-        self.docs.append(dict(doc))
-
-    async def delete_one(self, query):
-        for i, doc in enumerate(self.docs):
-            if self._matches(doc, query):
-                del self.docs[i]
-                return
-
-    async def delete_many(self, query):
-        self.docs = [d for d in self.docs if not self._matches(d, query)]
 
 
 class EvtcApiKeys:
@@ -823,49 +501,6 @@ class EvtcApiKeys:
 
 # --- Command handlers -------------------------------------------------------
 
-def stored_key(permissions, account_name="Example.1234"):
-    """A user's stored settings with one key (synthetic, never real data)."""
-    key = {"key": "KEY", "account_name": account_name, "permissions": list(permissions), "name": ""}
-    return {"key": key, "keys": [key]}
-
-
-async def run_command(cog_for, command, responses, *, permissions, users=None, pages=(), head_error=None,
-                      on_interaction=None, **options):
-    """Run a slash command's handler with a fake interaction.
-
-    cog_for(session, users) builds the cog; `responses` are the API
-    responses in request order (see FakeSession); `users` is the users
-    repository (default: one user with a key with `permissions`). Returns
-    (what was sent, API requests). What was sent is the reply's embed as a
-    dict, or its content if there's no embed: the followup's if the command
-    deferred, else the direct response's. `pages` are the wiki pages that
-    exist, and `head_error` makes checking them fail (see FakeSession).
-    on_interaction(interaction) is called before running the command.
-    """
-    from unittest.mock import AsyncMock
-
-    session = FakeSession(*responses, pages=pages, head_error=head_error)
-    users = users or FakeUserRepo(stored_key(permissions))
-    cog = cog_for(session, users)
-    interaction = MagicMock()
-    interaction.user.id = 1
-    interaction.response.defer = AsyncMock()
-    interaction.response.send_message = AsyncMock()
-    interaction.followup.send = AsyncMock()
-    interaction.user.send = AsyncMock()
-    if on_interaction:
-        on_interaction(interaction)
-    await command.callback(cog, interaction, **options)
-    reply = interaction.followup.send if interaction.followup.send.await_count else interaction.response.send_message
-    if interaction.followup.send.await_count:
-        # A followup needs a deferred (or answered) interaction first
-        assert interaction.response.defer.await_count or interaction.response.send_message.await_count
-    call = reply.await_args
-    embed = call.kwargs.get("embed")
-    sent = embed.to_dict() if embed else call.args[0] if call.args else call.kwargs.get("content")
-    return sent, [(url, params) for url, params, _ in session.requests]
-
-
 async def pvp(command, stats, *, rank_icon="https://render/rank.png", permissions=("account", "pvp"), **options):
     """Run /pvp stats or /pvp professions against synthetic pvp/stats."""
     responses = [(200, stats)]
@@ -876,7 +511,7 @@ async def pvp(command, stats, *, rank_icon="https://render/rank.png", permission
     handler = {"stats": Pvp.pvp_stats, "professions": Pvp.pvp_professions}[command]
 
     def cog_for(session, users):
-        return Pvp(_fake_bot(session, users))
+        return Pvp(fake_bot(session, users))
 
     return await run_command(cog_for, handler, responses, permissions=permissions, **options)
 
@@ -903,62 +538,10 @@ async def wizards_vault(daily, weekly, special, *, wallet=None, now, permissions
     from gw2bot.cogs.wizardsvault import WizardsVault
 
     def cog_for(session, users):
-        return WizardsVault(_fake_bot(session, users))
+        return WizardsVault(fake_bot(session, users))
 
-    with _at(now):
+    with at(now):
         return await run_command(cog_for, WizardsVault.wizards_vault, responses, permissions=permissions)
-
-
-class MemoryItems:
-    """In-memory stand-in for a game data cache: find_one by _id, and find
-    with a regex on name plus $nin / $ne conditions (searches)."""
-
-    def __init__(self, docs=()):
-        self.docs = {doc["_id"]: doc for doc in docs}
-
-    async def find_one(self, query):
-        try:
-            return self.docs.get(query["_id"])
-        except TypeError:
-            # Like Mongo, a document as the id matches nothing here
-            return None
-
-    def find(self, query=None):
-        query = query or {}
-
-        def matches(doc):
-            for field, condition in query.items():
-                value = doc.get(field)
-                if field == "name":
-                    if not condition.search(value):
-                        return False
-                elif not isinstance(condition, dict):
-                    if value != condition:
-                        return False
-                elif "$nin" in condition and set(value or []) & set(condition["$nin"]):
-                    return False
-                elif "$ne" in condition and value == condition["$ne"]:
-                    return False
-            return True
-
-        found = [doc for doc in self.docs.values() if matches(doc)]
-
-        class Cursor:
-            def limit(self, length):
-                del found[length:]
-                return self
-
-            async def to_list(self, length):
-                return found[:length] if length else found
-
-            def __aiter__(self):
-                return self._iterate()
-
-            async def _iterate(self):
-                for doc in found:
-                    yield doc
-
-        return Cursor()
 
 
 async def commerce(command, responses, *, items=(), permissions=("account", "tradingpost"), users=None, **options):
@@ -968,8 +551,8 @@ async def commerce(command, responses, *, items=(), permissions=("account", "tra
     handler = getattr(Commerce, command)
 
     def cog_for(session, users):
-        cog = Commerce(_fake_bot(session, users))
-        cog.db = SimpleNamespace(items=MemoryItems(items))
+        cog = Commerce(fake_bot(session, users))
+        cog.db = gw2_db(items=items)
         return cog
 
     return await run_command(cog_for, handler, responses, permissions=permissions, users=users, **options)
@@ -979,15 +562,10 @@ async def tp_item_search(text, items):
     """The /tp price autocomplete choices for `text`, as (name, value)."""
     from gw2bot.cogs.commerce import Commerce
 
-    cog = Commerce(_fake_bot())
-    cog.db = SimpleNamespace(items=MemoryItems(items))
+    cog = Commerce(fake_bot())
+    cog.db = gw2_db(items=items)
     choices = await Commerce.tp_autocomplete(cog, MagicMock(), text)
     return [(c.name, c.value) for c in choices]
-
-
-def gw2_db(**collections):
-    """A stand-in for the gw2 collections: {name: [documents]}."""
-    return SimpleNamespace(**{name: MemoryItems(docs) for name, docs in collections.items()})
 
 
 async def achievement(responses, achievement_name, *, db, permissions=("account", "progression")):
@@ -995,7 +573,7 @@ async def achievement(responses, achievement_name, *, db, permissions=("account"
     from gw2bot.cogs.achievements import Achievements
 
     def cog_for(session, users):
-        cog = Achievements(_fake_bot(session, users))
+        cog = Achievements(fake_bot(session, users))
         cog.db = db
         return cog
 
@@ -1009,7 +587,7 @@ async def achievement_search(text, db):
     """The /achievement autocomplete choices for `text`, as (name, value)."""
     from gw2bot.cogs.achievements import Achievements
 
-    cog = Achievements(_fake_bot())
+    cog = Achievements(fake_bot())
     cog.db = db
     choices = await Achievements.achievement_autocomplete(cog, MagicMock(), text)
     return [(c.name, c.value) for c in choices]
@@ -1034,7 +612,7 @@ async def wallet(responses, *, currencies, items, permissions=("account", "walle
     from gw2bot.cogs.wallet import Wallet
 
     def cog_for(session, users):
-        cog = Wallet(_fake_bot(session, users))
+        cog = Wallet(fake_bot(session, users))
         cog.db = gw2_db(currencies=currencies, items=items)
         return cog
 
@@ -1047,7 +625,7 @@ async def items_in_account(responses, item_ids, *, permissions=("account", "inve
     account/inventory, account/materials, characters (and
     commerce/delivery with the tradingpost permission)."""
     session = FakeSession(*responses)
-    cog = _Harness(session, FakeUserRepo(stored_key(permissions)))
+    cog = _shared_cog(session, FakeUserRepo(stored_key(permissions)))
     user = MagicMock(id=1)
     result = await cog.find_items_in_account(user, item_ids, **options)
     # Plain dicts, for comparing
@@ -1056,47 +634,13 @@ async def items_in_account(responses, item_ids, *, permissions=("account", "inve
     return {item: dict(places) for item, places in result.items()}
 
 
-class MemoryEncounters:
-    """In-memory stand-in for the EVTC encounters collection, for the
-    /bosses report links: boss_id $in, a player, a date range and success;
-    newest first."""
-
-    def __init__(self, docs=()):
-        self.docs = list(docs)
-
-    def find(self, query):
-        found = [
-            doc for doc in self.docs
-            if doc["boss_id"] in query["boss_id"]["$in"]
-            and query["players"] in doc["players"]
-            and query["date"]["$gte"] <= doc["date"] < query["date"]["$lt"]
-            and doc["success"] == query["success"]
-        ]
-
-        class Cursor:
-            def sort(self, field, direction):
-                found.sort(key=lambda doc: doc[field], reverse=direction == -1)
-                return self
-
-            def limit(self, length):
-                del found[length:]
-                return self
-
-            async def to_list(self, length):
-                return found
-
-        return Cursor()
-
-
 def _account_cog(session=None, users=None, db=None, raids=None):
     from unittest.mock import AsyncMock
 
     from gw2bot.cogs.account import Account
 
-    cog = Account(_fake_bot(session, users))
+    cog = Account(fake_bot(session, users))
     cog.db = db or gw2_db()
-    if not hasattr(cog.db, "encounters"):
-        cog.db.encounters = MemoryEncounters()
     cog.bot.data.config.get = AsyncMock(return_value={"cache": {"raids": raids}})
     return cog
 
@@ -1115,7 +659,7 @@ async def account_command(command, responses, *, permissions=("account",), db=No
     def cog_for(session, users):
         return _account_cog(session, users, db=db, raids=raids)
 
-    with _at(now) if now else contextlib.nullcontext():
+    with at(now) if now else contextlib.nullcontext():
         return await run_command(cog_for, handler, responses, permissions=permissions, **options)
 
 
@@ -1135,7 +679,7 @@ def _characters_cog(session=None, users=None, db=None, public=(), config=None, c
 
     from gw2bot.cogs.characters import Characters
 
-    cog = Characters(_fake_bot(session, users))
+    cog = Characters(fake_bot(session, users))
     cog.db = db or gw2_db()
     cog.db.characters = MemoryCollection()
     cog.db.characters.docs = [dict(doc) for doc in public]
@@ -1168,7 +712,7 @@ async def character_command(command, responses, *, permissions=("account", "char
         cogs.append(_characters_cog(session, users, db=db, public=public, config=config, channel=channel))
         return cogs[0]
 
-    with _at(now) if now else contextlib.nullcontext():
+    with at(now) if now else contextlib.nullcontext():
         sent, requests = await run_command(
             cog_for, _character_handler(command), responses, permissions=permissions, users=users,
             on_interaction=interactions.append, **options,
@@ -1194,7 +738,7 @@ async def character_choices(current, stored, responses=(), *, now):
     cog = _characters_cog(session, users)
     interaction = MagicMock()
     interaction.user.id = 1
-    with _at(now):
+    with at(now):
         choices = await cog.character_autocomplete(interaction, current)
         for _ in range(10):
             await asyncio.sleep(0)
@@ -1202,44 +746,6 @@ async def character_choices(current, stored, responses=(), *, now):
 
 
 # --- Guilds --------------------------------------------------------------------
-
-class MemoryUsers:
-    """Users' settings by Discord id (get/update), and find() by account
-    name as /guild members uses it."""
-
-    def __init__(self, docs):
-        self.docs = docs
-        self.writes = []
-
-    async def get(self, user_id):
-        return self.docs.get(user_id, {})
-
-    async def update(self, user_id, fields, op="set"):
-        self.writes.append((user_id, op, fields))
-        return SimpleNamespace(modified_count=1)
-
-    async def find(self, query):
-        """By account name ({"$or": [{"key.account_name": name}, ...]}), or
-        top-level fields equal to a value or {"$ne": value}."""
-        if "$or" in query:
-            names = {next(iter(condition.values())) for condition in query["$or"]}
-            for user_id, doc in self.docs.items():
-                accounts = [doc.get("key", {}).get("account_name")]
-                accounts += [k.get("account_name") for k in doc.get("keys", [])]
-                if names & set(accounts):
-                    yield {**doc, "_id": user_id}
-            return
-        for user_id, doc in list(self.docs.items()):
-            def matches(field, condition):
-                if isinstance(condition, dict):
-                    if condition.get("$exists") and field not in doc:
-                        return False
-                    return "$ne" not in condition or doc.get(field) != condition["$ne"]
-                return doc.get(field) == condition
-
-            if all(matches(f, c) for f, c in query.items()):
-                yield {**doc, "_id": user_id}
-
 
 async def guild_command(command, responses, *, permissions=("account", "guilds"), items=(), users=None,
                         discord_members=None, **options):
@@ -1249,10 +755,10 @@ async def guild_command(command, responses, *, permissions=("account", "guilds")
     from gw2bot.cogs.guild import Guild
 
     handler = getattr(Guild, "guild_" + command)
-    repo = MemoryUsers({1: stored_key(permissions), **(users or {})})
+    repo = MemorySettings({1: stored_key(permissions), **(users or {})})
 
     def cog_for(session, _):
-        cog = Guild(_fake_bot(session, repo))
+        cog = Guild(fake_bot(session, repo))
         cog.db = gw2_db(items=items)
         return cog
 
@@ -1278,12 +784,12 @@ async def guild_choices(current, stored, responses=(), *, server_default=None, n
 
     session = FakeSession(*(responses or [(500, {})]))
     users = FakeUserRepo(stored)
-    cog = _Harness(session, users)
+    cog = _shared_cog(session, users)
     interaction = MagicMock()
     interaction.user.id = 1
     interaction.command.binding = cog
     cog.bot.data.guilds.get = AsyncMock(return_value={"guild_ingame": server_default} if server_default else {})
-    with _at(now):
+    with at(now):
         choices = await guild_name_autocomplete(interaction, current)
         for _ in range(10):
             await asyncio.sleep(0)
@@ -1294,31 +800,10 @@ async def guild_choices(current, stored, responses=(), *, server_default=None, n
 
 # --- Misc -------------------------------------------------------------------------
 
-class FakeWikiSession:
-    """Serves wiki pages, {url: html}; `redirects` maps a search URL to the
-    page it lands on (an exact match). Records (url, headers)."""
-
-    def __init__(self, pages=None, redirects=None):
-        self.pages = pages or {}
-        self.redirects = redirects or {}
-        self.requests = []
-
-    def get(self, url, headers=None, **kwargs):
-        self.requests.append((url, dict(headers or {})))
-        target = self.redirects.get(url)
-        response = MagicMock(history=[MagicMock()] if target else [], url=target or url)
-
-        async def text():
-            return self.pages[target or url]
-
-        response.text = text
-        return _AsyncContext(response)
-
-
 def _misc_cog(session=None, users=None, items=(), skins=()):
     from gw2bot.cogs.misc import Misc
 
-    cog = Misc(_fake_bot(session, users))
+    cog = Misc(fake_bot(session, users))
     cog.db = gw2_db(items=items, skins=skins)
     return cog
 
@@ -1355,65 +840,11 @@ async def chatcode_choices(option, text, *, items=(), skins=()):
 
 # --- Guild sync ------------------------------------------------------------------
 
-class FakeGuildsyncs:
-    """gw2.guildsyncs: find by guild_id, update_one, count_documents."""
-
-    def __init__(self, docs):
-        self.docs = docs
-        self.updates = []
-
-    def find(self, query):
-        found = [d for d in self.docs if d["guild_id"] == query["guild_id"]]
-
-        async def iterate():
-            for doc in found:
-                yield doc
-
-        return iterate()
-
-    async def update_one(self, query, update):
-        self.updates.append((query, update))
-
-
-def discord_member(member_id, *, roles=1, days_on_server=3):
-    """A server member with `roles` roles (1 is just @everyone)."""
-    member = MagicMock(id=member_id, bot=False)
-    member.roles = [MagicMock(id=900 + i) for i in range(roles)]
-    member.joined_at = datetime.datetime.now(UTC) - datetime.timedelta(days=days_on_server)
-    return member
-
-
-async def run_guildsync(members, accounts, responses, *, syncs=1, purge=True):
-    """Run a full guild sync on a server with `members` (see
-    discord_member), whose accounts are {member id: account name}, against
-    `syncs` guild syncs with tag and rank roles off. `responses` are each
-    sync's guild/:id/members (see FakeSession). Returns the ids of the
-    members kicked."""
-    from unittest.mock import AsyncMock
-
-    from gw2bot.cogs.guildsync import GuildSync
-
-    users = MemoryUsers({member_id: stored_key(["account", "guilds"], account_name=name)
-                         for member_id, name in accounts.items()})
-    session = FakeSession(*responses)
-    cog = GuildSync(_fake_bot(session, users))
-    guild = MagicMock(id=10, chunked=True, members=members)
-    guild.kick = AsyncMock()
-    guild.get_role = lambda role_id: None
-    for member in members:
-        member.guild = guild
-    docs = [{"_id": f"sync{i}", "guild_id": 10, "gid": f"GUILD-{i}", "key": "LEADER", "rank_roles": {},
-             "tag_role": None, "enabled": {"ranks": False, "tag": False}, "name": f"Guild {i}", "tag": "EX"}
-            for i in range(syncs)]
-    cog.db = SimpleNamespace(guildsyncs=FakeGuildsyncs(docs))
-    cog.bot.data.guilds.get = AsyncMock(return_value={"guildsync": {"enabled": True, "purge": purge}})
-    await cog.run_guildsyncs(guild)
-    return [call.kwargs["user"].id for call in guild.kick.await_args_list]
 async def set_event_reminder(**options):
     """Run /reminder event. Returns (reply, users' settings writes)."""
     from gw2bot.cogs.events import Events
 
-    users = MemoryUsers({1: {}})
+    users = MemorySettings({1: {}})
     sent, _ = await run_command(lambda session, _: _events_cog(session, users), Events.reminder_event, [],
                                 permissions=(), users=users, **options)
     return sent, users.writes
@@ -1423,7 +854,7 @@ async def set_event_reminder(**options):
 def _notifier_cog(session=None, users=None):
     from gw2bot.cogs.notifiers import Notifiers
 
-    return Notifiers(_fake_bot(session, users))
+    return Notifiers(fake_bot(session, users))
 
 
 async def run_gem_tracker(responses, tracked):
@@ -1434,7 +865,7 @@ async def run_gem_tracker(responses, tracked):
 
     import discord
 
-    users = MemoryUsers({user_id: {"gemtrack": price} for user_id, price in tracked.items()})
+    users = MemorySettings({user_id: {"gemtrack": price} for user_id, price in tracked.items()})
     cog = _notifier_cog(FakeSession(*responses), users)
     sent = []
 
@@ -1458,60 +889,9 @@ async def run_gem_tracker(responses, tracked):
     return sent, users.writes, error
 
 
-class MemoryGuilds:
-    """bot.data.guilds: server settings by id, find() with equality and
-    {"$ne": value} on dotted fields, update() recorded."""
-
-    def __init__(self, docs):
-        self.docs = docs
-        self.writes = []
-
-    async def get(self, guild_id):
-        return self.docs.get(guild_id, {})
-
-    async def update(self, guild_id, fields, op="set"):
-        self.writes.append((guild_id, op, fields))
-
-    async def find(self, query=None, **kwargs):
-        def value(doc, name):
-            for part in name.split("."):
-                doc = doc.get(part) if isinstance(doc, dict) else None
-            return doc
-
-        def matches(doc, field, condition):
-            if isinstance(condition, dict):
-                return value(doc, field) != condition["$ne"]
-            return value(doc, field) == condition
-
-        for guild_id, doc in list(self.docs.items()):
-            if all(matches(doc, f, c) for f, c in (query or {}).items()):
-                yield {**doc, "_id": guild_id}
-
-
-def text_channel(channel_id, guild_id=10, *, can_send=True, can_embed=True):
-    """A channel whose sent messages are recorded in channel.sent as
-    (content, embed dict or None)."""
-    from unittest.mock import AsyncMock
-
-    channel = MagicMock(id=channel_id)
-    channel.guild.id = guild_id
-    permissions = channel.permissions_for.return_value
-    permissions.send_messages = can_send
-    permissions.embed_links = can_embed
-    permissions.read_message_history = True
-    channel.sent = []
-
-    async def send(content=None, *, embed=None, **kwargs):
-        channel.sent.append((content, embed.to_dict() if embed else None))
-        return MagicMock(id=1000 + len(channel.sent))
-
-    channel.send = AsyncMock(side_effect=send)
-    return channel
-
-
 async def run_news_checker(feed, cached_titles, guilds, channels):
     """One run of the news checker against an RSS `feed` (text). `guilds`
-    are server settings by id, `channels` text_channel()s. Returns
+    are server settings by id, `channels` RecordingChannels. Returns
     (config writes, server settings writes, anything the run raised)."""
     from unittest.mock import AsyncMock
 
@@ -1519,7 +899,7 @@ async def run_news_checker(feed, cached_titles, guilds, channels):
     cog.bot.session = FakeWikiSession({"https://www.guildwars2.com/en/feed/": feed})
     cog.bot.data.config.get = AsyncMock(return_value={"cache": {"news": cached_titles}})
     cog.bot.data.config.update = AsyncMock()
-    cog.bot.data.guilds = MemoryGuilds(guilds)
+    cog.bot.data.guilds = MemorySettings(guilds)
     by_id = {c.id: c for c in channels}
     cog.bot.get_channel = by_id.get
     try:
@@ -1548,7 +928,7 @@ async def check_game_updates(config, build_page, *, notes=None, servers=None, ch
     cog.bot.session = FakeWikiSession({"http://assetcdn.101.arenanetworks.com/latest/101": build_page})
     cog.bot.data.config.get = AsyncMock(return_value=config)
     cog.bot.data.config.update = AsyncMock()
-    cog.bot.data.guilds = MemoryGuilds(servers or {})
+    cog.bot.data.guilds = MemorySettings(servers or {})
     cog.bot.get_channel = {c.id: c for c in channels}.get
     cache = MagicMock()
     cache.rebuild_database = AsyncMock()
@@ -1574,7 +954,7 @@ async def notifier_command(command, *, settings=None, channel=None, **options):
 
     handler = {"news": Notifiers.newsfeed, "update": Notifiers.updatenotifier,
                "bosses": Notifiers.bossnotifier}[command]
-    guilds = MemoryGuilds({10: settings or {}})
+    guilds = MemorySettings({10: settings or {}})
 
     def cog_for(session, users):
         cog = _notifier_cog(session, users)
@@ -1591,82 +971,6 @@ async def notifier_command(command, *, settings=None, channel=None, **options):
     return sent, guilds.writes
 
 
-async def run_daily_notifier(settings, *, previous_message_exists=True, channel_exists=True, can_send=True,
-                             can_embed=True):
-    """One 23:40 daily notifier run for a server whose `daily` settings
-    are `settings` (channel 5; the previous post is message 999). Returns
-    {"sent", "edited", "deleted", "pinned", "unpinned": [message ids],
-    "texts": [text-only messages], "embeds": [embeds sent, as dicts],
-    "writes": server settings writes}."""
-    from unittest.mock import AsyncMock
-
-    import discord
-
-    events = {"sent": [], "edited": [], "deleted": [], "pinned": [], "unpinned": [], "texts": [], "embeds": []}
-    messages = {}
-
-    def message(message_id):
-        msg = MagicMock(id=message_id, pinned=False)
-
-        async def act(name):
-            if message_id in events["deleted"]:
-                raise discord.NotFound(MagicMock(status=404), "Unknown Message")
-            events[name].append(message_id)
-
-        def recorder(name):
-            async def record(*args, **kwargs):
-                await act(name)
-
-            return AsyncMock(side_effect=record)
-
-        msg.edit, msg.delete = recorder("edited"), recorder("deleted")
-        msg.pin, msg.unpin = recorder("pinned"), recorder("unpinned")
-        messages[message_id] = msg
-        return msg
-
-    if previous_message_exists:
-        message(999)
-    channel = MagicMock(id=5)
-    channel.guild.id = 10
-    permissions = channel.permissions_for.return_value
-    permissions.send_messages = can_send
-    permissions.embed_links = can_embed
-    permissions.read_message_history = True
-
-    async def send(*args, embed=None, **kwargs):
-        if embed is None:
-            events["texts"].append(args[0])
-            return message(0)
-        events["embeds"].append(embed.to_dict())
-        msg = message(1000 + len(events["sent"]) + 1)
-        events["sent"].append(msg.id)
-        return msg
-
-    async def fetch_message(message_id):
-        if message_id not in messages or message_id in events["deleted"]:
-            raise discord.NotFound(MagicMock(status=404), "Unknown Message")
-        return messages[message_id]
-
-    async def history(**kwargs):
-        return
-        yield
-
-    channel.send = AsyncMock(side_effect=send)
-    channel.fetch_message = AsyncMock(side_effect=fetch_message)
-    channel.history = history
-
-    cog = _daily()
-    cog.cache_dailies = AsyncMock()
-    cog.bot.data.config.get = AsyncMock(return_value={"cache": {"dailies_tomorrow": {"raids": [], "fractals": []}}})
-    cog.bot.data.guilds = MemoryGuilds({10: {"daily": {"on": True, "channel": 5, "categories": ["psna"],
-                                                       "message": 999, **settings}}})
-    cog.bot.get_channel = {5: channel}.get if channel_exists else {}.get
-    await type(cog).send_daily_notifs.coro(cog)
-    for _ in range(50):
-        await asyncio.sleep(0)
-    return {**events, "writes": cog.bot.data.guilds.writes}
-
-
 async def api_key_role(**options):
     """Run /server api_key_role on server 10. Returns (reply, settings
     writes, whether a sync of the server's roles started)."""
@@ -1674,11 +978,11 @@ async def api_key_role(**options):
 
     from gw2bot.cogs.server import Server
 
-    guilds = MemoryGuilds({})
+    guilds = MemorySettings({})
     cogs = []
 
     def cog_for(session, users):
-        cog = Server(_fake_bot(session, users))
+        cog = Server(fake_bot(session, users))
         cog.bot.data.guilds = guilds
         # The role sync is the Keys cog's
         keys = MagicMock()
@@ -1700,8 +1004,8 @@ async def switch_key(stored, token):
     (reply, settings writes)."""
     from gw2bot.cogs.keys import Keys
 
-    users = MemoryUsers({1: stored})
-    sent, _ = await run_command(lambda session, _: Keys(_fake_bot(session, users)), Keys.key_switch, [],
+    users = MemorySettings({1: stored})
+    sent, _ = await run_command(lambda session, _: Keys(fake_bot(session, users)), Keys.key_switch, [],
                                 permissions=(), users=users, token=token)
     return sent, users.writes
 
@@ -1711,15 +1015,8 @@ async def can_add_guildsync(existing, in_game_guild_id="NEW"):
     add one for `in_game_guild_id`."""
     from gw2bot.cogs.guildsync import GuildSync
 
-    class Syncs:
-        async def find_one(self, query):
-            return {"gid": query["gid"]} if query["gid"] in existing else None
-
-        async def count_documents(self, query):
-            return len(existing)
-
-    cog = GuildSync(_fake_bot())
-    cog.db = SimpleNamespace(guildsyncs=Syncs())
+    cog = GuildSync(fake_bot())
+    cog.db = gw2_db(guildsyncs=[{"guild_id": 10, "gid": gid} for gid in existing])
     return await cog.can_add_sync(MagicMock(id=10), in_game_guild_id)
 
 
@@ -1735,7 +1032,7 @@ DAILY_CACHE = {
 def _daily_cog(session=None, users=None, cache=None):
     from unittest.mock import AsyncMock
 
-    cog = daily.Daily(_fake_bot(session, users))
+    cog = daily.Daily(fake_bot(session, users))
     config = {"cache": {"dailies": cache, "dailies_tomorrow": cache}} if cache is not None else {"cache": {}}
     cog.bot.data.config.get = AsyncMock(return_value=config)
     cog.bot.data.config.update = AsyncMock()
@@ -1747,7 +1044,7 @@ async def daily_command(cache, *, now=None, **options):
     optionally with the clock frozen at `now`."""
     import contextlib
 
-    with _at(now) if now else contextlib.nullcontext():
+    with at(now) if now else contextlib.nullcontext():
         sent, _ = await run_command(lambda session, users: _daily_cog(session, users, cache), daily.Daily.daily, [],
                                     permissions=(), **options)
     return sent
@@ -1777,7 +1074,7 @@ async def notifier_daily(*, choose=None, enabled=True, already_enabled=False, **
 
     from gw2bot.cogs.notifiers import Notifiers
 
-    guilds = MemoryGuilds({10: {"daily": {"on": already_enabled}}})
+    guilds = MemorySettings({10: {"daily": {"on": already_enabled}}})
     final = []
 
     async def wait(view):
@@ -1831,62 +1128,7 @@ async def notifier_daily(*, choose=None, enabled=True, already_enabled=False, **
 def _events_cog(session=None, users=None):
     from gw2bot.cogs.events import Events
 
-    return Events(_fake_bot(session, users))
-
-
-class RecordingChannel:
-    """A channel, or a user's DMs: messages it sends are recorded in
-    `sent` as (content, embed dict or None, view), and what happens to them
-    in `edited` / `deleted` (message ids). Message ids start at 1001;
-    `existing` are ids of messages already there."""
-
-    def __init__(self, channel_id=5, guild_id=10, *, existing=(), can_send=True, can_embed=True):
-        import discord
-
-        self.id = channel_id
-        self.guild = MagicMock(id=guild_id)
-        self.can_send, self.can_embed = can_send, can_embed
-        self.sent, self.edited, self.deleted = [], [], []
-        self.messages = {message_id: self._message(message_id) for message_id in existing}
-        self._discord = discord
-
-    def permissions_for(self, member):
-        if member is None:
-            # Like discord.py, for someone who isn't on the server
-            raise AttributeError("'NoneType' object has no attribute '_roles'")
-        return SimpleNamespace(send_messages=self.can_send, embed_links=self.can_embed, read_message_history=True,
-                               use_external_emojis=True)
-
-    def _message(self, message_id):
-        import datetime as dt
-        from unittest.mock import AsyncMock
-
-        message = MagicMock(id=message_id, created_at=dt.datetime(2024, 3, 6, 12, tzinfo=UTC))
-
-        async def edit(**kwargs):
-            self.edited.append(message_id)
-
-        async def delete():
-            self.deleted.append(message_id)
-            del self.messages[message_id]
-
-        message.edit = AsyncMock(side_effect=edit)
-        message.delete = AsyncMock(side_effect=delete)
-        return message
-
-    async def send(self, content=None, *, embed=None, view=None, **kwargs):
-        forbidden = self._discord.Forbidden(MagicMock(status=403), "Missing Permissions")
-        if not self.can_send or (embed and not self.can_embed):
-            raise forbidden
-        message = self._message(1001 + len(self.sent))
-        self.messages[message.id] = message
-        self.sent.append((content, embed.to_dict() if embed else None, view))
-        return message
-
-    async def fetch_message(self, message_id):
-        if message_id not in self.messages:
-            raise self._discord.NotFound(MagicMock(status=404), "Unknown Message")
-        return self.messages[message_id]
+    return Events(fake_bot(session, users))
 
 
 async def run_reminder(reminder, now, *, existing=()):
@@ -1894,8 +1136,8 @@ async def run_reminder(reminder, now, *, existing=()):
     user's DMs as a RecordingChannel, users' settings writes)."""
     dms = RecordingChannel(existing=existing)
     dms.mention = "<@1>"
-    users = MemoryUsers({1: {"event_reminders": [reminder]}})
-    with _at(now):
+    users = MemorySettings({1: {"event_reminders": [reminder]}})
+    with at(now):
         cog = _events_cog(users=users)
         await cog.process_reminder(SimpleNamespace(id=1, send=dms.send, fetch_message=dms.fetch_message),
                                    dict(reminder), 0)
@@ -1909,7 +1151,7 @@ async def press_unsubscribe(message_id):
 
     from gw2bot.cogs.events import EventTimerReminderUnsubscribeView
 
-    users = MemoryUsers({1: {}})
+    users = MemorySettings({1: {}})
     cog = _events_cog(users=users)
     view = EventTimerReminderUnsubscribeView(cog)
     interaction = MagicMock()
@@ -1929,8 +1171,8 @@ async def run_boss_notifier(servers, channels, now):
     `channels` RecordingChannels. Returns server settings writes."""
     from unittest.mock import patch
 
-    guilds = MemoryGuilds(servers)
-    with _at(now):
+    guilds = MemorySettings(servers)
+    with at(now):
         cog = _events_cog()
         cog.bot.data.guilds = guilds
         cog.bot.get_channel = {c.id: c for c in channels}.get
@@ -1947,7 +1189,7 @@ async def et_command(category, now):
     """Run /et at `now`; returns the embed."""
     from gw2bot.cogs.events import Events
 
-    with _at(now):
+    with at(now):
         sent, _ = await run_command(lambda session, users: _events_cog(session, users), Events.et, [],
                                     permissions=(), category=category)
     return sent
@@ -1975,7 +1217,7 @@ async def post_chat_link(content, *, db=None, in_guild=True, opted_out=False, au
     from gw2bot.cogs.chatlinks import ChatLinks
 
     session = FakeSession((500, {}), pages=pages)
-    cog = ChatLinks(_fake_bot(session))
+    cog = ChatLinks(fake_bot(session))
     cog.db = db or gw2_db()
     cog.previews_disabled = {10} if opted_out else set()
     cog.bot.user.display_avatar.url = "https://cdn/bot.png"
@@ -2002,52 +1244,14 @@ async def post_chat_link(content, *, db=None, in_guild=True, opted_out=False, au
 
 # --- EVTC ---------------------------------------------------------------------------------
 
-class FakeDpsReport:
-    """dps.report: getUserToken gives `token`; uploadContent answers
-    `upload` (an error, or a report whose id getJson serves from
-    `reports`). Records requests as (method, url, params)."""
-
-    def __init__(self, reports=None, *, upload=None, token="DPS-TOKEN"):
-        self.reports = reports or {}
-        self.upload = upload
-        self.token = token
-        self.requests = []
-
-    def _response(self, body):
-        response = MagicMock()
-
-        async def json():
-            return body
-
-        response.json = json
-        return _AsyncContext(response)
-
-    def get(self, url, params=None, **kwargs):
-        self.requests.append(("GET", url, dict(params or {})))
-        if url.endswith("getUserToken"):
-            return self._response({"userToken": self.token})
-        return self._response(self.reports[params["id"]])
-
-    def post(self, url, data=None, params=None, **kwargs):
-        self.requests.append(("POST", url, dict(params or {})))
-        return self._response(self.upload)
-
-
-def log_file(filename="20240305-200000.zevtc", content=b"EVTC"):
-    """A message attachment."""
-    from unittest.mock import AsyncMock
-
-    return MagicMock(filename=filename, read=AsyncMock(return_value=content))
-
-
 def _evtc_cog(session=None, users=None, *, dps_report=None, encounters=(), destinations=(), notifications=(),
               api_keys=()):
     from gw2bot.cogs.evtc import Evtc
 
-    cog = Evtc(_fake_bot(session, users))
+    cog = Evtc(fake_bot(session, users))
     cog.bot.session = dps_report
     cog.bot.user.display_avatar.url = "https://cdn/bot.png"
-    cog.bot.data.channels = MemorySettingsRepo()
+    cog.bot.data.channels = MemorySettings()
     cog.db = SimpleNamespace(
         encounters=MemoryCollection(encounters),
         evtc=SimpleNamespace(destinations=MemoryCollection(destinations),
@@ -2061,7 +1265,7 @@ async def upload_logs(files, dps_report, *, stored=None, encounters=(), anonymou
     """Process `files` as uploaded by user 1 (whose settings are
     `stored`). Returns (messages sent as (content, embed dict or None), the
     cog's collections, user settings writes)."""
-    users = MemoryUsers({1: stored or {}})
+    users = MemorySettings({1: stored or {}})
     cog = _evtc_cog(users=users, dps_report=dps_report, encounters=encounters)
     destination = RecordingChannel()
     await cog.process_evtc(files, SimpleNamespace(id=1), destination, anonymous=anonymous)
@@ -2165,49 +1369,13 @@ async def evtc_destination_command(command, *, api_key=True, destinations=(), ac
 
 # --- Game data cache ----------------------------------------------------------------
 
-class CacheCollection:
-    """A game data collection: records documents written with bulk_write
-    (ReplaceOne by _id) and the indexes created."""
-
-    def __init__(self):
-        self.docs = {}
-        self.indexes = []
-
-    async def bulk_write(self, requests):
-        if not requests:
-            from pymongo.errors import InvalidOperation
-
-            raise InvalidOperation("No operations to execute")
-        for request in requests:
-            doc = request._doc
-            self.docs[doc["_id"]] = doc
-
-    async def create_index(self, field):
-        self.indexes.append(field)
-
-
-class CacheDb:
-    """bot.data.gw2 for the cache: a CacheCollection per collection name."""
-
-    def __init__(self):
-        self.collections = {}
-
-    def __getitem__(self, name):
-        return self.collections.setdefault(name, CacheCollection())
-
-    def __getattr__(self, name):
-        if name.startswith("_") or name == "collections":
-            raise AttributeError(name)
-        return self[name]
-
-
 def _cache_cog(session=None):
     from unittest.mock import AsyncMock
 
     from gw2bot.cogs.cache import Cache
 
-    cog = Cache(_fake_bot(session))
-    cog.db = CacheDb()
+    cog = Cache(fake_bot(session))
+    cog.db = MemoryDb()
     cog.bot.data.config.update = AsyncMock()
     cog.bot.change_presence = AsyncMock()
     return cog
@@ -2219,7 +1387,8 @@ async def cache_endpoint(responses, endpoint, all_at_once=False):
     session = FakeSession(*responses)
     cog = _cache_cog(session)
     await cog.cache_endpoint(endpoint, all_at_once)
-    return cog.db[endpoint.replace("/", "_")].docs, [url for url, _, _ in session.requests]
+    docs = {doc["_id"]: doc for doc in cog.db[endpoint.replace("/", "_")].docs}
+    return docs, [url for url, _, _ in session.requests]
 
 
 async def cache_raids(responses):
@@ -2233,7 +1402,7 @@ async def cache_pois(responses):
     """Returns the points of interest written, {_id: doc}."""
     cog = _cache_cog(FakeSession(*responses))
     await cog.cache_pois()
-    return cog.db.pois.docs
+    return {doc["_id"]: doc for doc in cog.db.pois.docs}
 
 
 async def rebuild_cache(*, failing=(), owner_cached=True):
@@ -2288,11 +1457,11 @@ async def key_command(command, stored, responses=(), *, in_guild=False, **option
     from gw2bot.cogs.keys import Keys
 
     handler = getattr(Keys, "key_" + command)
-    users = MemoryUsers({1: stored})
+    users = MemorySettings({1: stored})
     syncs = []
 
     def cog_for(session, _):
-        cog = Keys(_fake_bot(session, users))
+        cog = Keys(fake_bot(session, users))
 
         async def guildsync(member):
             syncs.append("guildsync")
@@ -2318,165 +1487,13 @@ async def key_choices(stored, current=""):
     """The key autocomplete for a user with settings `stored`, as (name, value)."""
     from gw2bot.cogs.keys import Keys
 
-    cog = Keys(_fake_bot(None, MemoryUsers({1: stored})))
+    cog = Keys(fake_bot(None, MemorySettings({1: stored})))
     interaction = MagicMock()
     interaction.user.id = 1
     return [(c.name, c.value) for c in await cog.key_autocomplete(interaction, current)]
 
 
-def server_member(member_id, *roles):
-    """A member with `roles`; role changes are recorded in member.changes."""
-    from unittest.mock import AsyncMock
-
-    member = MagicMock(id=member_id, bot=False)
-    member.roles = list(roles)
-    member.changes = []
-
-    async def add_roles(*added, reason=None):
-        member.changes.append(("add", [r.id for r in added]))
-
-    async def remove_roles(*removed, reason=None):
-        member.changes.append(("remove", [r.id for r in removed]))
-
-    member.add_roles = AsyncMock(side_effect=add_roles)
-    member.remove_roles = AsyncMock(side_effect=remove_roles)
-    return member
-
-
-async def run_key_role_sync(members, users, *, settings=None, role_exists=True, can_manage_roles=True):
-    """One run of the 5-minute API key role sync on server 10, whose
-    `key_sync` settings are `settings` (default: on, role 77). `users` are
-    settings by member id. Returns {member id: role changes}."""
-    from unittest.mock import AsyncMock
-
-    from gw2bot.cogs.keys import Keys
-
-    cog = Keys(_fake_bot(None, MemoryUsers(users)))
-    role = KEY_ROLE
-    guild = MagicMock(id=10, chunked=True, members=members)
-    guild.get_role = lambda role_id: role if role_exists and role_id == 77 else None
-    guild.me.guild_permissions.manage_roles = can_manage_roles
-    for member in members:
-        member.guild = guild
-    cog.bot.data.guilds = MemoryGuilds({10: {"key_sync": settings or {"enabled": True, "role": 77}}})
-    cog.bot.get_guild = {10: guild}.get
-    await type(cog).key_sync_task.coro(cog)
-    return {m.id: m.changes for m in members}
-
-
-KEY_ROLE = MagicMock(id=77)
-
-
-async def member_joins(member, users, *, settings=None):
-    """A member joins server 10 (API key role 77 per `settings`). Returns
-    their role changes."""
-    from gw2bot.cogs.keys import Keys
-
-    cog = Keys(_fake_bot(None, MemoryUsers(users)))
-    guild = MagicMock(id=10)
-    guild.get_role = lambda role_id: KEY_ROLE if role_id == 77 else None
-    guild.me.guild_permissions.manage_roles = True
-    member.guild = guild
-    cog.bot.data.guilds = MemoryGuilds({10: {"key_sync": settings or {"enabled": True, "role": 77}}})
-    await type(cog).on_member_join(cog, member)
-    return member.changes
-
-
-
 # --- A Discord server for guild sync ------------------------------------------------------
-
-class FakeRole:
-    """A role; compared by position like discord.Role."""
-
-    def __init__(self, server, role_id, name, position):
-        self.server, self.id, self.name, self.position = server, role_id, name, position
-
-    def __lt__(self, other):
-        return self.position < other.position
-
-    def __gt__(self, other):
-        return self.position > other.position
-
-    def __le__(self, other):
-        return self.position <= other.position
-
-    def __ge__(self, other):
-        return self.position >= other.position
-
-    def __repr__(self):
-        return f"<role {self.name}>"
-
-    async def delete(self, reason=None):
-        self.server.deleted.append(self.name)
-        self.server.roles.pop(self.id, None)
-        for member in self.server.members:
-            if self in member.roles:
-                member.roles.remove(self)
-
-
-class FakeMember:
-    def __init__(self, server, member_id, roles, days_on_server):
-        self.id, self.guild, self.bot = member_id, server, False
-        self.display_name = self.name = f"Member {member_id}"
-        self.roles = [server.everyone, *roles]
-        self.joined_at = datetime.datetime.now(UTC) - datetime.timedelta(days=days_on_server)
-
-    @property
-    def mention(self):
-        return f"<@{self.id}>"
-
-    def role_names(self):
-        return sorted(r.name for r in self.roles if r is not self.guild.everyone)
-
-    async def add_roles(self, *roles, reason=None):
-        self.roles += [r for r in roles if r not in self.roles]
-
-    async def remove_roles(self, *roles, reason=None):
-        self.roles = [r for r in self.roles if r not in roles]
-
-
-class FakeServer:
-    """A Discord server whose roles guild sync creates, deletes, gives and
-    takes. The bot's top role is at position 50; new roles go in at 10.
-    Created and deleted role names are recorded; kicks too."""
-
-    def __init__(self, server_id=10, *, can_manage_roles=True):
-        from unittest.mock import AsyncMock
-
-        self.id = server_id
-        self.name = "Example Server"
-        self.chunked = True
-        self.roles = {}
-        self.created, self.deleted, self.kicked = [], [], []
-        self.members = []
-        self.everyone = FakeRole(self, server_id, "@everyone", 0)
-        self.me = SimpleNamespace(top_role=FakeRole(self, 1, "GW2Bot", 50),
-                                  guild_permissions=SimpleNamespace(manage_roles=can_manage_roles))
-        self.chunk = AsyncMock()
-
-    def role(self, name, position=10, role_id=None):
-        role = FakeRole(self, role_id or 100 + len(self.roles), name, position)
-        self.roles[role.id] = role
-        return role
-
-    def member(self, member_id, *roles, days_on_server=3):
-        member = FakeMember(self, member_id, roles, days_on_server)
-        self.members.append(member)
-        return member
-
-    def get_role(self, role_id):
-        return self.roles.get(role_id)
-
-    def get_member(self, member_id):
-        return next((m for m in self.members if m.id == member_id), None)
-
-    async def create_role(self, name, reason=None, color=None):
-        self.created.append(name)
-        return self.role(name)
-
-    async def kick(self, user, reason=None):
-        self.kicked.append(user.id)
-
 
 def guildsync_doc(gid="GUILD-A", *, ranks=True, tag=True, rank_roles=None, tag_role=None, key="LEADER", **extra):
     """A saved guild sync for server 10."""
@@ -2490,9 +1507,9 @@ def _guildsync_cog(server, users, responses, syncs, *, settings=None, prompts=()
     from gw2bot.cogs.guildsync import GuildSync
 
     session = FakeSession(*(responses or [(500, {})]))
-    cog = GuildSync(_fake_bot(session, MemoryUsers(users)))
-    cog.db = SimpleNamespace(guildsyncs=MemoryCollection(syncs), guildsync_prompts=MemoryCollection(prompts))
-    guilds = MemoryGuilds({server.id: settings if settings is not None else {"guildsync": {"enabled": True}}})
+    cog = GuildSync(fake_bot(session, MemorySettings(users)))
+    cog.db = gw2_db(guildsyncs=syncs, guildsync_prompts=prompts)
+    guilds = MemorySettings({server.id: settings if settings is not None else {"guildsync": {"enabled": True}}})
     cog.bot.data.guilds = guilds
     cog.bot.get_guild = {server.id: server}.get
     cog.bot.wait_until_ready = AsyncMock()
@@ -2549,7 +1566,7 @@ async def guildsync_command(command, server, *, users=None, responses=(), syncs=
 
     def cog_for(session, _):
         cog, _ = _guildsync_cog(server, users or {}, None, syncs, settings=settings)
-        cog.bot.gw2api = _client(session)
+        cog.bot.gw2api = client(session)
         cogs.append(cog)
         return cog
 
@@ -2571,7 +1588,7 @@ async def guildsync_command(command, server, *, users=None, responses=(), syncs=
 
     with patch.object(discord.ui.View, "wait", wait):
         sent, requests = await run_command(cog_for, handler, list(responses) or [(500, {})], permissions=(),
-                                           users=MemoryUsers(users or {}), on_interaction=admin, **options)
+                                           users=MemorySettings(users or {}), on_interaction=admin, **options)
     interaction = cogs[0].interaction
     for mock in (interaction.response.send_message, interaction.followup.send):
         for call in mock.await_args_list:
@@ -2625,11 +1642,11 @@ async def server_command(command, server, *, users=None, settings=None, response
     handler = {"force_account_names": Server.server_force_account_names,
                "sync_now": Server.sync_now, "default_guild": Server.guild_default}[command]
     started = []
-    guilds = MemoryGuilds({server.id: settings or {}})
+    guilds = MemorySettings({server.id: settings or {}})
     holder = []
 
     def cog_for(session, _):
-        cog = Server(_fake_bot(session, MemoryUsers(users or {})))
+        cog = Server(fake_bot(session, MemorySettings(users or {})))
         cog.bot.data.guilds = guilds
 
         async def rename(guild):
@@ -2662,8 +1679,8 @@ async def run_forced_account_names(server, users):
 
     from gw2bot.cogs.server import Server
 
-    cog = Server(_fake_bot(None, MemoryUsers(users)))
-    cog.bot.data.guilds = MemoryGuilds({server.id: {"force_account_names": True}})
+    cog = Server(fake_bot(None, MemorySettings(users)))
+    cog.bot.data.guilds = MemorySettings({server.id: {"force_account_names": True}})
     cog.bot.get_guild = {server.id: server}.get
     renamed = {}
     for member in server.members:
@@ -2673,3 +1690,112 @@ async def run_forced_account_names(server, users):
         member.edit = edit
     await type(cog).forced_account_names.coro(cog)
     return renamed
+
+
+
+# --- Rebuilt on the shared fakes ----------------------------------------------------
+
+def discord_member(member_id, *, roles=1, days_on_server=3):
+    """A server member to be, for run_guildsync: `roles` roles (1 is just
+    @everyone)."""
+    return SimpleNamespace(id=member_id, extra_roles=roles - 1, days=days_on_server)
+
+
+async def run_guildsync(members, accounts, responses, *, syncs=1, purge=True):
+    """Run a full guild sync on a server with `members` (see
+    discord_member), whose accounts are {member id: account name}, against
+    `syncs` guild syncs with tag and rank roles off. `responses` are each
+    sync's guild/:id/members (see FakeSession). Returns the ids of the
+    members kicked."""
+    from gw2bot.cogs.guildsync import GuildSync
+
+    server = FakeServer()
+    for spec in members:
+        roles = [server.role(f"Role {spec.id}.{i}") for i in range(spec.extra_roles)]
+        server.member(spec.id, *roles, days_on_server=spec.days)
+    users = MemorySettings({member_id: stored_key(["account", "guilds"], account_name=name)
+                            for member_id, name in accounts.items()})
+    cog = GuildSync(fake_bot(FakeSession(*responses), users))
+    docs = [{"_id": f"sync{i}", "guild_id": 10, "gid": f"GUILD-{i}", "key": "LEADER", "rank_roles": {},
+             "tag_role": None, "enabled": {"ranks": False, "tag": False}, "name": f"Guild {i}", "tag": "EX"}
+            for i in range(syncs)]
+    cog.db = gw2_db(guildsyncs=docs)
+    cog.bot.data.guilds = MemorySettings({10: {"guildsync": {"enabled": True, "purge": purge}}})
+    await cog.run_guildsyncs(server)
+    return server.kicked
+
+
+async def run_daily_notifier(settings, *, previous_message_exists=True, channel_exists=True, can_send=True,
+                             can_embed=True):
+    """One 23:40 daily notifier run for a server whose `daily` settings
+    are `settings` (channel 5; the previous post is message 999). Returns
+    {"sent", "edited", "deleted", "pinned", "unpinned": [message ids],
+    "texts": [text-only messages], "embeds": [embeds sent, as dicts],
+    "writes": server settings writes}."""
+    from unittest.mock import AsyncMock
+
+    channel = RecordingChannel(5, 10, existing=[999] if previous_message_exists else [], can_send=can_send,
+                               can_embed=can_embed)
+    cog = _daily()
+    cog.cache_dailies = AsyncMock()
+    cog.bot.data.config.get = AsyncMock(return_value={"cache": {"dailies_tomorrow": {"raids": [], "fractals": []}}})
+    cog.bot.data.guilds = MemorySettings({10: {"daily": {"on": True, "channel": 5, "categories": ["psna"],
+                                                         "message": 999, **settings}}})
+    cog.bot.get_channel = {5: channel}.get if channel_exists else {}.get
+    await type(cog).send_daily_notifs.coro(cog)
+    for _ in range(50):
+        await asyncio.sleep(0)
+    return {
+        "sent": [1001 + i for i, (_, embed, _) in enumerate(channel.sent) if embed],
+        "texts": [content for content, embed, _ in channel.sent if embed is None],
+        "embeds": [embed for _, embed, _ in channel.sent if embed],
+        "edited": channel.edited, "deleted": channel.deleted, "pinned": channel.pinned, "unpinned": channel.unpinned,
+        "writes": cog.bot.data.guilds.writes,
+    }
+
+
+# The API key role on the servers below
+KEY_ROLE = FakeRole(None, 77, "API key", 10)
+
+
+def server_member(member_id, *roles):
+    """A member with `roles`, not yet on a server; role changes are
+    recorded in member.changes."""
+    return FakeMember(None, member_id, roles)
+
+
+def _key_server(members, *, role_exists=True, can_manage_roles=True):
+    server = FakeServer(can_manage_roles=can_manage_roles)
+    for member in members:
+        server.add(member)
+    if role_exists:
+        server.roles[KEY_ROLE.id] = KEY_ROLE
+    else:
+        server.roles.pop(KEY_ROLE.id, None)
+    return server
+
+
+async def run_key_role_sync(members, users, *, settings=None, role_exists=True, can_manage_roles=True):
+    """One run of the 5-minute API key role sync on server 10, whose
+    `key_sync` settings are `settings` (default: on, role 77). `users` are
+    settings by member id. Returns {member id: role changes}."""
+    from gw2bot.cogs.keys import Keys
+
+    server = _key_server(members, role_exists=role_exists, can_manage_roles=can_manage_roles)
+    cog = Keys(fake_bot(None, MemorySettings(users)))
+    cog.bot.data.guilds = MemorySettings({10: {"key_sync": settings or {"enabled": True, "role": 77}}})
+    cog.bot.get_guild = {10: server}.get
+    await type(cog).key_sync_task.coro(cog)
+    return {m.id: m.changes for m in members}
+
+
+async def member_joins(member, users, *, settings=None):
+    """A member joins server 10 (API key role 77 per `settings`). Returns
+    their role changes."""
+    from gw2bot.cogs.keys import Keys
+
+    _key_server([member])
+    cog = Keys(fake_bot(None, MemorySettings(users)))
+    cog.bot.data.guilds = MemorySettings({10: {"key_sync": settings or {"enabled": True, "role": 77}}})
+    await type(cog).on_member_join(cog, member)
+    return member.changes
