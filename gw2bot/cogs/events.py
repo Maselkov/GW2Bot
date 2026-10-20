@@ -319,13 +319,16 @@ class Events(GW2Cog):
                                   color=self.embed_color)
             # try:
             try:
-
                 msg = await user.send(
                     embed=embed, view=EventTimerReminderUnsubscribeView(self))
             except discord.HTTPException:
-                return
-            reminder["last_reminded"] = msg.created_at
-            reminder["last_message"] = msg.id
+                # Closed DMs: count this spawn as reminded rather than
+                # trying again every 10 seconds until it starts
+                reminder["last_reminded"] = naive_utcnow()
+                reminder.pop("last_message", None)
+            else:
+                reminder["last_reminded"] = msg.created_at
+                reminder["last_message"] = msg.id
             await self.bot.data.users.update(user.id, {f"event_reminders.{i}": reminder})
 
     @tasks.loop(seconds=10)
@@ -337,12 +340,12 @@ class Events(GW2Cog):
                 if not user:
                     continue
                 for i, reminder in enumerate(doc["event_reminders"]):
-                    asyncio.create_task(
-                        self.process_reminder(user, reminder, i))
+                    self.run_in_background(self.process_reminder(user, reminder, i),
+                                           f"reminding user {user.id} of {reminder.get('name')}")
             except asyncio.CancelledError:
                 return
             except Exception:
-                pass
+                self.log.exception("Couldn't check user %s's event reminders", doc.get("_id"))
 
     @event_reminder_task.before_loop
     async def before_event_reminder_task(self):
@@ -432,10 +435,13 @@ class Events(GW2Cog):
         await asyncio.sleep(boss["diff"].total_seconds() + 1)
         cursor = self.bot.data.guilds.find({"bossnotifs.on": True, "bossnotifs.channel": {"$ne": None}})
         async for doc in cursor:
+            guild_id = doc["_id"]
             try:
                 doc = doc["bossnotifs"]
                 edit = doc.get("edit", False)
                 channel = self.bot.get_channel(doc["channel"])
+                if not channel:
+                    continue
                 embed = self.schedule_embed(2)
                 old_message_id = doc.get("message")
                 edited = False
@@ -453,15 +459,19 @@ class Events(GW2Cog):
                             pass
                     message = await channel.send(embed=embed)
                 except discord.Forbidden:
-                    message = await channel.send(
-                        "Need permission to "
-                        "embed links in order "
-                        "to send boss "
-                        "notifs!"
-                    )
+                    try:
+                        await channel.send(
+                            "Need permission to "
+                            "embed links in order "
+                            "to send boss "
+                            "notifs!"
+                        )
+                    except discord.Forbidden:
+                        # Can't post there at all: stop trying, like news
+                        await self.bot.data.guilds.update(guild_id, {"bossnotifs.on": False})
                     continue
                 if not edited:
-                    await self.bot.data.guilds.update(channel.guild.id, {"bossnotifs.message": message.id})
+                    await self.bot.data.guilds.update(guild_id, {"bossnotifs.message": message.id})
                     if old_message_id:
                         try:
                             to_delete = await channel.fetch_message(old_message_id)
@@ -471,7 +481,7 @@ class Events(GW2Cog):
             except asyncio.CancelledError:
                 return
             except Exception:
-                pass
+                self.log.exception("Couldn't post boss notifications in server %s", guild_id)
             await asyncio.sleep(0.1)
 
     @boss_notifier.before_loop

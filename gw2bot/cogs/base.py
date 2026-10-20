@@ -1,4 +1,6 @@
 """What every GW2Bot cog shares."""
+import asyncio
+import logging
 from collections import defaultdict
 
 from discord.ext import commands
@@ -6,6 +8,7 @@ from discord.ext import commands
 from ..gw2api.errors import APIError
 
 EMBED_COLOR = 0xC12D2B
+log = logging.getLogger(__name__)
 
 
 class GW2Cog(commands.Cog):
@@ -18,6 +21,28 @@ class GW2Cog(commands.Cog):
         self.bot = bot
         # Game data caches, guild syncs, EVTC, ... (items, skins, ...)
         self.db = bot.data.gw2
+        # Work started with run_in_background that hasn't finished
+        self.background_tasks = set()
+
+    def run_in_background(self, coro, description):
+        """Run `coro` without waiting for it. The task is kept until it's
+        done (asyncio only holds weak references), and what it raises is
+        logged with `description` instead of being lost."""
+        task = asyncio.create_task(coro)
+        self.background_tasks.add(task)
+
+        def finished(task):
+            self.background_tasks.discard(task)
+            if not task.cancelled() and task.exception():
+                log.error("Error in the background: %s", description, exc_info=task.exception())
+
+        task.add_done_callback(finished)
+        return task
+
+    async def users_by_id(self, user_ids):
+        """{id: settings} for the users among `user_ids` who have any, in
+        one read."""
+        return {doc["_id"]: doc async for doc in self.bot.data.users.find({"_id": {"$in": list(user_ids)}})}
 
     @property
     def api(self):

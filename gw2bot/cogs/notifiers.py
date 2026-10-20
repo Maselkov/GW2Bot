@@ -1,6 +1,5 @@
 """Server notifiers: the /notifier group, and the news, game update and gem
 price checks."""
-import asyncio
 import logging
 import unicodedata
 import xml.etree.ElementTree as et
@@ -577,22 +576,26 @@ class Notifiers(GW2Cog):
             return
         cost_coins = self.gold_to_coins(None, cost)
         async for doc in self.bot.data.users.find({"gemtrack": {"$ne": None}}):
+            if cost >= doc["gemtrack"]:
+                continue
             try:
-                if cost < doc["gemtrack"]:
-                    user = self.bot.get_user(doc["_id"])
-                    user_price = self.gold_to_coins(None, doc["gemtrack"])
-                    msg = (
-                        "Hey, {.mention}! You asked to be notified "
-                        "when 400 gems were cheaper than {}. Guess "
-                        "what? They're now only "
-                        "{}!".format(user, user_price, cost_coins)
-                    )
-                    await user.send(msg)
-                    await self.bot.data.users.update(user.id, {"gemtrack": None})
-            except asyncio.CancelledError:
-                return
-            except Exception:
-                pass
+                user = self.bot.get_user(doc["_id"]) or await self.bot.fetch_user(doc["_id"])
+                user_price = self.gold_to_coins(None, doc["gemtrack"])
+                msg = (
+                    "Hey, {.mention}! You asked to be notified "
+                    "when 400 gems were cheaper than {}. Guess "
+                    "what? They're now only "
+                    "{}!".format(user, user_price, cost_coins)
+                )
+                await user.send(msg)
+            except (discord.Forbidden, discord.NotFound):
+                # Can't be told (closed DMs, or gone): stop tracking rather
+                # than trying every 5 minutes
+                self.log.info("Gem tracker: couldn't DM user %s, tracking stopped", doc["_id"])
+            except discord.HTTPException:
+                self.log.warning("Gem tracker: couldn't DM user %s, trying again later", doc["_id"])
+                continue
+            await self.bot.data.users.update(doc["_id"], {"gemtrack": None})
 
     @gem_tracker.before_loop
     async def before_gem_tracker(self):

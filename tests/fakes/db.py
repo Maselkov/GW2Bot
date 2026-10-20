@@ -172,15 +172,18 @@ class MemorySettings:
     """Settings by Discord id, like bot.data.users / guilds / channels.
 
     Updates are applied (set, push and pull) and recorded in `writes` as
-    (id, op, fields); find() takes Mongo queries on (dotted) fields.
+    (id, op, fields); find() takes Mongo queries on (dotted) fields and
+    _id. Reads are recorded in `reads`: ("get", id) or ("find", query).
     """
 
     def __init__(self, docs=None):
         # A copy: updates apply here, not to the test's own data
         self.docs = copy.deepcopy(docs or {})
         self.writes = []
+        self.reads = []
 
     async def get(self, entity_id):
+        self.reads.append(("get", entity_id))
         doc = self.docs.get(entity_id)
         return {**doc, "_id": entity_id} if doc else {}
 
@@ -200,8 +203,9 @@ class MemorySettings:
         return SimpleNamespace(modified_count=1)
 
     async def find(self, query=None, **kwargs):
+        self.reads.append(("find", query))
         for entity_id, doc in list(self.docs.items()):
-            if matches(doc, query):
+            if matches({**doc, "_id": entity_id}, query):
                 yield {**doc, "_id": entity_id}
 
     async def count(self, query=None):

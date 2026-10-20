@@ -1131,10 +1131,10 @@ def _events_cog(session=None, users=None):
     return Events(fake_bot(session, users))
 
 
-async def run_reminder(reminder, now, *, existing=()):
+async def run_reminder(reminder, now, *, existing=(), can_dm=True):
     """process_reminder for user 1's first reminder at `now`. Returns (the
     user's DMs as a RecordingChannel, users' settings writes)."""
-    dms = RecordingChannel(existing=existing)
+    dms = RecordingChannel(existing=existing, can_send=can_dm)
     dms.mention = "<@1>"
     users = MemorySettings({1: {"event_reminders": [reminder]}})
     with at(now):
@@ -1726,7 +1726,7 @@ async def run_guildsync(members, accounts, responses, *, syncs=1, purge=True):
 
 
 async def run_daily_notifier(settings, *, previous_message_exists=True, channel_exists=True, can_send=True,
-                             can_embed=True):
+                             can_embed=True, error=None):
     """One 23:40 daily notifier run for a server whose `daily` settings
     are `settings` (channel 5; the previous post is message 999). Returns
     {"sent", "edited", "deleted", "pinned", "unpinned": [message ids],
@@ -1735,7 +1735,7 @@ async def run_daily_notifier(settings, *, previous_message_exists=True, channel_
     from unittest.mock import AsyncMock
 
     channel = RecordingChannel(5, 10, existing=[999] if previous_message_exists else [], can_send=can_send,
-                               can_embed=can_embed)
+                               can_embed=can_embed, error=error)
     cog = _daily()
     cog.cache_dailies = AsyncMock()
     cog.bot.data.config.get = AsyncMock(return_value={"cache": {"dailies_tomorrow": {"raids": [], "fractals": []}}})
@@ -1799,3 +1799,48 @@ async def member_joins(member, users, *, settings=None):
     cog.bot.data.guilds = MemorySettings({10: {"key_sync": settings or {"enabled": True, "role": 77}}})
     await type(cog).on_member_join(cog, member)
     return member.changes
+
+
+
+async def run_in_background(coroutine_function, description):
+    """Start `coroutine_function()` with GW2Cog.run_in_background and let
+    it finish. Returns whether the cog still held the task while it ran."""
+    cog = _shared_cog()
+    held = []
+
+    async def work():
+        held.append(bool(cog.background_tasks))
+        await coroutine_function()
+
+    cog.run_in_background(work(), description)
+    for _ in range(10):
+        await asyncio.sleep(0)
+    return held == [True] and not cog.background_tasks
+
+
+
+async def user_reads(job, server, users, *, responses=(), syncs=()):
+    """The users' settings reads made by `job` on `server`: "guild sync" (a
+    full sync), "key role" (the API key role sync, role 77) or "forced
+    names" (forced account names). Reads are ("get", id) / ("find",
+    query)."""
+    from gw2bot.cogs.keys import Keys
+    from gw2bot.cogs.server import Server
+
+    if job == "guild sync":
+        cog, _ = _guildsync_cog(server, users, responses, syncs)
+        await cog.run_guildsyncs(server)
+    elif job == "key role":
+        server.roles[KEY_ROLE.id] = KEY_ROLE
+        cog = Keys(fake_bot(None, MemorySettings(users)))
+        cog.bot.data.guilds = MemorySettings({server.id: {"key_sync": {"enabled": True, "role": KEY_ROLE.id}}})
+        await cog.key_sync_guild(server, KEY_ROLE)
+    else:
+        cog = Server(fake_bot(None, MemorySettings(users)))
+        for member in server.members:
+            async def edit(nick=None, reason=None):
+                pass
+
+            member.edit = edit
+        await cog.force_guild_account_names(server)
+    return cog.bot.data.users.reads

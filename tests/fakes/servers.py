@@ -132,9 +132,10 @@ class RecordingChannel:
     happens to messages in `edited` / `deleted` / `pinned` / `unpinned`
     (message ids). `existing` are ids of messages already there. Sending
     an embed without embed permission, or anything without send
-    permission, raises Forbidden."""
+    permission, raises Forbidden; with `error`, every send raises it."""
 
-    def __init__(self, channel_id=5, guild_id=10, *, existing=(), can_send=True, can_embed=True):
+    def __init__(self, channel_id=5, guild_id=10, *, existing=(), can_send=True, can_embed=True, error=None):
+        self.error = error
         self.id = channel_id
         self.name = f"channel-{channel_id}"
         self.mention = f"<#{channel_id}>"
@@ -170,6 +171,9 @@ class RecordingChannel:
         return message
 
     async def send(self, content=None, *, embed=None, view=None, **kwargs):
+        if self.error:
+            # Something unexpected going wrong
+            raise self.error
         if not self.can_send or (embed and not self.can_embed):
             raise _forbidden()
         message = self._message(1001 + len(self.sent))

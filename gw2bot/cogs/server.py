@@ -166,25 +166,29 @@ class Server(GW2Cog):
         async for doc in cursor:
             try:
                 guild = self.bot.get_guild(doc["_id"])
+                if not guild:
+                    continue
                 await self.force_guild_account_names(guild)
             except asyncio.CancelledError:
                 return
             except Exception:
-                pass
+                self.log.exception("Couldn't force account names in server %s", doc["_id"])
 
     @forced_account_names.before_loop
     async def before_forced_account_names_loop(self):
         await self.bot.wait_until_ready()
 
     async def force_guild_account_names(self, guild):
+        users = await self.users_by_id(member.id for member in guild.members)
         for member in guild.members:
+            name = (users.get(member.id, {}).get("key") or {}).get("account_name")
+            if not name or name.lower() in member.display_name.lower():
+                continue
             try:
-                key = await self.fetch_key(member)
-                name = key["account_name"]
-                if name.lower() not in member.display_name.lower():
-                    await member.edit(nick=name, reason="Force account names - /server")
-            except Exception:
-                pass
+                await member.edit(nick=name, reason="Force account names - /server")
+            except discord.Forbidden:
+                # Above the bot's role, or the server's owner
+                continue
 
 
 async def setup(bot):

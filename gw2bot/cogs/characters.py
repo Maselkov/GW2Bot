@@ -1,5 +1,4 @@
 """Character commands: the /character and /sab groups."""
-import asyncio
 import collections
 import copy
 import datetime
@@ -226,7 +225,8 @@ class Characters(GW2Cog):
         if not cache:
             cache = await cache_characters()
         elif cache["last_update"] < utcnow() - datetime.timedelta(days=3):
-            asyncio.create_task(cache_characters())
+            self.run_in_background(cache_characters(),
+                                   f"caching user {interaction.user.id}'s characters")
         character_list = cache["characters"]
         current = current.lower()
         return [

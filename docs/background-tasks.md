@@ -23,11 +23,13 @@ A behaviour that changes on purpose is called out in the PR. Anything else that 
   bot restarts**, after logging "Unhandled exception in internal background task". `APIError` is a plain
   `Exception`, and so are XML parse errors and `KeyError`. Only the daily notifier has an error handler, which
   restarts it.
-- **Swallowed errors.** Many loops wrap each guild or user in `except Exception: pass`. One bad server can't stop
-  the loop, but its failures are invisible: nothing is logged.
-- **Untracked tasks.** The daily notifier and event reminders start an `asyncio.create_task` per guild or
-  reminder and keep no reference. Their exceptions only appear as "Task exception was never retrieved", and the
-  tasks can be garbage-collected mid-run.
+- **Errors per server.** Loops catch each server's or user's errors, so one bad server can't stop the loop, and log
+  them with the server's id. (*Fixed:* most used to `except Exception: pass`, so failures were invisible.)
+- **Background work.** Work a loop doesn't wait for goes through `GW2Cog.run_in_background`, which keeps the task
+  until it's done and logs what it raises. (*Fixed:* the daily notifier and event reminders used bare
+  `asyncio.create_task`, whose errors showed only as "Task exception was never retrieved".)
+- **Users' settings in bulk.** Syncs over a server's members read their settings in one query
+  (`GW2Cog.users_by_id`), not one per member.
 - **Settings.** Server settings are `bot.data.guilds` documents (`gw2bot.db.settings.SettingsRepo`); user
   settings are `bot.data.users`; the bot's caches are the `bot.data.config` document. Game data caches and the
   guild sync and EVTC collections are in `bot.data.gw2` (`self.db`).
@@ -36,17 +38,17 @@ A behaviour that changes on purpose is called out in the PR. Anything else that 
 
 | Section | Trigger | Writes | Messages | Worst known issue |
 |---|---|---|---|---|
-| [Daily notifier](#daily-notifier) (moved) | 23:40 UTC daily; dailies refresh every 15 min | `daily.message`, dailies cache | channel posts, pins | Untracked per-server tasks |
-| [Event reminders](#event-reminders) (moved) | every 10 s | `event_reminders` | DMs | Users with closed DMs are retried forever |
-| [Boss notifier](#boss-notifier) (moved) | before each world boss | `bossnotifs.message` | channel posts | Failures are silent |
+| [Daily notifier](#daily-notifier) (moved) | 23:40 UTC daily; dailies refresh every 15 min | `daily.message`, dailies cache | channel posts, pins | Permission problems only show in the channel |
+| [Event reminders](#event-reminders) (moved) | every 10 s | `event_reminders` | DMs | Reminders saved by index can overwrite each other |
+| [Boss notifier](#boss-notifier) (moved) | before each world boss | `bossnotifs.message` | channel posts | A deleted channel is skipped, not turned off |
 | [Chat link previews](#chat-link-previews) (moved) | every message | `statistics.link_previews` | replies | Uncached POIs show nothing |
 | [News](#news) (moved) | every 3 min | `cache.news`, `news.on` | channel posts | Items whose title changes are posted again |
 | [Game updates](#game-updates) (moved) | every 1 min | `cache.build`, game data caches, `updates` | channel posts | The rebuild runs inside the loop |
-| [Gem tracker](#gem-tracker) (moved) | every 5 min | `gemtrack` | DMs | Undeliverable users are retried forever |
-| [EVTC autopost](#evtc-autopost-and-uploads) (moved) | every 5 s; uploads on message | `evtc.notifications`, `encounters` | channel posts | Members who left are skipped noisily |
+| [Gem tracker](#gem-tracker) (moved) | every 5 min | `gemtrack` | DMs | — |
+| [EVTC autopost](#evtc-autopost-and-uploads) (moved) | every 5 s; uploads on message | `evtc.notifications`, `encounters` | channel posts | `guild.chunk()` per destination |
 | [API key role](#api-key-role-and-key) (moved) | every 5 min; joins; `/key add` | member roles | — | Keys aren't re-checked |
-| [Forced account names](#forced-account-names) (moved) | every 5 min | member nicknames | — | Failures are silent |
-| [Guild sync](#guild-sync) (moved) | every 60 s; member join | roles, kicks, `guildsyncs` | DMs, prompts | Heavy: a database read per member per minute |
+| [Forced account names](#forced-account-names) (moved) | every 5 min | member nicknames | — | Doesn't chunk servers itself |
+| [Guild sync](#guild-sync) (moved) | every 60 s; member join | roles, kicks, `guildsyncs` | DMs, prompts | A full sync of every server every minute |
 
 ## Daily notifier
 
@@ -60,7 +62,7 @@ from the `Daily` cog.
     and `cache.dailies_tomorrow`. It logs API errors and anything else, so it never stops.
   - `send_daily_notifs` runs at 23:40 UTC and posts **tomorrow's** dailies, 20 minutes before reset. It refreshes
     the cache first, falling back to the existing cache.
-- **For each server** with `daily.on` and a channel, as a separate untracked task:
+- **For each server** with `daily.on` and a channel, in the background (`run_in_background`):
   - **Skip:** if the channel is gone or the bot can't send there. Without embed permission it posts "Need
     permission to embed links in order to send daily notifs!".
   - **The post:** title "Dailies", timestamp tomorrow 00:00 UTC, the daily-achievement thumbnail, and the saved
@@ -72,7 +74,7 @@ from the `Daily` cog.
 - **Errors.** The loop's error handler logs and restarts it. Each server's task swallows its own errors.
 - **Known issues.**
   - *Fixed:* autopin pinned the previous message instead of a newly posted one, so it only worked with autoedit.
-  - The per-server tasks are untracked (see Shared facts).
+  - *Fixed:* the per-server tasks were untracked, so their errors were lost.
   - *Fixed:* `/notifier daily` failed when the dropdown timed out (`followup.edit_message` without a message id).
   - *Fixed:* `/daily`'s timestamp was a naive `utcnow()`, which discord.py reads as local time.
 - **Tests.**
@@ -85,7 +87,7 @@ from the `Daily` cog.
 `get_time_until_event`, `EventTimerReminderUnsubscribeView` (registered in `cog_load`), and the `/reminder` group
 with `/reminder event` (event name, minutes before, 0–60).
 
-- **Schedule.** Every 10 s, for each user with `event_reminders`, one untracked task per reminder.
+- **Schedule.** Every 10 s, for each user with `event_reminders`, one background task per reminder.
 - **Behaviour.**
   - **When:** the reminder fires once the event is less than `time + 30` seconds away, and not within
     `time + 120` s of the last reminder.
@@ -101,7 +103,7 @@ with `/reminder event` (event name, minutes before, 0–60).
   - *Fixed:* SotO events couldn't be reminded. `reminder_event` now searches every map event group.
   - Reminders saved by index (`event_reminders.{i}`) can overwrite the wrong one if the list changed meanwhile
     (an unsubscribe from another reminder's DM).
-  - Users with closed DMs are retried every 10 s, forever.
+  - *Fixed:* users with closed DMs were retried every 10 s until the event; that spawn now counts as reminded.
 - **Tests.**
   - Existing: event timing (`test_logic.py`); `/reminder event`, a boss missing from the schedule, when a
     reminder fires or is held back, the DM and its saved fields, and Unsubscribe (`test_event_reminders.py`).
@@ -123,7 +125,8 @@ behaviour: delete (default) / edit), in the `Notifiers` cog. *Fixed:* `enabled:F
 - **Known issues.**
   - *Fixed:* in edit mode, a deleted message stopped the server's boss notifications for good. A new message is
     posted instead.
-  - Silent failures: a deleted channel or missing permissions are never logged or turned off.
+  - *Fixed:* failures were silent. Errors are logged, and a channel it can't post in at all turns the notifier
+    off, like news. A deleted channel is still skipped every slot.
   - The setup command's choice text says "the previous day's message"; it's the previous boss's message.
   - The "Need permission" message itself fails without send permission, and that's swallowed too.
 - **Tests.**
@@ -222,7 +225,7 @@ opt-out set, loaded in `cog_load`. `/server preview_chat_links` (in `Server`) up
   are retried every 5 minutes, forever.
 - **Known issues.**
   - *Fixed:* an API error from `gem_price` stopped the loop until restart. It's logged now.
-  - Users the bot can't see or DM are never cleared or told.
+  - *Fixed:* users the bot couldn't see or DM were retried every 5 minutes forever; tracking stops for them.
 - **Tests.**
   - Existing: `/gem track` and `gem_price` (`test_commerce.py`); notifying and clearing, and an API error
     (`test_notifiers.py`).
@@ -254,7 +257,7 @@ opt-out set, loaded in `cog_load`. `/server preview_chat_links` (in `Server`) up
   - *Fixed:* adding a destination crashed for an account in no guild; removing one crashed on a channel the bot
     can't see.
   - *Fixed:* messages named commands that don't exist.
-  - A user who left the destination's server is skipped with a logged exception.
+  - *Fixed:* a user who left the destination's server was skipped with a logged traceback; now quietly.
   - `guild.chunk()` runs per destination in the loop.
 - **Tests.**
   - Existing: `/evtc_automation api_key` (`test_evtc_api_key.py`), the upload listener's channel and autodelete
@@ -290,7 +293,8 @@ opt-out set, loaded in `cog_load`. `/server preview_chat_links` (in `Server`) up
 
 - **Schedule.** Every 5 minutes, for each server with `force_account_names`: every cached member with a key whose
   display name doesn't contain their account name gets that account name as their nickname.
-- **Errors.** All swallowed: members without keys, members above the bot's role, missing permissions.
+- **Errors.** Members without keys and members the bot can't rename (`Forbidden`) are skipped; other errors are
+  logged per server. Members' settings are read in one query per server.
 - **Known issues.**
   - Relies on the member lists loaded at startup; unlike key sync, it never chunks a server itself.
   - *Fixed:* enabling renamed everyone before replying, so on big servers the interaction could time out; the reply
@@ -338,7 +342,7 @@ asks it to sync.
   - *Fixed:* answering an expired authorization prompt crashed.
   - *Fixed:* stale text: "name#0", `$guildsync`, reactions, and "Key has in-game leader permissions" for a key
     without them. The dead `guildsync_consumer` queue and a leftover `print` are gone.
-  - One users-collection read per server member per minute, per server.
+  - *Fixed:* one users read per member per minute, per server; now one query per server.
 - **Tests.**
   - Existing: the purge (`test_guildsync.py`), roles and membership (`test_guildsync_roles.py`), the commands and
     the authorization prompt (`test_guildsync_commands.py`), and the sync limit (`test_server_commands.py`).
