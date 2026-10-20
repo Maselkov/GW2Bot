@@ -73,13 +73,14 @@ class Cache(GW2Cog):
                             if len(pois) > 200:
                                 await bulk_write(pois)
                                 pois = []
-            print("Continents done")
+        if pois:
+            await bulk_write(pois)
 
     async def cache_endpoint(self, endpoint, all_at_once=False):
 
         async def bulk_write(item_group):
             requests = []
-            for item in itemgroup:
+            for item in item_group:
                 item["_id"] = item.pop("id")
                 requests.append(
                     ReplaceOne({"_id": item["_id"]}, item, upsert=True))
@@ -93,13 +94,9 @@ class Cache(GW2Cog):
                                     schema_string="2021-07-15T13:00:00.000Z")
         if not all_at_once:
             counter = 0
-            total = len(items)
             while True:
-                percentage = (counter / total) * 100
-                print("Progress: {0:.1f}%".format(percentage))
                 ids = ",".join(str(x) for x in items[counter:counter + 200])
                 if not ids:
-                    print("{} done".format(endpoint))
                     break
                 itemgroup = await self.call_api(
                     f"{endpoint}?ids={ids}",
@@ -125,29 +122,36 @@ class Cache(GW2Cog):
                      ["minis", True], ["pvp/amulets", True],
                      ["professions", True], ["legends", True], ["pets", True],
                      ["outfits", True], ["colors", True]]
-        for e in endpoints:
-            try:
-                await self.cache_endpoint(*e)
-            except:
-                msg = "Caching {} failed".format(e)
-                self.log.warn(msg)
-                owner = self.bot.get_user(self.bot.owner_id)
-                await owner.send(msg)
-        await self.db.items.create_index("name")
-        await self.db.achievements.create_index("name")
-        await self.db.titles.create_index("name")
-        await self.db.recipes.create_index("output_item_id")
-        await self.db.skins.create_index("name")
-        await self.db.currencies.create_index("name")
-        await self.db.skills.create_index("name")
-        await self.cache_raids()
-        await self.cache_pois()
-        end = time.time()
-        await self.bot.change_presence()
-        self.bot.available = True
-        print("Done")
-        self.log.info("Database done! Time elapsed: {} seconds".format(end -
-                                                                       start))
+        try:
+            for e in endpoints:
+                try:
+                    await self.cache_endpoint(*e)
+                except Exception:
+                    msg = "Caching {} failed".format(e)
+                    self.log.exception(msg)
+                    await self.tell_owner(msg)
+            await self.db.items.create_index("name")
+            await self.db.achievements.create_index("name")
+            await self.db.titles.create_index("name")
+            await self.db.recipes.create_index("output_item_id")
+            await self.db.skins.create_index("name")
+            await self.db.currencies.create_index("name")
+            await self.db.skills.create_index("name")
+            await self.cache_raids()
+            await self.cache_pois()
+        finally:
+            await self.bot.change_presence()
+            self.bot.available = True
+        self.log.info("Database done! Time elapsed: %s seconds", time.time() - start)
+
+    async def tell_owner(self, message):
+        """DM the bot's owner; failures are logged."""
+        try:
+            owner = (self.bot.get_user(self.bot.owner_id)
+                     or await self.bot.fetch_user(self.bot.owner_id))
+            await owner.send(message)
+        except discord.HTTPException:
+            self.log.exception("Couldn't DM the owner")
 
 
 async def setup(bot):

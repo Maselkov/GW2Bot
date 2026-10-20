@@ -69,16 +69,14 @@ async def test_rebuild_tells_the_owner_about_failures():
     assert len(result["cached"]) == 16
 
 
-# --- Known bugs ---------------------------------------------------------------------------
+# --- Fixes --------------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="the last batch of points of interest is never written")
 async def test_cache_pois_writes_every_poi():
     docs = await subject.cache_pois([(200, [{"id": 1}]), (200, [floor(1, 2, 3)])])
     assert sorted(docs) == [1, 2, 3]
 
 
-@pytest.mark.xfail(strict=True, reason="with the owner not cached, a failure aborts the rebuild and the status stays")
 async def test_rebuild_finishes_when_the_owner_isnt_cached():
     result = await subject.rebuild_cache(failing=["skins"], owner_cached=False)
     assert result["error"] is None
