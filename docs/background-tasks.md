@@ -181,8 +181,8 @@ moves, and updates the cog through `set_previews_enabled()`.
 ## Game updates
 
 **Moved** to `gw2bot/cogs/notifiers.py` (`Notifiers`): `game_update_checker`, `game_build_changed`,
-`send_update_notifs`, `update_notification`; the parser is `gw2bot/utils/update_notes.py`. The rebuild
-(`database.py: rebuild_database`) is still the old cog's, called through `bot.get_cog("GuildWars2")`. Set up with
+`send_update_notifs`, `update_notification`; the parser is `gw2bot/utils/update_notes.py`. The rebuild is the
+`Cache` cog's (`gw2bot/cogs/cache.py: rebuild_database`), called through `bot.get_cog("Cache")`. Set up with
 `/notifier update` (channel, optional role).
 
 - **Schedule.** Every minute.
@@ -190,7 +190,9 @@ moves, and updates the cog through `set_previews_enabled()`.
   - **Build check:** reads the build number from `http://assetcdn.101.arenanetworks.com/latest/101`. If it
     differs from `config.cache.build`, it saves it and **rebuilds the game data cache inside the loop**. The
     rebuild sets the bot's status to "Rebuilding API cache" and re-fetches items, achievements, skins, skills and
-    more; failures DM the owner. No updates are posted until it's done.
+    more; failures DM the owner. No updates are posted until it's done. *Fixed:* the last batch of points of
+    interest was never saved, and a failure with the owner uncached aborted the rebuild with the status stuck.
+    Tested in `test_cache.py`.
   - **Update notes:** reads the forum's release-notes feed and topic, tracking posts per thread in
     `gw2.updates`. The first post is a major update and mentions `updates.mention`. Later posts are hotfixes,
     with no mention. If the forum is blocked, the RSS copy is used.
@@ -208,7 +210,6 @@ moves, and updates the cog through `set_previews_enabled()`.
   - Existing: notes parsing and which posts to send (`test_update_notes.py`, 18 tests); a bad build page or
     missing config (`test_notifiers.py`).
     The build check, sending to servers (mention, hotfixes, text without embed permission) are covered too.
-  - To write: the rebuild's status and owner DM using a fake API (with the game data cache's move).
 
 ## Gem tracker
 
@@ -353,8 +354,8 @@ Least risky first. Each item is one PR.
 3. Chat link previews and `/server preview_chat_links`.
 4. News, game updates, the gem tracker and the `/notifier` commands.
 5. EVTC.
-6. The game data cache: `database.py`'s owner `>database` commands and `rebuild_database`, which game updates
-   trigger.
+6. The game data cache: `>database` and `rebuild_database` (done: `gw2bot/cogs/cache.py`; `>emojis` moved to
+   `gw2bot/owner.py`).
 7. `/key` and the API key role.
 8. Guild sync, forced account names and the rest of `/server`.
 

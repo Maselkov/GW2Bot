@@ -17,7 +17,6 @@ import time_machine
 
 from gw2bot.cogs.base import GW2Cog
 from gw2bot.cogs import daily
-from gw2bot.cogs.guildwars2.database import DatabaseMixin
 from gw2bot.utils import chat, db
 
 DATA_DIR = pathlib.Path(__file__).resolve().parent.parent / "gw2bot" / "data"
@@ -63,7 +62,6 @@ def _fake_bot(session=None, users=None):
 
 class _Harness(
     GW2Cog,
-    DatabaseMixin,
 ):
     """Just enough of the cog's state for its non-Discord logic to run."""
 
@@ -1550,10 +1548,9 @@ async def check_game_updates(config, build_page, *, notes=None, servers=None, ch
     cog.bot.data.config.update = AsyncMock()
     cog.bot.data.guilds = MemoryGuilds(servers or {})
     cog.bot.get_channel = {c.id: c for c in channels}.get
-    # The game data cache is rebuilt by the old cog
-    old_cog = MagicMock()
-    old_cog.rebuild_database = AsyncMock()
-    cog.bot.get_cog = {"GuildWars2": old_cog}.get
+    cache = MagicMock()
+    cache.rebuild_database = AsyncMock()
+    cog.bot.get_cog = {"Cache": cache}.get
     cog.update_notification = AsyncMock(return_value=notes)
     try:
         await type(cog).game_update_checker.coro(cog)
@@ -1562,7 +1559,7 @@ async def check_game_updates(config, build_page, *, notes=None, servers=None, ch
         error = e
     return {
         "error": error,
-        "rebuilt": old_cog.rebuild_database.await_count == 1,
+        "rebuilt": cache.rebuild_database.await_count == 1,
         "config": [call.args[0] for call in cog.bot.data.config.update.await_args_list],
     }
 
@@ -2171,3 +2168,113 @@ async def evtc_destination_command(command, *, api_key=True, destinations=(), ac
         await select.callback(interaction)
         replies.append(interaction.response.edit_message.await_args.kwargs["content"])
     return [sent] + replies, cogs[0].db.evtc.destinations.docs
+
+
+# --- Game data cache ----------------------------------------------------------------
+
+class CacheCollection:
+    """A game data collection: records documents written with bulk_write
+    (ReplaceOne by _id) and the indexes created."""
+
+    def __init__(self):
+        self.docs = {}
+        self.indexes = []
+
+    async def bulk_write(self, requests):
+        if not requests:
+            from pymongo.errors import InvalidOperation
+
+            raise InvalidOperation("No operations to execute")
+        for request in requests:
+            doc = request._doc
+            self.docs[doc["_id"]] = doc
+
+    async def create_index(self, field):
+        self.indexes.append(field)
+
+
+class CacheDb:
+    """bot.data.gw2 for the cache: a CacheCollection per collection name."""
+
+    def __init__(self):
+        self.collections = {}
+
+    def __getitem__(self, name):
+        return self.collections.setdefault(name, CacheCollection())
+
+    def __getattr__(self, name):
+        if name.startswith("_") or name == "collections":
+            raise AttributeError(name)
+        return self[name]
+
+
+def _cache_cog(session=None):
+    from unittest.mock import AsyncMock
+
+    from gw2bot.cogs.cache import Cache
+
+    cog = Cache(_fake_bot(session))
+    cog.db = CacheDb()
+    cog.bot.data.config.update = AsyncMock()
+    cog.bot.change_presence = AsyncMock()
+    return cog
+
+
+async def cache_endpoint(responses, endpoint, all_at_once=False):
+    """Cache `endpoint` from the API `responses`. Returns ({_id: doc}
+    written, API requests)."""
+    session = FakeSession(*responses)
+    cog = _cache_cog(session)
+    await cog.cache_endpoint(endpoint, all_at_once)
+    return cog.db[endpoint.replace("/", "_")].docs, [url for url, _, _ in session.requests]
+
+
+async def cache_raids(responses):
+    """Returns the config writes."""
+    cog = _cache_cog(FakeSession(*responses))
+    await cog.cache_raids()
+    return [call.args[0] for call in cog.bot.data.config.update.await_args_list]
+
+
+async def cache_pois(responses):
+    """Returns the points of interest written, {_id: doc}."""
+    cog = _cache_cog(FakeSession(*responses))
+    await cog.cache_pois()
+    return cog.db.pois.docs
+
+
+async def rebuild_cache(*, failing=(), owner_cached=True):
+    """Rebuild the cache with each endpoint's caching faked; those in
+    `failing` raise. Returns {"presence": [change_presence kwargs],
+    "dms": owner DMs, "cached": endpoints cached, "indexes": {collection:
+    [fields]}, "error": anything raised}."""
+    from unittest.mock import AsyncMock
+
+    cog = _cache_cog()
+    cached = []
+
+    async def cache_endpoint(endpoint, all_at_once=False):
+        if endpoint in failing:
+            raise ValueError("API down")
+        cached.append(endpoint)
+
+    cog.cache_endpoint = cache_endpoint
+    cog.cache_raids = AsyncMock()
+    cog.cache_pois = AsyncMock()
+    owner = MagicMock()
+    owner.send = AsyncMock()
+    cog.bot.get_user = lambda user_id: owner if owner_cached else None
+    cog.bot.fetch_user = AsyncMock(return_value=owner)
+    try:
+        await cog.rebuild_database()
+        error = None
+    except Exception as e:
+        error = e
+    presence = [call.kwargs for call in cog.bot.change_presence.await_args_list]
+    return {
+        "presence": [{k: str(v) for k, v in p.items()} for p in presence],
+        "dms": [call.args[0] for call in owner.send.await_args_list],
+        "cached": cached,
+        "indexes": {name: c.indexes for name, c in cog.db.collections.items() if c.indexes},
+        "error": error,
+    }
