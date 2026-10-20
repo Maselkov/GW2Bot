@@ -43,7 +43,7 @@ A behaviour that changes on purpose is called out in the PR. Anything else that 
 | [News](#news) (moved) | every 3 min | `cache.news`, `news.on` | channel posts | Items whose title changes are posted again |
 | [Game updates](#game-updates) (moved) | every 1 min | `cache.build`, game data caches, `updates` | channel posts | The rebuild runs inside the loop |
 | [Gem tracker](#gem-tracker) (moved) | every 5 min | `gemtrack` | DMs | Undeliverable users are retried forever |
-| [EVTC autopost](#evtc-autopost-and-uploads) | every 5 s; uploads on message | `evtc.notifications`, `encounters` | channel posts | "name#0" in footers |
+| [EVTC autopost](#evtc-autopost-and-uploads) (moved) | every 5 s; uploads on message | `evtc.notifications`, `encounters` | channel posts | Members who left are skipped noisily |
 | [API key role](#api-key-role-and-key) | every 5 min; `/key add` | member roles | — | `/key remove` for legacy users |
 | [Forced account names](#forced-account-names) | every 5 min | member nicknames | — | Failures are silent |
 | [Guild sync](#guild-sync) | every 60 s; member join | roles, kicks, `guildsyncs` | DMs, prompts | Heavy: a database read per member per minute |
@@ -229,8 +229,9 @@ moves, and updates the cog through `set_previews_enabled()`.
 
 ## EVTC autopost and uploads
 
-`evtc.py: post_evtc_notifications, on_message, process_evtc, upload_log`. Set up with `/evtc channel`,
-`/evtc autopost`, `/evtc api_key`.
+**Moved** to `gw2bot/cogs/evtc.py` (`Evtc`): `post_evtc_notifications` (started in `cog_load`), `on_message`,
+`process_evtc`, `upload_log`. Set up with `/evtc_automation channel`, `/evtc_automation autopost` and
+`/evtc_automation api_key`. The `evtc.*` collections the EVTC API writes are unchanged.
 
 - **Uploads (listener).**
   - **Which messages:** a message with an `.evtc`, `.zevtc` or `.zip` attachment, in DMs or in channels with
@@ -247,14 +248,17 @@ moves, and updates the cog through `set_previews_enabled()`.
   - **Always marks the notification posted**, even after a failure, so nothing is retried.
 - **Errors.** Logged.
 - **Known issues.**
-  - The footer uses `user.discriminator`, so new-style usernames show as "name#0".
-  - A user who left the server raises on `permissions_for(None)` (logged, then skipped).
+  - *Fixed:* a saved dps.report user token was never used, so later uploads weren't linked to the user's account.
+  - *Fixed:* autopost footers showed "name#0" for new-style usernames.
+  - *Fixed:* adding a destination crashed for an account in no guild; removing one crashed on a channel the bot
+    can't see.
+  - *Fixed:* messages named commands that don't exist.
+  - A user who left the destination's server is skipped with a logged exception.
   - `guild.chunk()` runs per destination in the loop.
 - **Tests.**
-  - Existing: `/evtc api_key` (`test_evtc_api_key.py`), the upload listener's channel and autodelete rules
-    (`test_settings_commands.py`).
-  - To write: autopost with a fake dps.report covering destinations, the guild filter, the permission rules, and
-    marking failures as posted.
+  - Existing: `/evtc_automation api_key` (`test_evtc_api_key.py`), the upload listener's channel and autodelete
+    rules (`test_settings_commands.py`), and the report embed, encounter saving, uploads, `/evtc`, autopost and
+    destinations (`test_evtc.py`).
 
 ## API key role, and /key
 
