@@ -250,31 +250,27 @@ async def test_remove_without_destinations():
     assert replies == ["You don't have any autopost destinations yet."]
 
 
-# --- Known bugs --------------------------------------------------------------------------------------
+# --- Fixes -------------------------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="a saved dps.report token is never returned, so it isn't used")
 async def test_later_uploads_use_the_saved_token():
     service = dps_report()
     await subject.upload_logs([subject.log_file()], service, stored={"dpsreport_token": "SAVED"})
     assert service.requests[0] == ("POST", DPS_REPORT + "uploadContent", {"json": 1, "userToken": "SAVED"})
 
 
-@pytest.mark.xfail(strict=True, reason="footers show the legacy discriminator, 'example#0'")
 async def test_autopost_footer_names_the_user():
     channel = subject.RecordingChannel()
     await subject.run_evtc_autopost([NOTIFICATION], [destination()], {"abc-123": report()}, [channel])
     assert channel.sent[0][1]["footer"]["text"].startswith("Autoposted by example (1).")
 
 
-@pytest.mark.xfail(strict=True, reason="crashes for an account that isn't in any guild")
 async def test_add_destination_without_guilds():
     replies, destinations = await subject.evtc_destination_command("add", account={"name": "Example.1234"})
     assert replies[0].startswith(ADDED)
     assert destinations[0]["guild_ids"] == []
 
 
-@pytest.mark.xfail(strict=True, reason="crashes on a destination channel the bot can't see")
 async def test_remove_an_inaccessible_destination():
     replies, destinations = await subject.evtc_destination_command(
         "remove", destinations=[destination(5)], channels={}, choose=[0]

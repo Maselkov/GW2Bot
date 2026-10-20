@@ -24,6 +24,13 @@ UPLOAD_URL = BASE_URL + "uploadContent"
 JSON_URL = BASE_URL + "getJson"
 TOKEN_URL = BASE_URL + "getUserToken"
 ALLOWED_FORMATS = (".evtc", ".zevtc", ".zip")
+DESTINATION_ADDED = (
+    "This channel is now a destination for EVTC logs. Logs uploaded using "
+    "third-party utilities with your GW2Bot EVTC API key will be posted "
+    "here. You can have multiple destinations at the same time. DMs also "
+    "work.\nYou can always remove it using "
+    "`/evtc_automation autopost remove_destinations`"
+)
 
 
 class EvtcGuildSelectionViewSelect(discord.ui.Select):
@@ -42,14 +49,7 @@ class EvtcGuildSelectionViewSelect(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        await interaction.response.edit_message(
-            content="This channel is now a destination for EVTC logs. "
-            "Logs uploaded using third-party utilities with your GW2Bot "
-            "EVTC API key will be posted here. You can have multiple "
-            "destinations at the same time. DMs also work.\nYou can always "
-            "remove it using `/evtc_automation remove_destinations`",
-            view=None,
-        )
+        await interaction.response.edit_message(content=DESTINATION_ADDED, view=None)
         self.view.selected_guilds = self.values
         self.view.stop()
 
@@ -67,14 +67,7 @@ class EvtcGuildSelectionView(discord.ui.View):
     async def confirm(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
-        await interaction.response.edit_message(
-            content="This channel is now a destination for EVTC logs. "
-            "Logs uploaded using third-party utilities with your GW2Bot "
-            "EVTC API key will be posted here. You can have multiple "
-            "destinations at the same time. DMs also work.\nYou can always "
-            "remove it using `/evtc autopost remove_destinations`",
-            view=None,
-        )
+        await interaction.response.edit_message(content=DESTINATION_ADDED, view=None)
         self.skip = True
         self.stop()
 
@@ -88,9 +81,9 @@ class EvtcAutouploadDestinationsSelect(discord.ui.Select):
         for i, channel in enumerate(channels):
             if isinstance(channel, discord.DMChannel):
                 name = "DM"
+            elif not channel:
+                name = "Inaccessible Channel"
             else:
-                if not channel:
-                    name = "Inaccessible Channel"
                 name = f"{channel.guild.name} - {channel.name}"
             options.append(discord.SelectOption(label=name, value=str(i)))
         super().__init__(
@@ -143,9 +136,9 @@ class Evtc(GW2Cog):
                     data = await r.json()
                     token = data["userToken"]
                     await self.bot.data.users.update(user.id, {"dpsreport_token": token})
-                    return token
             except Exception:
                 return None
+        return token
 
     async def upload_log(self, file, user, *, anonymous=False):
         params = {"json": 1}
@@ -428,9 +421,8 @@ class Evtc(GW2Cog):
         )
         if enabled:
             msg = (
-                "Automatic EVTC processing enabled. Simply upload the file "
-                f"wish to be processed in {channel.mention}, while "
-                "@mentioning the bot in the same message.. Accepted "
+                "Automatic EVTC processing enabled. Simply upload the logs "
+                f"you want processed in {channel.mention}. Accepted "
                 f"formats: `{', '.join(ALLOWED_FORMATS)}`\nTo disable, use "
                 "this command with `enabled` set to False."
             )
@@ -475,7 +467,7 @@ class Evtc(GW2Cog):
             if not existing_key:
                 return await interaction.followup.send(
                     "You don't have an EVTC API key generated. Use "
-                    "`/evtc api_key generate` to generate one."
+                    "`/evtc_automation api_key` to generate one."
                 )
             return await interaction.followup.send(
                 f"Your EVTC API key is ```{existing_key}```"
@@ -493,8 +485,8 @@ class Evtc(GW2Cog):
                 "it with utilities that automatically upload logs to link "
                 "them with your account, and potentially post them to "
                 "certain channels. See `/evtc_automation` for more\n\nYou may "
-                "revoke the key at any time with `/evtc api_key delete`, or "
-                "regenerate it with `/evtc api_key generate`. Don't share "
+                "revoke the key at any time with `/evtc_automation api_key`, or "
+                "regenerate it the same way. Don't share "
                 "this key with anyone.\nYou can also use this "
                 "key without setting any upload destinations. Doing so will "
                 "still append the report links to `/bosses` results"
@@ -511,7 +503,7 @@ class Evtc(GW2Cog):
         if not key:
             return await interaction.followup.send(
                 "You don't have an EVTC API key generated. Use "
-                "`/evtc api_key generate` to generate one. Confused about "
+                "`/evtc_automation api_key` to generate one. Confused about "
                 "what this is? The aforementioned command includes a tutorial"
             )
         doc = (
@@ -530,13 +522,18 @@ class Evtc(GW2Cog):
             return await interaction.followup.send(
                 "This channel is already a destination. If you're "
                 "looking to remove it, see "
-                "`/evtc_automation remove_destinations`"
+                "`/evtc_automation autopost remove_destinations`"
             )
         results = await self.call_api("account", interaction.user, ["account"])
         guild_ids = results.get("guilds")
-        if guild_ids:
-            endpoints = [f"guild/{gid}" for gid in guild_ids]
-            guilds = await self.call_multiple(endpoints)
+        if not guild_ids:
+            # Nothing to filter by
+            await self.db.evtc.destinations.insert_one(
+                {"user_id": interaction.user.id, "channel_id": channel.id, "guild_ids": [], "guild_tags": []}
+            )
+            return await interaction.followup.send(DESTINATION_ADDED)
+        endpoints = [f"guild/{gid}" for gid in guild_ids]
+        guilds = await self.call_multiple(endpoints)
         view = EvtcGuildSelectionView(self, guilds)
         await interaction.followup.send(
             "If you wish to use this channel to post only "
@@ -619,7 +616,7 @@ class Evtc(GW2Cog):
                 embed = await self.upload_embed(None, data, doc["permalink"])
                 embed.set_footer(
                     text="Autoposted by "
-                    f"{user.name}#{user.discriminator}({user.id})."
+                    f"{user.name} ({user.id})."
                     " The bot respects the user's permissions; remove their "
                     "permission to send messages or embed "
                     "links to stop these messsages."
