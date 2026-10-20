@@ -38,6 +38,29 @@ class Owner(commands.Cog):
             await self.bot.record_command_sync()
         await ctx.send("Synced")
 
+    @commands.group(name="emojis", case_insensitive=True)
+    @commands.guild_only()
+    async def emojis_management(self, ctx):
+        """Commands related to emoji management"""
+        if ctx.invoked_subcommand is None:
+            return await ctx.send_help(ctx.command)
+
+    @emojis_management.command(name="register")
+    async def emojis_register(self, ctx):
+        """Register emojis present in the current server"""
+        registered = []
+        for emoji in ctx.guild.emojis:
+            name = emoji.name
+            await self.bot.gw2_emojis.register(name, emoji.id)
+            registered.append(emoji.name)
+        if not registered:
+            return await ctx.send("No emojis were registered")
+        await ctx.send(
+            "Registered {} emojis:\n```{}```".format(
+                len(registered), ", ".join(registered)
+            )
+        )
+
 
 async def setup(bot):
     await bot.add_cog(Owner(bot))

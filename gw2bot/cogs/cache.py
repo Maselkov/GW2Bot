@@ -1,4 +1,7 @@
-import asyncio
+"""The game data cache: items, achievements, skills and more copied from the
+API into MongoDB, rebuilt when the game updates, and the owner's >database
+commands."""
+import logging
 import time
 
 import discord
@@ -6,10 +9,14 @@ from discord.ext import commands
 from pymongo import ReplaceOne
 from pymongo.errors import BulkWriteError
 
-from .exceptions import APIError
+from .base import GW2Cog
 
 
-class DatabaseMixin:
+class Cache(GW2Cog):
+
+    def __init__(self, bot):
+        super().__init__(bot)
+        self.log = logging.getLogger(__name__)
 
     @commands.group(case_insensitive=True)
     @commands.is_owner()
@@ -24,81 +31,6 @@ class DatabaseMixin:
         """Create a new database
         """
         await self.rebuild_database()
-
-    async def upgrade_legacy_guildsync(self, guild):
-        doc = await self.bot.data.guilds.get(guild.id)
-        sync = doc.get("sync")
-        if not sync:
-            return False
-        if not sync.get("setupdone") or not sync.get("on"):
-            return False
-        key = sync.get("leader_key", None)
-        if not key:
-            return False
-        sync_doc = {}
-        ranks_to_role_ids = sync.get("ranks")
-        purge = sync.get("purge", False)
-        guild_role_name = sync.get("name")
-        guild_role_id = None
-        gid = sync["gid"]
-        base_ep = f"guild/{gid}"
-        try:
-            info = await self.call_api(base_ep)
-        except APIError:
-            print("No such guild exists. Skipping.")
-            return False
-        try:
-            await self.call_api(base_ep + "/members", key=key)
-        except APIError:
-            print("Invalid key or permissions")
-            return False
-        tag_role = None
-        if guild_role_name:
-            guild_role_id = ranks_to_role_ids.pop(guild_role_name, None)
-            if guild_role_id:
-                tag_role = guild_role_id
-        sync_doc = {
-            "guild_id": guild.id,
-            "enabled": {
-                "tag": sync.get("guildrole", False) and sync["on"],
-                "ranks": sync["on"]
-            },
-            "gid": gid,
-            "name": info["name"],
-            "tag": info["tag"],
-            "tag_role": tag_role,
-            "rank_roles": ranks_to_role_ids,
-            "key": key
-        }
-        if await self.can_add_sync(guild, gid):
-            await self.db.guildsyncs.insert_one(sync_doc)
-            await self.bot.data.guilds.update(guild.id, {
-                "guildsync.enabled": True,
-                "guildsync.purge": purge
-            })
-            return True
-        return False
-
-    @database.command(name="update_legacy_guildsync")
-    async def db_update_guildsync(self, ctx, guild: int = None):
-        if not guild:
-            conversions = 0
-            for guild in self.bot.guilds:
-                res = await self.upgrade_legacy_guildsync(guild)
-                if res:
-                    conversions += 1
-                await asyncio.sleep(0.2)
-            await ctx.send(f"{conversions} successful")
-            return
-        guild = self.bot.get_guild(guild)
-        if not guild:
-            return await ctx.send("Nope")
-        done = await self.upgrade_legacy_guildsync(guild)
-        if done:
-            await ctx.send("Successful conversion")
-        else:
-            await ctx.send("Encountered error")
-        pass
 
     @database.command(name="statistics")
     async def db_stats(self, ctx):
@@ -216,3 +148,7 @@ class DatabaseMixin:
         print("Done")
         self.log.info("Database done! Time elapsed: {} seconds".format(end -
                                                                        start))
+
+
+async def setup(bot):
+    await bot.add_cog(Cache(bot))

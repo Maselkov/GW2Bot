@@ -555,10 +555,9 @@ class Notifiers(GW2Cog):
     async def game_update_checker(self):
         try:
             if await self.game_build_changed():
-                # The game data cache is still the old cog's
-                old_cog = self.bot.get_cog("GuildWars2")
-                if old_cog:
-                    await old_cog.rebuild_database()
+                cache = self.bot.get_cog("Cache")
+                if cache:
+                    await cache.rebuild_database()
             await self.send_update_notifs()
         except Exception:
             # An escaping exception would stop the loop for good

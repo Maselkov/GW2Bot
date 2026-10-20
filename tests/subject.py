@@ -17,7 +17,6 @@ import time_machine
 
 from gw2bot.cogs.base import GW2Cog
 from gw2bot.cogs import daily
-from gw2bot.cogs.guildwars2.database import DatabaseMixin
 from gw2bot.utils import chat, db
 
 DATA_DIR = pathlib.Path(__file__).resolve().parent.parent / "gw2bot" / "data"
@@ -63,7 +62,6 @@ def _fake_bot(session=None, users=None):
 
 class _Harness(
     GW2Cog,
-    DatabaseMixin,
 ):
     """Just enough of the cog's state for its non-Discord logic to run."""
 
@@ -1550,10 +1548,9 @@ async def check_game_updates(config, build_page, *, notes=None, servers=None, ch
     cog.bot.data.config.update = AsyncMock()
     cog.bot.data.guilds = MemoryGuilds(servers or {})
     cog.bot.get_channel = {c.id: c for c in channels}.get
-    # The game data cache is rebuilt by the old cog
-    old_cog = MagicMock()
-    old_cog.rebuild_database = AsyncMock()
-    cog.bot.get_cog = {"GuildWars2": old_cog}.get
+    cache = MagicMock()
+    cache.rebuild_database = AsyncMock()
+    cog.bot.get_cog = {"Cache": cache}.get
     cog.update_notification = AsyncMock(return_value=notes)
     try:
         await type(cog).game_update_checker.coro(cog)
@@ -1562,7 +1559,7 @@ async def check_game_updates(config, build_page, *, notes=None, servers=None, ch
         error = e
     return {
         "error": error,
-        "rebuilt": old_cog.rebuild_database.await_count == 1,
+        "rebuilt": cache.rebuild_database.await_count == 1,
         "config": [call.args[0] for call in cog.bot.data.config.update.await_args_list],
     }
 
@@ -2214,7 +2211,9 @@ class CacheDb:
 def _cache_cog(session=None):
     from unittest.mock import AsyncMock
 
-    cog = _Harness(session)
+    from gw2bot.cogs.cache import Cache
+
+    cog = Cache(_fake_bot(session))
     cog.db = CacheDb()
     cog.bot.data.config.update = AsyncMock()
     cog.bot.change_presence = AsyncMock()

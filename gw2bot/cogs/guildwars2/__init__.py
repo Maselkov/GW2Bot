@@ -5,8 +5,6 @@ import discord
 
 from ...errors import error_message
 from ..base import GW2Cog
-from .database import DatabaseMixin
-from .emojis import EmojiMixin
 from .guild import GuildSync
 from .guild.sync import GuildSyncPromptUserConfirmView
 from .guildmanage import GuildManageMixin
@@ -14,8 +12,6 @@ from .key import KeyMixin
 
 class GuildWars2(
     GW2Cog,
-    DatabaseMixin,
-    EmojiMixin,
     GuildSync,
     GuildManageMixin,
     KeyMixin,
