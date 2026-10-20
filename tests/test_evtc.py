@@ -1,7 +1,6 @@
 """EVTC logs: uploading to dps.report, the report embed, autoposting and destinations."""
 import datetime
 
-import pytest
 
 import subject
 

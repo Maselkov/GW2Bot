@@ -22,6 +22,7 @@ dependencies = [
 dev = [
     "pytest",
     "pytest-asyncio",
+    "ruff",
     "time-machine",
 ]
 
@@ -33,6 +34,14 @@ include = ["gw2bot*"]
 
 [tool.setuptools.package-data]
 "gw2bot.data" = ["*.json"]
+
+[tool.ruff.lint]
+# Mistakes rather than style: pyflakes (unused imports and variables,
+# undefined names), statement and syntax errors, bugbear, pylint's errors,
+# and asyncio tasks nobody keeps (use GW2Cog.run_in_background)
+select = ["F", "E7", "E9", "W605", "B", "PLE", "RUF006"]
+# `raise ... from` and zip(strict=) are style here, not bugs
+ignore = ["B904", "B905"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

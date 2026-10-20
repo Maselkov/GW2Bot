@@ -7,7 +7,7 @@ import subject
 
 API = "https://api.guildwars2.com/v2/"
 GUILD = "4BBB52AA-D768-4FC6-8EDE-C299F2822F0F"
-ZWSP = "​"
+ZWSP = "\u200b"
 
 
 def fields(embed):

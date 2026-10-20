@@ -659,7 +659,7 @@ class Characters(GW2Cog):
         for k, v in sorted(fields.items(), reverse=True, key=lambda k: k[0]):
             lines = [
                 "{}: **{}**".format(*line)
-                for line in sorted(v, key=lambda l: l[1])
+                for line in sorted(v, key=lambda line: line[1])
             ]
             embed = embed_list_lines(embed, lines,
                                      "{}{} Birthday".format(k, suffix(k)))

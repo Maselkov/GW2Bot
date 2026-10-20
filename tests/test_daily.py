@@ -2,7 +2,6 @@
 import datetime
 import zoneinfo
 
-import pytest
 
 import subject
 

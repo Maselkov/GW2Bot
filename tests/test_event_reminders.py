@@ -2,7 +2,6 @@
 import datetime
 import threading
 
-import pytest
 
 import subject
 

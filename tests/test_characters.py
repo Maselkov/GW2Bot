@@ -8,7 +8,7 @@ import subject
 
 API = "https://api.guildwars2.com/v2/"
 UTC = datetime.timezone.utc
-ZWSP = "​"
+ZWSP = "\u200b"
 
 
 def fields(embed):

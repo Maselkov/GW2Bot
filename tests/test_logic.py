@@ -128,7 +128,7 @@ def test_embed_list_lines_splits_at_1024():
     lines = ["x" * 300] * 10
     fields = subject.embed_list_lines(lines, "Name")
     assert fields[0][0] == "Name"
-    assert all(name == "​" for name, _ in fields[1:])
+    assert all(name == "\u200b" for name, _ in fields[1:])
     assert all(len(value) <= 1024 for _, value in fields)
     assert sum(value.count("x" * 300) for _, value in fields) == 10
 
