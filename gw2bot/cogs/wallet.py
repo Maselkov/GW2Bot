@@ -7,7 +7,6 @@ from discord import app_commands
 from discord.app_commands import Choice
 
 from ..utils.chat import embed_list_lines
-from ..utils.db import prepare_search
 from .base import GW2Cog
 
 
@@ -58,8 +57,8 @@ class Wallet(GW2Cog):
             lines.append([])
             for k, v in search_results.items():
                 if k in ids[i]:
-                    doc = await self.db.items.find_one({"_id": k})
-                    name = doc["name"]
+                    item_doc = await self.fetch_item(k)
+                    name = item_doc["name"] if item_doc else "Unknown item"
                     name = re.sub(r'^\d+ ', '', name)
                     emoji = self.get_emoji(interaction, name)
                     lines[i].append("{} {} {}".format(emoji, sum(v.values()),
@@ -73,10 +72,7 @@ class Wallet(GW2Cog):
             return []
         if current == "gold":
             return [Choice(name="Gold", value="1")]
-        query = prepare_search(current)
-        query = {"name": query}
-        items = await self.db.currencies.find(query).to_list(25)
-        return [Choice(name=it["name"], value=str(it["_id"])) for it in items]
+        return await self.name_choices(self.db.currencies, current)
 
     @app_commands.command()
     @app_commands.describe(currency="The specific currency to search for. "
@@ -87,16 +83,12 @@ class Wallet(GW2Cog):
                      currency: str = None):
         """Shows your wallet"""
         if currency:
-            try:
-                currency = int(currency)
-            except ValueError:
-                results = await self.currency_autocomplete(
-                    interaction, currency)
-                if not results:
-                    return await interaction.response.send_message(
-                        "No results found for {}".format(currency.title()),
-                        ephemeral=True)
-                currency = int(results[0].value)
+            typed = currency
+            currency = await self.resolve_id(interaction, typed, self.currency_autocomplete)
+            if currency is None:
+                return await interaction.response.send_message(
+                    "No results found for {}".format(typed.title()),
+                    ephemeral=True)
             choice = await self.db.currencies.find_one({"_id": currency})
             if not choice:
                 return await interaction.response.send_message(

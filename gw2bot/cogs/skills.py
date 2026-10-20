@@ -4,10 +4,8 @@ import re
 
 import discord
 from discord import app_commands
-from discord.app_commands import Choice
 
 from gw2bot.utils.chat import cleanup_xml_tags, embed_list_lines
-from gw2bot.utils.db import prepare_search
 from gw2bot.utils.wiki import page_url, profession_icon_url
 
 from .base import GW2Cog
@@ -305,20 +303,10 @@ def skill_fields(skill):
 
 class Skills(GW2Cog):
     async def skill_autocomplete(self, interaction: discord.Interaction, current: str):
-        if not current:
-            return []
-        query = prepare_search(current)
-        query = {"name": query, "professions": {"$ne": None}}
-        items = await self.db.skills.find(query).to_list(25)
-        return [Choice(name=it["name"], value=str(it["_id"])) for it in items]
+        return await self.name_choices(self.db.skills, current, professions={"$ne": None})
 
     async def trait_autocomplete(self, interaction: discord.Interaction, current: str):
-        if not current:
-            return []
-        query = prepare_search(current)
-        query = {"name": query}
-        items = await self.db.traits.find(query).to_list(25)
-        return [Choice(name=it["name"], value=str(it["_id"])) for it in items]
+        return await self.name_choices(self.db.traits, current)
 
     @app_commands.command(name="skill")
     @app_commands.describe(
@@ -327,45 +315,24 @@ class Skills(GW2Cog):
     @app_commands.autocomplete(skill=skill_autocomplete)
     async def skillinfo(self, interaction: discord.Interaction, skill: str):
         """Information about a given skill"""
-        await interaction.response.defer()
-        try:
-            skill_id = int(skill)
-        except ValueError:
-            try:
-                choices = await self.skill_autocomplete(interaction, skill)
-                skill_id = int(choices[0].value)
-            except (ValueError, IndexError):
-                return await interaction.followup.send(
-                    "Could not find any skills with that name."
-                )
-        choice = await self.db.skills.find_one({"_id": skill_id})
-        if not choice:
-            return await interaction.followup.send(
-                "Could not find any skills with that name.")
-        data = await skill_embed(self, choice, interaction)
-        await interaction.followup.send(embed=data)
+        await self.send_tooltip(interaction, skill, self.skill_autocomplete, self.db.skills, "skills")
 
     @app_commands.command(name="trait")
     @app_commands.describe(trait="The trait name to search for. Example: Fresh Air")
     @app_commands.autocomplete(trait=trait_autocomplete)
     async def traitinfo(self, interaction: discord.Interaction, trait: str):
         """Information about a given trait"""
+        await self.send_tooltip(interaction, trait, self.trait_autocomplete, self.db.traits, "traits")
+
+    async def send_tooltip(self, interaction, value, autocomplete, collection, kind):
+        """Reply with the skill or trait `value` names."""
         await interaction.response.defer()
-        try:
-            trait_id = int(trait)
-        except ValueError:
-            try:
-                choices = await self.trait_autocomplete(interaction, trait)
-                trait_id = int(choices[0].value)
-            except (ValueError, IndexError):
-                return await interaction.followup.send(
-                    "Could not find any traits with that name."
-                )
-        choice = await self.db.traits.find_one({"_id": trait_id})
-        if not choice:
+        doc_id = await self.resolve_id(interaction, value, autocomplete)
+        doc = await collection.find_one({"_id": doc_id}) if doc_id is not None else None
+        if not doc:
             return await interaction.followup.send(
-                "Could not find any traits with that name.")
-        data = await skill_embed(self, choice, interaction)
+                f"Could not find any {kind} with that name.")
+        data = await skill_embed(self, doc, interaction)
         await interaction.followup.send(embed=data)
 
 

@@ -6,7 +6,6 @@ from discord import app_commands
 
 from ..gw2api.errors import APINotFound
 from ..utils.chat import cleanup_xml_tags
-from ..utils.db import prepare_search
 from .base import GW2Cog
 
 # Daily and monthly achievement points aren't in /v2/achievements
@@ -78,14 +77,7 @@ class Achievements(GW2Cog):
 
     async def achievement_autocomplete(self, interaction: discord.Interaction,
                                        current: str):
-        if not current:
-            return []
-        query = {"name": prepare_search(current)}
-        cursor = self.db.achievements.find(query).limit(25)
-        return [
-            app_commands.Choice(name=ach["name"], value=str(ach["_id"]))
-            async for ach in cursor
-        ]
+        return await self.name_choices(self.db.achievements, current)
 
     @app_commands.command(name="achievement")
     @app_commands.describe(
@@ -96,7 +88,7 @@ class Achievements(GW2Cog):
         """Display achievement information and your completion status"""
         user = interaction.user
         await interaction.response.defer()
-        choice = await self.find_achievement(achievement_name)
+        choice = await self.find_achievement(interaction, achievement_name)
         if not choice:
             return await interaction.followup.send(
                 f"No achievement found matching `{achievement_name}`.")
@@ -111,14 +103,13 @@ class Achievements(GW2Cog):
                          icon_url=user.display_avatar.url)
         await interaction.followup.send(embed=embed)
 
-    async def find_achievement(self, name):
+    async def find_achievement(self, interaction, name):
         """The cached achievement with this id (as picked from the
         autocomplete), or else the first whose name starts with `name`."""
-        if name.isdigit():
-            return await self.db.achievements.find_one({"_id": int(name)})
-        async for ach in self.db.achievements.find({"name": prepare_search(name)}).limit(1):
-            return ach
-        return None
+        ach_id = await self.resolve_id(interaction, name, self.achievement_autocomplete)
+        if ach_id is None:
+            return None
+        return await self.db.achievements.find_one({"_id": ach_id})
 
     async def ach_embed(self, ctx, res, ach):
         description = cleanup_xml_tags(ach["description"])

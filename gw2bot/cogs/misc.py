@@ -8,8 +8,6 @@ from bs4 import BeautifulSoup
 from discord import app_commands
 from discord.app_commands import Choice
 
-from gw2bot.utils.db import prepare_search
-
 from .base import GW2Cog
 
 
@@ -130,36 +128,17 @@ class Misc(GW2Cog):
     async def chatcode_item_autocomplete(self,
                                          interaction: discord.Interaction,
                                          current: str):
-        if not current:
-            return []
-        query = prepare_search(current)
-        query = {
-            "name": query,
-        }
-        items = await self.db.items.find(query).to_list(25)
-        return [Choice(name=it["name"], value=str(it["_id"])) for it in items]
+        return await self.name_choices(self.db.items, current)
 
     async def chatcode_skin_autocomplete(self,
                                          interaction: discord.Interaction,
                                          current: str):
-        if not current:
-            return []
-        query = prepare_search(current)
-        query = {
-            "name": query,
-        }
-        items = await self.db.skins.find(query).to_list(25)
-        return [Choice(name=it["name"], value=str(it["_id"])) for it in items]
+        return await self.name_choices(self.db.skins, current)
 
     async def chatcode_upgrade_autocomplete(self,
                                             interaction: discord.Interaction,
                                             current: str):
-        if not current:
-            return []
-        query = prepare_search(current)
-        query = {"name": query, "type": "UpgradeComponent"}
-        items = await self.db.items.find(query).to_list(25)
-        return [Choice(name=it["name"], value=str(it["_id"])) for it in items]
+        return await self.name_choices(self.db.items, current, type="UpgradeComponent")
 
     @app_commands.command()
     @app_commands.describe(
@@ -190,16 +169,12 @@ class Misc(GW2Cog):
                 ephemeral=True)
 
         async def resolve(value, autocomplete, kind):
-            """An id: picked from the autocomplete, or the first match for
-            a typed name."""
             if not value:
                 return None
-            if value.isdigit():
-                return int(value)
-            choices = await autocomplete(interaction, value)
-            if not choices:
+            resolved = await self.resolve_id(interaction, value, autocomplete)
+            if resolved is None:
                 raise LookupError(f"Could not find any {kind} named {value}")
-            return int(choices[0].value)
+            return resolved
 
         try:
             item = await resolve(item, self.chatcode_item_autocomplete,

@@ -336,6 +336,10 @@ class Account(GW2Cog):
                 return await interaction.followup.send(
                     "Could not find any items with that name.")
         item_doc = await self.fetch_item(ids[0])
+        if not item_doc:
+            # The results show its name, rarity and icon
+            return await interaction.followup.send(
+                "Could not find any items with that name.")
 
         async def generate_results_embed(results, characters):
             seq = [k for k, v in results.items() if v]

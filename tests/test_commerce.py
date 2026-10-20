@@ -196,3 +196,33 @@ async def test_items_without_listings_keep_the_others_right():
         ("Superior Sigil of Force", "1 x 25 gold "),
         ("Glob of Ectoplasm", "5 x 15 silver  - Total: 75 silver \nMax. offer: 14 silver  · Undercuts: 13"),
     ]
+
+
+async def test_price_by_typed_name():
+    prices = {"id": 19721, "buys": {"quantity": 900, "unit_price": 1598}, "sells": {"quantity": 2000, "unit_price": 1672}}
+    embed, requests = await subject.commerce("tp_price", [(200, prices)], items=ITEMS, item="glob of ecto")
+    assert embed["title"] == "Glob of Ectoplasm"
+    assert requests == [(API + "commerce/prices/19721", {})]
+
+
+async def test_price_unknown_name():
+    sent, requests = await subject.commerce("tp_price", [], items=ITEMS, item="Anvil")
+    assert sent == "Could not find any items with that name."
+    assert requests == []
+
+
+async def test_price_of_an_uncached_item():
+    # E.g. new since the cache was last rebuilt
+    prices = {"id": 99, "buys": {"quantity": 1, "unit_price": 100}, "sells": {"quantity": 1, "unit_price": 200}}
+    embed, _ = await subject.commerce("tp_price", [(200, prices)], items=ITEMS, item="99")
+    assert embed["title"] == "Unknown item"
+    assert fields(embed) == [("Buy price", "1 silver "), ("Sell price", "2 silver ")]
+
+
+async def test_uncached_items_in_transactions_and_deliveries():
+    sells = [{"id": 1, "item_id": 99, "price": 1500, "quantity": 1}]
+    embed, _ = await subject.commerce("tp_selling", [(200, sells), (200, [])], items=ITEMS)
+    assert fields(embed) == [("Unknown item", "1 x 15 silver ")]
+    box = {"coins": 0, "items": [{"id": 99, "count": 2}]}
+    embed, _ = await subject.commerce("tp_delivery", [(200, box)], items=ITEMS)
+    assert fields(embed) == [("Coins", "Currently no coins for pickup."), ("Unknown item", "x 2")]

@@ -147,17 +147,16 @@ class ChatLinks(GW2Cog):
                                 "<I", data[6 + offset : 9 + offset] + b"\0"
                             )
                             upgrade_id = upgrade_id[0]
+                            offset += 4
                             upgrade_doc = await self.db.items.find_one(
                                 {"_id": upgrade_id}
                             )
                             if not upgrade_doc:
                                 upgrades.append("Unknown upgrade")
                                 continue
-                            else:
-                                upgrades.append(upgrade_doc["name"])
+                            upgrades.append(upgrade_doc["name"])
                             if not suffix:
                                 suffix = upgrade_doc["details"].get("suffix", "")
-                            offset += 4
                         if upgrades:
                             field_name = "Upgrades" if len(upgrades) > 1 else "Upgrade"
                             embed.add_field(name=field_name, value="\n".join(upgrades))

@@ -476,3 +476,11 @@ async def test_gear_with_uncached_equipment():
         channel=image_channel(), character="Example Char",
     )
     assert fields(embed)[1] == ("> **WEAPON SET #1**", "Unknown item")
+
+
+async def test_autocomplete_when_the_api_fails():
+    # Nothing cached, and the key no longer works
+    choices, writes, _ = await subject.character_choices(
+        "a", subject.stored_key(["account", "characters"]), [(401, {"text": "Invalid access token"})], now=NOW
+    )
+    assert choices == writes == []

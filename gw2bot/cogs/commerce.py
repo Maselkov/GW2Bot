@@ -3,11 +3,9 @@ import operator
 
 import discord
 from discord import app_commands
-from discord.app_commands import Choice
 
 from ..gw2api.errors import APIBadRequest, APINotFound
 from .base import GW2Cog
-from ..utils.db import prepare_search
 
 
 def undercuts(offers, price, state):
@@ -89,7 +87,7 @@ class Commerce(GW2Cog):
             price = result["price"]
             itemdoc = await self.fetch_item(result["item_id"])
             quantity = result["quantity"]
-            item_name = itemdoc["name"]
+            item_name = itemdoc["name"] if itemdoc else "Unknown item"
             offers = listings.get(result["item_id"], {}).get(state)
             if quantity == 1:
                 total = ""
@@ -107,18 +105,9 @@ class Commerce(GW2Cog):
 
     async def tp_autocomplete(self, interaction: discord.Interaction,
                               current: str):
-        if not current:
-            return []
-        query = prepare_search(current)
-        query = {
-            "name": query,
-            "flags": {
-                "$nin": ["AccountBound", "SoulbindOnAcquire"]
-            }
-        }
-        items = await self.db.items.find(query).to_list(25)
-        items = sorted(items, key=lambda c: c["name"])
-        return [Choice(name=it["name"], value=str(it["_id"])) for it in items]
+        choices = await self.name_choices(
+            self.db.items, current, flags={"$nin": ["AccountBound", "SoulbindOnAcquire"]})
+        return sorted(choices, key=lambda c: c.name)
 
     @tp_group.command(name="price")
     @app_commands.autocomplete(item=tp_autocomplete)
@@ -127,22 +116,18 @@ class Commerce(GW2Cog):
     async def tp_price(self, interaction: discord.Interaction, item: str):
         """Check price of an item"""
         await interaction.response.defer()
+        item_id = await self.resolve_id(interaction, item, self.tp_autocomplete)
+        if item_id is None:
+            return await interaction.followup.send(
+                "Could not find any items with that name.")
         try:
-            commerce = 'commerce/prices/'
-            endpoint = commerce + item
-            results = await self.call_api(endpoint)
+            results = await self.call_api(f"commerce/prices/{item_id}")
         except APINotFound:
             return await interaction.followup.send("This item isn't on the TP."
                                                    )
-        choice = await self.db.items.find_one({"_id": int(item)})
+        choice = await self.fetch_item(item_id)
         buyprice = results["buys"]["unit_price"]
         sellprice = results["sells"]["unit_price"]
-        itemname = choice["name"]
-        level = str(choice["level"])
-        rarity = choice["rarity"]
-        itemtype = self.gamedata["items"]["types"][choice["type"]].lower()
-        description = "A level {} {} {}".format(level, rarity.lower(),
-                                                itemtype.lower())
         if buyprice != 0:
             buyprice = self.gold_to_coins(interaction, buyprice)
         else:
@@ -151,14 +136,23 @@ class Commerce(GW2Cog):
             sellprice = self.gold_to_coins(interaction, sellprice)
         else:
             sellprice = "No sell orders"
-        embed = discord.Embed(title=itemname,
-                              description=description,
-                              colour=self.rarity_to_color(rarity))
-        if "icon" in choice:
-            embed.set_thumbnail(url=choice["icon"])
+        if choice:
+            rarity = choice["rarity"]
+            itemtype = self.gamedata["items"]["types"][choice["type"]]
+            description = "A level {} {} {}".format(choice["level"], rarity.lower(),
+                                                    itemtype.lower())
+            embed = discord.Embed(title=choice["name"],
+                                  description=description,
+                                  colour=self.rarity_to_color(rarity))
+            if "icon" in choice:
+                embed.set_thumbnail(url=choice["icon"])
+        else:
+            # Not cached yet, e.g. new since the cache was last rebuilt
+            embed = discord.Embed(title="Unknown item", colour=self.embed_color)
         embed.add_field(name="Buy price", value=buyprice, inline=False)
         embed.add_field(name="Sell price", value=sellprice, inline=False)
-        embed.set_footer(text=choice["chat_link"])
+        if choice:
+            embed.set_footer(text=choice["chat_link"])
         await interaction.followup.send(embed=embed)
 
     @tp_group.command(name="delivery")
@@ -178,26 +172,16 @@ class Commerce(GW2Cog):
         coins = results["coins"]
         items = results["items"]
         items = items[:20]  # Get only first 20 entries
-        item_quantity = []
-        itemlist = []
         if coins == 0:
             gold = "Currently no coins for pickup."
         else:
             gold = self.gold_to_coins(interaction, coins)
         data.add_field(name="Coins", value=gold, inline=False)
-        counter = 0
-        if len(items) != 0:
+        if items:
             for item in items:
-                item_quantity.append(item["count"])
                 itemdoc = await self.fetch_item(item["id"])
-                itemlist.append(itemdoc)
-            for item in itemlist:
-                item_name = item["name"]
-                # Get quantity of items
-                quantity = item_quantity[counter]
-                counter += 1
-                data.add_field(name=item_name,
-                               value="x {0}".format(quantity),
+                data.add_field(name=itemdoc["name"] if itemdoc else "Unknown item",
+                               value="x {0}".format(item["count"]),
                                inline=False)
         else:
             if coins == 0:
