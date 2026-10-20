@@ -238,7 +238,7 @@ async def test_bosses_link_logs_from_this_week():
          "players": ["Other.5678"]},
     ]
     db = subject.gw2_db()
-    db.encounters = subject.MemoryEncounters(encounters)
+    db.encounters = subject.MemoryCollection(encounters)
     embed, _ = await subject.account_command(
         "bosses", [(200, ["vale_guardian"]), (200, BOSSES_ACCOUNT)], permissions=("account", "progression"),
         raids=RAIDS, now=WEDNESDAY, db=db,

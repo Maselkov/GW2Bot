@@ -39,12 +39,12 @@ NEWS_SERVERS = {10: {"news": {"on": True, "channel": 5}}, 11: {"news": {"on": Fa
 
 
 async def test_news_posts_new_items_to_enabled_servers():
-    channel, other = subject.text_channel(5), subject.text_channel(6, guild_id=11)
+    channel, other = subject.RecordingChannel(5), subject.RecordingChannel(6, guild_id=11)
     config, _, error = await subject.run_news_checker(
         feed("New Release", "Old News"), ["Old News"], NEWS_SERVERS, [channel, other]
     )
     assert error is None
-    assert [(content, embed["title"], embed["description"]) for content, embed in channel.sent] == [
+    assert [(content, embed["title"], embed["description"]) for content, embed, _ in channel.sent] == [
         (None, "New Release", "[Click here](https://www.guildwars2.com/en/news/0/)\nAbout New Release"),
     ]
     assert other.sent == []
@@ -52,22 +52,22 @@ async def test_news_posts_new_items_to_enabled_servers():
 
 
 async def test_news_first_run_only_remembers_the_feed():
-    channel = subject.text_channel(5)
+    channel = subject.RecordingChannel(5)
     config, _, _ = await subject.run_news_checker(feed("A", "B"), [], NEWS_SERVERS, [channel])
     assert channel.sent == []
     assert config == [{"cache.news": ["A", "B"]}]
 
 
 async def test_news_filters_streams_and_showcases():
-    channel = subject.text_channel(5)
+    channel = subject.RecordingChannel(5)
     await subject.run_news_checker(
         feed("The ArenaNet Streaming Schedule", "Community Showcase: Art", "Patch"), ["Old"], NEWS_SERVERS, [channel]
     )
-    assert [embed["title"] for _, embed in channel.sent] == ["Patch"]
+    assert [embed["title"] for _, embed, _ in channel.sent] == ["Patch"]
 
 
 async def test_news_survives_a_feed_that_isnt_xml(caplog):
-    channel = subject.text_channel(5)
+    channel = subject.RecordingChannel(5)
     config, _, error = await subject.run_news_checker(
         "<html>Just a moment...</html><script>", ["Old"], NEWS_SERVERS, [channel]
     )
@@ -91,19 +91,15 @@ async def test_game_update_checker_survives_a_missing_config(caplog):
 async def test_news_mentions_the_role():
     from unittest.mock import MagicMock
 
-    channel = subject.text_channel(5)
+    channel = subject.RecordingChannel(5)
     channel.guild.get_role = lambda role_id: MagicMock(mention="<@&77>") if role_id == 77 else None
     servers = {10: {"news": {"on": True, "channel": 5, "role": 77}}}
     await subject.run_news_checker(feed("New Release"), ["Old"], servers, [channel])
-    assert [content for content, _ in channel.sent] == ["<@&77>"]
+    assert [content for content, _, _ in channel.sent] == ["<@&77>"]
 
 
 async def test_news_turns_itself_off_without_permission():
-    import discord
-    from unittest.mock import MagicMock
-
-    channel = subject.text_channel(5)
-    channel.send.side_effect = discord.Forbidden(MagicMock(status=403), "Missing Permissions")
+    channel = subject.RecordingChannel(5, can_send=False)
     _, writes, error = await subject.run_news_checker(feed("New Release"), ["Old"], NEWS_SERVERS, [channel])
     assert error is None
     assert writes == [(10, "set", {"news.on": False})]
