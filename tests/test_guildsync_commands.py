@@ -259,10 +259,9 @@ async def test_forced_account_names_loop():
     assert await subject.run_forced_account_names(server, users) == {1: "Member.3333"}
 
 
-# --- Known bugs -------------------------------------------------------------------------------------
+# --- Fixes ------------------------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="only the user's first key is checked")
 async def test_diagnose_a_user_with_several_accounts():
     from unittest.mock import MagicMock
 
@@ -274,7 +273,6 @@ async def test_diagnose_a_user_with_several_accounts():
     assert result["replies"][0].startswith("Everything seems to be in order!")
 
 
-@pytest.mark.xfail(strict=True, reason="a user without keys passes the membership check")
 async def test_diagnose_a_user_without_keys():
     from unittest.mock import MagicMock
 
@@ -285,21 +283,19 @@ async def test_diagnose_a_user_without_keys():
     assert result["replies"] == ["The provided user is not in the guild."]
 
 
-@pytest.mark.xfail(strict=True, reason="checks for an `api_key` operation that doesn't exist")
 async def test_edit_change_key_needs_a_key():
     result = await subject.guildsync_command("edit", subject.FakeServer(), syncs=[subject.guildsync_doc()],
                                              sync="GUILD-A", operation="change_key")
     assert result["replies"] == ["You must fill the API key argument to use this operation."]
 
 
-@pytest.mark.xfail(strict=True, reason="pressing a button on an expired prompt crashes")
 async def test_leader_answers_an_expired_prompt():
     result = await subject.answer_guildsync_prompt(subject.FakeServer(), True,
                                                    users={2: subject.accounts("Leader.1111")})
     assert result["reply"] == "This request has expired."
 
 
-@pytest.mark.xfail(strict=True, reason="renames everyone before replying, and names a command that doesn't exist")
 async def test_force_account_names_replies_first():
     replies, _, started = await subject.server_command("force_account_names", subject.FakeServer(), enabled=True)
     assert "`/server force_account_names enabled:False`" in replies[0]
+    assert started == ["rename"]

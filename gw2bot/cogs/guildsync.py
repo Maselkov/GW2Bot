@@ -64,6 +64,11 @@ class GuildSyncPromptUserConfirmView(discord.ui.View):
     async def handle_answer(self, interaction: discord.Interaction, answer):
         query = {"message_id": interaction.message.id}
         doc = await self.cog.db.guildsync_prompts.find_one(query)
+        if not doc:
+            # Prompts expire after three days
+            return await interaction.response.edit_message(
+                content="This request has expired.", view=None, embed=None
+            )
         if not answer:
             await self.cog.db.guildsync_prompts.delete_one(query)
             return await interaction.response.edit_message(
@@ -89,7 +94,7 @@ class GuildSyncPromptUserConfirmView(discord.ui.View):
             return await interaction.followup.send(
                 content="It seems like your key does not have the necessary "
                 "in-game permissions. Try switching your key, then try "
-                "again by removing and adding the reaction"
+                "again by pressing Confirm"
             )
         guild = self.cog.bot.get_guild(doc["guild_id"])
         if not guild:
@@ -107,7 +112,7 @@ class GuildSyncPromptUserConfirmView(discord.ui.View):
             key=key,
             destination=requesting_user,
             options=doc["options"],
-            extra_message="User {0.name}#{0.discriminator} has accepted your "
+            extra_message="User {0.name} has accepted your "
             "request for Guildsync authorization in {1.name}. "
             "Guild: {2}".format(interaction.user, guild, doc["options"]["name"]),
         )
@@ -230,7 +235,7 @@ class GuildSync(GW2Cog):
                 name = self.guild_name
             coro = self.guild.create_role(
                 name=name,
-                reason="$guildsync",
+                reason="/guildsync",
                 color=discord.Color(self.cog.embed_color),
             )
             try:
@@ -249,7 +254,7 @@ class GuildSync(GW2Cog):
             if role:
                 try:
                     coro = role.delete(
-                        reason="$guildsync - role removed " "or renamed in-game"
+                        reason="/guildsync - role removed " "or renamed in-game"
                     )
                     await asyncio.wait_for(coro, timeout=5)
                     return True
@@ -281,7 +286,7 @@ class GuildSync(GW2Cog):
                 try:
                     ranks = await self.cog.call_api(ep, key=self.key)
                 except APIForbidden:
-                    self.error = "Key has in-game leader permissions"
+                    self.error = "Key lacks in-game leader permissions"
                     return
                 except APIInvalidKey:
                     self.error = "Invalid key. Most likely deleted"
@@ -336,14 +341,14 @@ class GuildSync(GW2Cog):
 
         async def add_roles(self, roles):
             try:
-                coro = self.member.add_roles(*roles, reason="$guildsync")
+                coro = self.member.add_roles(*roles, reason="/guildsync")
                 await asyncio.wait_for(coro, timeout=5)
             except (asyncio.TimeoutError, discord.Forbidden):
                 pass
 
         async def remove_roles(self, roles):
             try:
-                coro = self.member.remove_roles(*roles, reason="$guildsync")
+                coro = self.member.remove_roles(*roles, reason="/guildsync")
                 await asyncio.wait_for(coro, timeout=5)
             except (asyncio.TimeoutError, discord.Forbidden):
                 pass
@@ -447,13 +452,10 @@ class GuildSync(GW2Cog):
                 key = user_doc.get("key")
                 if key:
                     keys.append(key)
-            for key in keys:
-                if key["account_name"] in gs.members:
-                    break
-                else:
-                    return await interaction.followup.send(
-                        "The provided user " "is not in the guild."
-                    )
+            if not any(key["account_name"] in gs.members for key in keys):
+                return await interaction.followup.send(
+                    "The provided user " "is not in the guild."
+                )
         for rank in gs.roles:
             if gs.roles[rank] > interaction.guild.me.top_role:
                 return await interaction.followup.send(
@@ -510,8 +512,8 @@ class GuildSync(GW2Cog):
             return "**OFF**"
 
         await interaction.response.defer(ephemeral=True)
-        if operation == "api_key" and not api_key:
-            return await interaction.response.send_message(
+        if operation == "change_key" and not api_key:
+            return await interaction.followup.send(
                 "You must fill the API key argument to use this operation.",
                 ephemeral=True,
             )
@@ -674,7 +676,7 @@ class GuildSync(GW2Cog):
             try:
                 embed = discord.Embed(title="Guildsync request", color=self.embed_color)
                 embed.description = (
-                    "User {0.name}#{0.discriminator} (`{0.id}`), an "
+                    "User {0.name} (`{0.id}`), an "
                     "Administrator in {0.guild.name} server (`{0.guild.id}`) "
                     "is requesting your authorization in order to enable "
                     "Guildsync for the `{1}` guild, of which you are a leader "
@@ -687,7 +689,7 @@ class GuildSync(GW2Cog):
                     )
                 )
                 embed.set_footer(
-                    text="Use the reactions below to answer. "
+                    text="Use the buttons below to answer. "
                     "If no response is given within three days this request "
                     "will expire."
                 )
@@ -750,7 +752,7 @@ class GuildSync(GW2Cog):
             return await destination.send(
                 "Cannot add guildsync. You've either reached the limit "
                 f"of {GUILDSYNC_LIMIT} active syncs, or you're trying to add "
-                "one that already exists. See $guildsync edit."
+                "one that already exists. See /guildsync edit."
             )
         await self.db.guildsyncs.insert_one(doc)
         guild_doc = await self.bot.data.guilds.get(guild.id)
@@ -882,7 +884,7 @@ class GuildSync(GW2Cog):
                     if len(member.roles) == 1 and membership_duration > 172800:
                         try:
                             await member.guild.kick(
-                                user=member, reason="$guildsync purge"
+                                user=member, reason="/guildsync purge"
                             )
                         except discord.Forbidden:
                             pass

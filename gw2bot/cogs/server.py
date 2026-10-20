@@ -56,12 +56,14 @@ class Server(GW2Cog):
                 "Forced account names disabled"
             )
         await self.bot.data.guilds.update(guild.id, {"force_account_names": True})
-        await self.force_guild_account_names(guild)
+        # Reply first: renaming a big server takes longer than an
+        # interaction may wait
         await interaction.response.send_message(
             content="Automatic account names enabled. To disable, use "
-            "`/server forceaccountnames false`\nPlease note that the "
+            "`/server force_account_names enabled:False`\nPlease note that the "
             "bot cannot change nicknames for roles above the bot."
         )
+        await self.force_guild_account_names(guild)
 
     @server_group.command(name="preview_chat_links")
     @app_commands.checks.has_permissions(manage_guild=True)
