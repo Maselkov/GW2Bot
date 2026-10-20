@@ -44,7 +44,7 @@ A behaviour that changes on purpose is called out in the PR. Anything else that 
 | [Game updates](#game-updates) (moved) | every 1 min | `cache.build`, game data caches, `updates` | channel posts | The rebuild runs inside the loop |
 | [Gem tracker](#gem-tracker) (moved) | every 5 min | `gemtrack` | DMs | Undeliverable users are retried forever |
 | [EVTC autopost](#evtc-autopost-and-uploads) (moved) | every 5 s; uploads on message | `evtc.notifications`, `encounters` | channel posts | Members who left are skipped noisily |
-| [API key role](#api-key-role-and-key) | every 5 min; `/key add` | member roles | — | `/key remove` for legacy users |
+| [API key role](#api-key-role-and-key) (moved) | every 5 min; joins; `/key add` | member roles | — | Keys aren't re-checked |
 | [Forced account names](#forced-account-names) | every 5 min | member nicknames | — | Failures are silent |
 | [Guild sync](#guild-sync) | every 60 s; member join | roles, kicks, `guildsyncs` | DMs, prompts | Heavy: a database read per member per minute |
 
@@ -263,7 +263,9 @@ moves, and updates the cog through `set_previews_enabled()`.
 
 ## API key role, and /key
 
-`guildmanage.py: key_sync_task, key_sync_guild, key_sync_user, /server api_key_role`, `key.py`.
+**Moved** to `gw2bot/cogs/keys.py` (`Keys`): `/key`, `key_sync_task` (started in `cog_load`), `key_sync_guild`,
+`key_sync_user` and an `on_member_join` listener. `/server api_key_role` stays in the old cog's `/server` group and
+asks the `Keys` cog to sync; `/key add` reaches guild sync through the old cog until guild sync moves.
 
 - **Schedule.**
   - Every 5 minutes, for each server with `key_sync.enabled`: chunks the member list, then gives `key_sync.role`
@@ -273,13 +275,13 @@ moves, and updates the cog through `set_previews_enabled()`.
 - **Known issues.**
   - *Fixed:* `/server api_key_role enabled:False` without a role crashed, so key sync couldn't be turned off.
   - *Fixed:* `/key switch` named the previous key, and crashed when no key was active.
-  - `/key remove` for a legacy user with only `key` (no `keys` list) says "No keys were removed": the
-    `key == key` check is always true.
+  - *Fixed:* `/key remove` couldn't remove a key saved before the keys list existed, and removing the active key
+    left none active.
+  - *Fixed:* the role wasn't given when a member joined, only on the next 5-minute run.
   - "Valid API key" only means "has a key"; keys aren't re-checked.
-  - The role isn't given when a member joins, only on the next 5-minute run.
 - **Tests.**
-  - Existing: `/server api_key_role` and `/key switch` (`test_server_commands.py`).
-  - To write: the role given and taken on a fake server, and `/key add`, `remove` and `info`.
+  - Existing: `/key add`, `remove`, `switch` and `info`, the autocomplete, the role sync and member joins
+    (`test_keys.py`), and `/server api_key_role` (`test_server_commands.py`).
 
 ## Forced account names
 
@@ -356,7 +358,7 @@ Least risky first. Each item is one PR.
 5. EVTC.
 6. The game data cache: `>database` and `rebuild_database` (done: `gw2bot/cogs/cache.py`; `>emojis` moved to
    `gw2bot/owner.py`).
-7. `/key` and the API key role.
+7. `/key` and the API key role (done: `gw2bot/cogs/keys.py`).
 8. Guild sync, forced account names and the rest of `/server`.
 
 The guild sync purge issue was the exception, fixed ahead of the order in #194 because it affected live servers.
