@@ -641,7 +641,11 @@ class Evtc(GW2Cog):
                         if guild := channel.guild:
                             if not guild.chunked:
                                 await guild.chunk()
-                            members = [channel.guild.me, guild.get_member(user.id)]
+                            poster = guild.get_member(user.id)
+                            if not poster:
+                                # Left that server: not posted there
+                                continue
+                            members = [channel.guild.me, poster]
                             for member in members:
                                 if not channel.permissions_for(member).embed_links:
                                     break

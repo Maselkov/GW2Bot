@@ -1,5 +1,4 @@
 """Guild commands: /guild info, members, treasury and log."""
-import asyncio
 import datetime
 
 import discord
@@ -68,9 +67,9 @@ async def guild_name_autocomplete(interaction: discord.Interaction,
         if not choices:
             cache = await cache_guild()
         else:
-            asyncio.create_task(cache_guild())
+            cog.run_in_background(cache_guild(), f"caching user {interaction.user.id}'s guilds")
     elif cache["last_update"] < utcnow() - datetime.timedelta(days=7):
-        asyncio.create_task(cache_guild())
+        cog.run_in_background(cache_guild(), f"caching user {interaction.user.id}'s guilds")
     if cache:
         choices += [
             Choice(name=guild["name"], value=guild["id"])

@@ -326,10 +326,12 @@ class GuildSync(GW2Cog):
     class SyncTarget:
 
         @classmethod
-        async def create(cls, cog, member) -> GuildSync.SyncTarget:
+        async def create(cls, cog, member, doc=None) -> GuildSync.SyncTarget:
+            """`doc` is the member's settings, if already read."""
             self = cls()
             self.member = member
-            doc = await cog.bot.data.users.get(member.id)
+            if doc is None:
+                doc = await cog.bot.data.users.get(member.id)
             keys = doc.get("keys", [])
             if not keys:
                 key = doc.get("key")
@@ -841,8 +843,9 @@ class GuildSync(GW2Cog):
         else:
             if not guild.chunked:
                 await guild.chunk()
+            users = await self.users_by_id(member.id for member in guild.members)
             for member in guild.members:
-                target = await self.SyncTarget.create(self, member)
+                target = await self.SyncTarget.create(self, member, users.get(member.id, {}))
                 if target:
                     targets.append(target)
         # Purging is only safe when every sync read its guild's members:
@@ -901,7 +904,7 @@ class GuildSync(GW2Cog):
             except asyncio.CancelledError:
                 return
             except Exception:
-                pass
+                self.log.exception("Couldn't run guild sync in server %s", doc["_id"])
 
     @guild_synchronizer.before_loop
     async def before_guild_synchronizer(self):

@@ -163,9 +163,9 @@ async def test_hotfixes_dont_mention():
 # --- Gem tracker: undeliverable users ------------------------------------------------------------
 
 
-async def test_gem_tracker_keeps_users_it_cant_dm():
-    # Closed DMs (9xx in the fake) are retried on the next run
+async def test_gem_tracker_users_it_cant_dm_dont_stop_the_others():
+    # Closed DMs (9xx in the fake) stop tracking for that user
     sent, writes, error = await subject.run_gem_tracker([PRICE], {950: 1_100_000, 1: 1_100_000})
     assert error is None
     assert [user for user, _ in sent] == [1]
-    assert writes == [(1, "set", {"gemtrack": None})]
+    assert sorted(writes) == [(1, "set", {"gemtrack": None}), (950, "set", {"gemtrack": None})]

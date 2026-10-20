@@ -428,7 +428,7 @@ class Daily(GW2Cog):
                     pass
 
         async for doc in cursor:
-            asyncio.create_task(notify_guild(doc))
+            self.run_in_background(notify_guild(doc), f"posting dailies to server {doc['_id']}")
             await asyncio.sleep(0.1)
 
     @send_daily_notifs.error

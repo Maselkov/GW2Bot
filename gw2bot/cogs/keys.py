@@ -264,6 +264,8 @@ class Keys(GW2Cog):
         async for doc in self.bot.data.guilds.find({"key_sync.enabled": True}):
             try:
                 guild = self.bot.get_guild(doc["_id"])
+                if not guild:
+                    continue
                 role = guild.get_role(doc["key_sync"]["role"])
                 if not role:
                     continue
@@ -271,7 +273,7 @@ class Keys(GW2Cog):
             except asyncio.CancelledError:
                 return
             except Exception:
-                pass
+                self.log.exception("Couldn't sync the API key role in server %s", doc["_id"])
 
     async def key_sync_guild(self, guild: discord.Guild, role=None):
         if not role:
@@ -288,10 +290,13 @@ class Keys(GW2Cog):
             return
         if not guild.chunked:
             await guild.chunk()
+        users = await self.users_by_id(member.id for member in guild.members)
         for member in guild.members:
-            await self.key_sync_user(member, role)
+            await self.key_sync_user(member, role, user_doc=users.get(member.id, {}))
 
-    async def key_sync_user(self, member, role=None):
+    async def key_sync_user(self, member, role=None, *, user_doc=None):
+        """Give or take `member`'s API key role. `user_doc` is their
+        settings, if already read."""
         guild = member.guild
         if not guild.me.guild_permissions.manage_roles:
             return
@@ -303,7 +308,8 @@ class Keys(GW2Cog):
             role = guild.get_role(doc["key_sync"]["role"])
         if not role:
             return
-        user_doc = await self.bot.data.users.get(member.id)
+        if user_doc is None:
+            user_doc = await self.bot.data.users.get(member.id)
         has_key = False
         if user_doc.get("key", {}).get("key"):
             has_key = True
