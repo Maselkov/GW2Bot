@@ -1,14 +1,31 @@
+"""API keys: /key add, remove, switch and info, and the role servers give to
+members with a key (/server api_key_role)."""
+import asyncio
+import logging
 import re
 
 import discord
 from discord import app_commands
 from discord.app_commands import Choice
-from .exceptions import APIError, APIInactiveError
+from discord.ext import commands, tasks
+
+from ..gw2api.errors import APIError, APIInactiveError
+from .base import GW2Cog
 
 
-class KeyMixin:
+class Keys(GW2Cog):
 
     key_group = app_commands.Group(name="key", description="API key management")
+
+    def __init__(self, bot):
+        super().__init__(bot)
+        self.log = logging.getLogger(__name__)
+
+    async def cog_load(self):
+        self.key_sync_task.start()
+
+    async def cog_unload(self):
+        self.key_sync_task.cancel()
 
     @key_group.command(name="add")
     @app_commands.describe(
@@ -85,7 +102,10 @@ class KeyMixin:
         await interaction.followup.send(output)
         try:
             if interaction.guild:
-                await self.guildsync_on_member_join(interaction.user)
+                # Guild sync is still the old cog's
+                guild_sync = self.bot.get_cog("GuildWars2")
+                if guild_sync:
+                    await guild_sync.guildsync_on_member_join(interaction.user)
                 await self.key_sync_user(interaction.user)
                 return
             # Disabled for now while chunking is further investigated
@@ -127,19 +147,24 @@ class KeyMixin:
         await interaction.response.defer(ephemeral=True)
         doc = await self.bot.data.users.get(interaction.user.id)
         keys = doc.get("keys", [])
-        key = doc.get("key", {})
-        to_keep = []
-        if key.get("key") == token:
-            key = {}
-        for k in keys:
-            if k["key"] != token:
-                to_keep.append(k)
-        if key == key and to_keep == keys:
+        active = doc.get("key", {})
+        to_keep = [k for k in keys if k["key"] != token]
+        removed_active = active.get("key") == token
+        if not removed_active and to_keep == keys:
             return await interaction.followup.send(
                 "No keys were removed. Invalid token"
             )
-        await self.bot.data.users.update(interaction.user.id, {"key": key, "keys": to_keep})
-        await interaction.followup.send("Key removed.")
+        message = "Key removed."
+        if removed_active:
+            # Keep a key active while there are any left
+            active = to_keep[0] if to_keep else {}
+            if active:
+                name = active["account_name"]
+                if active.get("name"):
+                    name += " - " + active["name"]
+                message += f" Your active key is now {name}."
+        await self.bot.data.users.update(interaction.user.id, {"key": active, "keys": to_keep})
+        await interaction.followup.send(message)
 
     @key_group.command(name="info")
     async def key_info(self, interaction: discord.Interaction):
@@ -234,3 +259,80 @@ class KeyMixin:
             text=self.bot.user.name, icon_url=self.bot.user.display_avatar.url
         )
         return embed
+
+    @tasks.loop(minutes=5)
+    async def key_sync_task(self):
+        async for doc in self.bot.data.guilds.find({"key_sync.enabled": True}):
+            try:
+                guild = self.bot.get_guild(doc["_id"])
+                role = guild.get_role(doc["key_sync"]["role"])
+                if not role:
+                    continue
+                await self.key_sync_guild(guild, role)
+            except asyncio.CancelledError:
+                return
+            except Exception:
+                pass
+
+    async def key_sync_guild(self, guild: discord.Guild, role=None):
+        if not role:
+            doc = await self.bot.data.guilds.get(guild.id)
+            enabled = doc.get("key_sync", {}).get("enabled")
+            if not enabled:
+                return
+            role = guild.get_role(doc["key_sync"]["role"])
+        if not role:
+            return
+        doc = await self.bot.data.guilds.get(guild.id)
+        role = guild.get_role(doc["key_sync"]["role"])
+        if not role:
+            return
+        if not guild.chunked:
+            await guild.chunk()
+        for member in guild.members:
+            await self.key_sync_user(member, role)
+
+    async def key_sync_user(self, member, role=None):
+        guild = member.guild
+        if not guild.me.guild_permissions.manage_roles:
+            return
+        if not role:
+            doc = await self.bot.data.guilds.get(guild.id)
+            enabled = doc.get("key_sync", {}).get("enabled")
+            if not enabled:
+                return
+            role = guild.get_role(doc["key_sync"]["role"])
+        if not role:
+            return
+        user_doc = await self.bot.data.users.get(member.id)
+        has_key = False
+        if user_doc.get("key", {}).get("key"):
+            has_key = True
+        try:
+            if has_key:
+                if role not in member.roles:
+                    await member.add_roles(role, reason="/server api_key_role")
+            else:
+                if role in member.roles:
+                    await member.remove_roles(
+                        role,
+                        reason="/server api_key_role is enabled. Member "
+                        "lacks a valid API key.",
+                    )
+        except discord.Forbidden:
+            return
+
+    @commands.Cog.listener()
+    async def on_member_join(self, member):
+        """Give the API key role right away, not on the next run."""
+        if member.bot:
+            return
+        await self.key_sync_user(member)
+
+    @key_sync_task.before_loop
+    async def before_key_sync_task(self):
+        await self.bot.wait_until_ready()
+
+
+async def setup(bot):
+    await bot.add_cog(Keys(bot))

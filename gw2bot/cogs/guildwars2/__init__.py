@@ -8,13 +8,11 @@ from ..base import GW2Cog
 from .guild import GuildSync
 from .guild.sync import GuildSyncPromptUserConfirmView
 from .guildmanage import GuildManageMixin
-from .key import KeyMixin
 
 class GuildWars2(
     GW2Cog,
     GuildSync,
     GuildManageMixin,
-    KeyMixin,
 ):
     """Guild Wars 2 commands"""
 
@@ -27,7 +25,6 @@ class GuildWars2(
         self.tasks = [
             self.guild_synchronizer,
             self.forced_account_names,
-            self.key_sync_task,
         ]
         for task in self.tasks:
             task.start()

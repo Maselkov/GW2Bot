@@ -1681,8 +1681,11 @@ async def api_key_role(**options):
 
         cog = Cog(session, users)
         cog.bot.data.guilds = guilds
-        cog.key_sync_guild = AsyncMock()
-        cogs.append(cog)
+        # The role sync is the Keys cog's
+        keys = MagicMock()
+        keys.key_sync_guild = AsyncMock()
+        cog.bot.get_cog = {"Keys": keys}.get
+        cogs.append(keys)
         return cog
 
     def in_server(interaction):
@@ -1696,17 +1699,11 @@ async def api_key_role(**options):
 async def switch_key(stored, token):
     """Run /key switch for a user whose settings are `stored`. Returns
     (reply, settings writes)."""
-    from gw2bot.cogs.guildwars2.key import KeyMixin
+    from gw2bot.cogs.keys import Keys
 
     users = MemoryUsers({1: stored})
-
-    def cog_for(session, _):
-        class Cog(KeyMixin, _Harness):
-            pass
-
-        return Cog(session, users)
-
-    sent, _ = await run_command(cog_for, KeyMixin.key_switch, [], permissions=(), users=users, token=token)
+    sent, _ = await run_command(lambda session, _: Keys(_fake_bot(session, users)), Keys.key_switch, [],
+                                permissions=(), users=users, token=token)
     return sent, users.writes
 
 
@@ -2278,3 +2275,113 @@ async def rebuild_cache(*, failing=(), owner_cached=True):
         "indexes": {name: c.indexes for name, c in cog.db.collections.items() if c.indexes},
         "error": error,
     }
+
+
+# --- API keys --------------------------------------------------------------------------------
+
+def api_key(token, account="Example.1234", name="", permissions=("account", "characters")):
+    return {"key": token, "account_name": account, "name": name, "permissions": list(permissions)}
+
+
+async def key_command(command, stored, responses=(), *, in_guild=False, **options):
+    """Run /key add, remove, switch or info for user 1 with settings
+    `stored`. Returns (reply, settings writes, the other cogs' syncs run
+    for the user: ["guildsync", "key role"])."""
+    from unittest.mock import AsyncMock
+
+    from gw2bot.cogs.keys import Keys
+
+    handler = getattr(Keys, "key_" + command)
+    users = MemoryUsers({1: stored})
+    syncs = []
+
+    def cog_for(session, _):
+        cog = Keys(_fake_bot(session, users))
+
+        async def guildsync(member):
+            syncs.append("guildsync")
+
+        async def key_role(member, role=None):
+            syncs.append("key role")
+
+        # Guild sync is the old cog's
+        guild_sync = SimpleNamespace(guildsync_on_member_join=guildsync)
+        cog.bot.get_cog = {"GuildWars2": guild_sync}.get
+        cog.key_sync_user = key_role
+        return cog
+
+    def where(interaction):
+        if not in_guild:
+            interaction.guild = None
+
+    sent, _ = await run_command(cog_for, handler, list(responses) or [(500, {})], permissions=(), users=users,
+                                on_interaction=where, **options)
+    return sent, users.writes, syncs
+
+
+async def key_choices(stored, current=""):
+    """The key autocomplete for a user with settings `stored`, as (name, value)."""
+    from gw2bot.cogs.keys import Keys
+
+    cog = Keys(_fake_bot(None, MemoryUsers({1: stored})))
+    interaction = MagicMock()
+    interaction.user.id = 1
+    return [(c.name, c.value) for c in await cog.key_autocomplete(interaction, current)]
+
+
+def server_member(member_id, *roles):
+    """A member with `roles`; role changes are recorded in member.changes."""
+    from unittest.mock import AsyncMock
+
+    member = MagicMock(id=member_id, bot=False)
+    member.roles = list(roles)
+    member.changes = []
+
+    async def add_roles(*added, reason=None):
+        member.changes.append(("add", [r.id for r in added]))
+
+    async def remove_roles(*removed, reason=None):
+        member.changes.append(("remove", [r.id for r in removed]))
+
+    member.add_roles = AsyncMock(side_effect=add_roles)
+    member.remove_roles = AsyncMock(side_effect=remove_roles)
+    return member
+
+
+async def run_key_role_sync(members, users, *, settings=None, role_exists=True, can_manage_roles=True):
+    """One run of the 5-minute API key role sync on server 10, whose
+    `key_sync` settings are `settings` (default: on, role 77). `users` are
+    settings by member id. Returns {member id: role changes}."""
+    from unittest.mock import AsyncMock
+
+    from gw2bot.cogs.keys import Keys
+
+    cog = Keys(_fake_bot(None, MemoryUsers(users)))
+    role = KEY_ROLE
+    guild = MagicMock(id=10, chunked=True, members=members)
+    guild.get_role = lambda role_id: role if role_exists and role_id == 77 else None
+    guild.me.guild_permissions.manage_roles = can_manage_roles
+    for member in members:
+        member.guild = guild
+    cog.bot.data.guilds = MemoryGuilds({10: {"key_sync": settings or {"enabled": True, "role": 77}}})
+    cog.bot.get_guild = {10: guild}.get
+    await type(cog).key_sync_task.coro(cog)
+    return {m.id: m.changes for m in members}
+
+
+KEY_ROLE = MagicMock(id=77)
+
+
+async def member_joins(member, users, *, settings=None):
+    """A member joins server 10 (API key role 77 per `settings`). Returns
+    their role changes."""
+    from gw2bot.cogs.keys import Keys
+
+    cog = Keys(_fake_bot(None, MemoryUsers(users)))
+    guild = MagicMock(id=10)
+    guild.get_role = lambda role_id: KEY_ROLE if role_id == 77 else None
+    guild.me.guild_permissions.manage_roles = True
+    member.guild = guild
+    cog.bot.data.guilds = MemoryGuilds({10: {"key_sync": settings or {"enabled": True, "role": 77}}})
+    await type(cog).on_member_join(cog, member)
+    return member.changes
