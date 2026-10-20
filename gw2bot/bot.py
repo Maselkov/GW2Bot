@@ -20,6 +20,12 @@ from .keys import ApiKeys
 
 log = logging.getLogger(__name__)
 
+# Caches and settings in the config document the cogs expect
+CONFIG_DEFAULTS = {
+    "cache": {"news": [], "build": 0, "dailies": {}, "dailies_tomorrow": {}},
+    "emojis": {},
+}
+
 # Modules in gw2bot/cogs that aren't extensions
 NOT_EXTENSIONS = {"base"}
 
@@ -89,6 +95,7 @@ class GW2Bot(commands.AutoShardedBot):
         report = await migrate(self.data.client, self.settings.migrate_from_db, self.settings.mongo_db)
         log.info(report.summary())
         await self.data.ensure_indexes()
+        await self.data.config.ensure_defaults(CONFIG_DEFAULTS)
         await self.gw2_emojis.load()
         for extension in extensions():
             await self.load_extension(extension)

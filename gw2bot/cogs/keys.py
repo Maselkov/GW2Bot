@@ -102,8 +102,7 @@ class Keys(GW2Cog):
         await interaction.followup.send(output)
         try:
             if interaction.guild:
-                # Guild sync is still the old cog's
-                guild_sync = self.bot.get_cog("GuildWars2")
+                guild_sync = self.bot.get_cog("GuildSync")
                 if guild_sync:
                     await guild_sync.guildsync_on_member_join(interaction.user)
                 await self.key_sync_user(interaction.user)

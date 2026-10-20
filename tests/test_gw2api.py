@@ -8,7 +8,7 @@ import pytest
 
 import subject
 from conftest import ROOT
-from gw2bot.cogs.guildwars2.exceptions import (
+from gw2bot.gw2api.errors import (
     APIConnectionError,
     APIRateLimited,
     APIUnavailable,

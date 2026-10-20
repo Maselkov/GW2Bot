@@ -60,10 +60,8 @@ def _fake_bot(session=None, users=None):
     return bot
 
 
-class _Harness(
-    GW2Cog,
-):
-    """Just enough of the cog's state for its non-Discord logic to run."""
+class _Harness(GW2Cog):
+    """A cog with what every cog shares, for the shared logic."""
 
     def __init__(self, session=None, users=None):
         super().__init__(_fake_bot(session, users))
@@ -657,16 +655,12 @@ class SettingsCommands:
 
         from gw2bot.cogs.chatlinks import ChatLinks
         from gw2bot.cogs.evtc import Evtc
-        from gw2bot.cogs.guildwars2.guildmanage import GuildManageMixin
-
-        class Cog(GuildManageMixin):
-            pass
+        from gw2bot.cogs.server import Server
 
         bot = MagicMock()
         bot.data.guilds = self.guilds
         bot.data.channels = self.channels
-        self.cog = Cog()
-        self.cog.bot = bot
+        self.cog = Server(bot)
         self.cog.force_guild_account_names = AsyncMock()
         self.evtc = Evtc(bot)
         self.previews = ChatLinks(bot)
@@ -1397,15 +1391,12 @@ async def run_guildsync(members, accounts, responses, *, syncs=1, purge=True):
     members kicked."""
     from unittest.mock import AsyncMock
 
-    from gw2bot.cogs.guildwars2.guild import GuildSync
-
-    class Cog(GuildSync, _Harness):
-        pass
+    from gw2bot.cogs.guildsync import GuildSync
 
     users = MemoryUsers({member_id: stored_key(["account", "guilds"], account_name=name)
                          for member_id, name in accounts.items()})
     session = FakeSession(*responses)
-    cog = Cog(session, users)
+    cog = GuildSync(_fake_bot(session, users))
     guild = MagicMock(id=10, chunked=True, members=members)
     guild.kick = AsyncMock()
     guild.get_role = lambda role_id: None
@@ -1681,16 +1672,13 @@ async def api_key_role(**options):
     writes, whether a sync of the server's roles started)."""
     from unittest.mock import AsyncMock
 
-    from gw2bot.cogs.guildwars2.guildmanage import GuildManageMixin
+    from gw2bot.cogs.server import Server
 
     guilds = MemoryGuilds({})
     cogs = []
 
     def cog_for(session, users):
-        class Cog(GuildManageMixin, _Harness):
-            pass
-
-        cog = Cog(session, users)
+        cog = Server(_fake_bot(session, users))
         cog.bot.data.guilds = guilds
         # The role sync is the Keys cog's
         keys = MagicMock()
@@ -1702,7 +1690,7 @@ async def api_key_role(**options):
     def in_server(interaction):
         interaction.guild.id = 10
 
-    sent, _ = await run_command(cog_for, GuildManageMixin.server_key_sync, [], permissions=(),
+    sent, _ = await run_command(cog_for, Server.server_key_sync, [], permissions=(),
                                 on_interaction=in_server, **options)
     return sent, guilds.writes, cogs[0].key_sync_guild.await_count == 1
 
@@ -1721,7 +1709,7 @@ async def switch_key(stored, token):
 async def can_add_guildsync(existing, in_game_guild_id="NEW"):
     """Whether a server with `existing` guild syncs (in-game guild ids) can
     add one for `in_game_guild_id`."""
-    from gw2bot.cogs.guildwars2.guild import GuildSync
+    from gw2bot.cogs.guildsync import GuildSync
 
     class Syncs:
         async def find_one(self, query):
@@ -1730,10 +1718,7 @@ async def can_add_guildsync(existing, in_game_guild_id="NEW"):
         async def count_documents(self, query):
             return len(existing)
 
-    class Cog(GuildSync, _Harness):
-        pass
-
-    cog = Cog()
+    cog = GuildSync(_fake_bot())
     cog.db = SimpleNamespace(guildsyncs=Syncs())
     return await cog.can_add_sync(MagicMock(id=10), in_game_guild_id)
 
@@ -2315,9 +2300,8 @@ async def key_command(command, stored, responses=(), *, in_guild=False, **option
         async def key_role(member, role=None):
             syncs.append("key role")
 
-        # Guild sync is the old cog's
         guild_sync = SimpleNamespace(guildsync_on_member_join=guildsync)
-        cog.bot.get_cog = {"GuildWars2": guild_sync}.get
+        cog.bot.get_cog = {"GuildSync": guild_sync}.get
         cog.key_sync_user = key_role
         return cog
 
@@ -2503,13 +2487,10 @@ def guildsync_doc(gid="GUILD-A", *, ranks=True, tag=True, rank_roles=None, tag_r
 def _guildsync_cog(server, users, responses, syncs, *, settings=None, prompts=()):
     from unittest.mock import AsyncMock
 
-    from gw2bot.cogs.guildwars2.guild import GuildSync
-
-    class Cog(GuildSync, _Harness):
-        pass
+    from gw2bot.cogs.guildsync import GuildSync
 
     session = FakeSession(*(responses or [(500, {})]))
-    cog = Cog(session, MemoryUsers(users))
+    cog = GuildSync(_fake_bot(session, MemoryUsers(users)))
     cog.db = SimpleNamespace(guildsyncs=MemoryCollection(syncs), guildsync_prompts=MemoryCollection(prompts))
     guilds = MemoryGuilds({server.id: settings if settings is not None else {"guildsync": {"enabled": True}}})
     cog.bot.data.guilds = guilds
@@ -2559,7 +2540,7 @@ async def guildsync_command(command, server, *, users=None, responses=(), syncs=
 
     import discord
 
-    from gw2bot.cogs.guildwars2.guild import GuildSync
+    from gw2bot.cogs.guildsync import GuildSync
 
     handler = {"add": GuildSync.guildsync_add, "edit": GuildSync.guildsync_edit, "toggle": GuildSync.sync_toggle,
                "purge": GuildSync.sync_purge, "diagnose": GuildSync.guildsync_diagnose}[command]
@@ -2607,7 +2588,7 @@ async def answer_guildsync_prompt(server, answer, *, users, responses=(), prompt
     deleted}."""
     from unittest.mock import AsyncMock
 
-    from gw2bot.cogs.guildwars2.guild.sync import GuildSyncPromptUserConfirmView
+    from gw2bot.cogs.guildsync import GuildSyncPromptUserConfirmView
 
     cog, session = _guildsync_cog(server, users, responses, syncs, prompts=prompts)
     requester = MagicMock(id=1, discriminator="0")
@@ -2639,19 +2620,16 @@ async def server_command(command, server, *, users=None, settings=None, response
     work started: ["rename", "guildsync"])."""
     from unittest.mock import AsyncMock
 
-    from gw2bot.cogs.guildwars2.guildmanage import GuildManageMixin
+    from gw2bot.cogs.server import Server
 
-    handler = {"force_account_names": GuildManageMixin.server_force_account_names,
-               "sync_now": GuildManageMixin.sync_now, "default_guild": GuildManageMixin.guild_default}[command]
+    handler = {"force_account_names": Server.server_force_account_names,
+               "sync_now": Server.sync_now, "default_guild": Server.guild_default}[command]
     started = []
     guilds = MemoryGuilds({server.id: settings or {}})
     holder = []
 
     def cog_for(session, _):
-        class Cog(GuildManageMixin, _Harness):
-            pass
-
-        cog = Cog(session, MemoryUsers(users or {}))
+        cog = Server(_fake_bot(session, MemoryUsers(users or {})))
         cog.bot.data.guilds = guilds
 
         async def rename(guild):
@@ -2661,7 +2639,7 @@ async def server_command(command, server, *, users=None, settings=None, response
             started.append("guildsync")
 
         cog.force_guild_account_names = rename
-        cog.guildsync_now = guildsync
+        cog.bot.get_cog = {"GuildSync": SimpleNamespace(guildsync_now=guildsync)}.get
         return cog
 
     def in_server(interaction):
@@ -2682,12 +2660,9 @@ async def run_forced_account_names(server, users):
     {member id: new nickname} for members renamed."""
     from unittest.mock import AsyncMock
 
-    from gw2bot.cogs.guildwars2.guildmanage import GuildManageMixin
+    from gw2bot.cogs.server import Server
 
-    class Cog(GuildManageMixin, _Harness):
-        pass
-
-    cog = Cog(None, MemoryUsers(users))
+    cog = Server(_fake_bot(None, MemoryUsers(users)))
     cog.bot.data.guilds = MemoryGuilds({server.id: {"force_account_names": True}})
     cog.bot.get_guild = {server.id: server}.get
     renamed = {}

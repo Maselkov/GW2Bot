@@ -1,5 +1,9 @@
+"""Guild sync: in-game guild ranks and membership as Discord roles, the
+optional purge of members in no synced guild, and /guildsync."""
 from __future__ import annotations
+
 import asyncio
+import logging
 from datetime import datetime
 
 import discord
@@ -9,7 +13,8 @@ from discord.ext import commands, tasks
 
 from gw2bot.utils.db import prepare_search
 
-from ..exceptions import APIError, APIForbidden, APIInvalidKey, APIKeyError, APINotFound
+from ..gw2api.errors import APIError, APIForbidden, APIInvalidKey, APIKeyError, APINotFound
+from .base import GW2Cog
 
 PROMPT_EMOJIS = ["✅", "❌"]
 GUILDSYNC_LIMIT = 8
@@ -136,8 +141,7 @@ class GuildSyncPromptUserConfirmView(discord.ui.View):
         return await self.handle_answer(interaction, False)
 
 
-class GuildSync:
-    # The good ol switcheroo
+class GuildSync(GW2Cog):
 
     @app_commands.guild_only()
     @app_commands.default_permissions(
@@ -151,6 +155,18 @@ class GuildSync:
         pass
 
     guildsync_group = GuildsyncGroup(guild_only=True)
+
+    def __init__(self, bot):
+        super().__init__(bot)
+        self.log = logging.getLogger(__name__)
+
+    async def cog_load(self):
+        # Authorization prompts' buttons keep working across restarts
+        self.bot.add_view(GuildSyncPromptUserConfirmView(self))
+        self.guild_synchronizer.start()
+
+    async def cog_unload(self):
+        self.guild_synchronizer.cancel()
 
     class SyncGuild:
 
@@ -872,18 +888,6 @@ class GuildSync:
                             pass
 
     @tasks.loop(seconds=60)
-    async def guildsync_consumer(self):
-        while True:
-            _, coro = await self.guildsync_queue.get()
-            await asyncio.wait_for(coro, timeout=300)
-            self.guildsync_queue.task_done()
-            await asyncio.sleep(0.5)
-
-    @guildsync_consumer.before_loop
-    async def before_guildsync_consumer(self):
-        await self.bot.wait_until_ready()
-
-    @tasks.loop(seconds=60)
     async def guild_synchronizer(self):
         cursor = self.bot.data.guilds.find({"guildsync.enabled": True}, batch_size=10)
         async for doc in cursor:
@@ -901,11 +905,6 @@ class GuildSync:
     async def before_guild_synchronizer(self):
         await self.bot.wait_until_ready()
 
-    def schedule_guildsync(self, guild, priority, *, member=None):
-        coro = self.run_guildsyncs(guild, sync_for=member)
-        self.guildsync_entry_number += 1
-        self.guildsync_queue.put_nowait(((priority, self.guildsync_entry_number), coro))
-
     @commands.Cog.listener("on_member_join")
     async def guildsync_on_member_join(self, member):
         if member.bot:
@@ -916,3 +915,7 @@ class GuildSync:
         enabled = sync.get("enabled", False)
         if enabled:
             await self.run_guildsyncs(guild, sync_for=member)
+
+
+async def setup(bot):
+    await bot.add_cog(GuildSync(bot))
