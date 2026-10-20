@@ -40,9 +40,9 @@ A behaviour that changes on purpose is called out in the PR. Anything else that 
 | [Event reminders](#event-reminders) (moved) | every 10 s | `event_reminders` | DMs | Users with closed DMs are retried forever |
 | [Boss notifier](#boss-notifier) (moved) | before each world boss | `bossnotifs.message` | channel posts | Failures are silent |
 | [Chat link previews](#chat-link-previews) (moved) | every message | `statistics.link_previews` | replies | Uncached POIs show nothing |
-| [News](#news) | every 3 min | `cache.news`, `news.on` | channel posts | Items whose title changes are posted again |
-| [Game updates](#game-updates) | every 1 min | `cache.build`, game data caches, `updates` | channel posts | The rebuild runs inside the loop |
-| [Gem tracker](#gem-tracker) | every 5 min | `gemtrack` | DMs | Undeliverable users are retried forever |
+| [News](#news) (moved) | every 3 min | `cache.news`, `news.on` | channel posts | Items whose title changes are posted again |
+| [Game updates](#game-updates) (moved) | every 1 min | `cache.build`, game data caches, `updates` | channel posts | The rebuild runs inside the loop |
+| [Gem tracker](#gem-tracker) (moved) | every 5 min | `gemtrack` | DMs | Undeliverable users are retried forever |
 | [EVTC autopost](#evtc-autopost-and-uploads) | every 5 s; uploads on message | `evtc.notifications`, `encounters` | channel posts | "name#0" in footers |
 | [API key role](#api-key-role-and-key) | every 5 min; `/key add` | member roles | — | `/key remove` for legacy users |
 | [Forced account names](#forced-account-names) | every 5 min | member nicknames | — | Failures are silent |
@@ -52,8 +52,8 @@ A behaviour that changes on purpose is called out in the PR. Anything else that 
 
 **Moved** to `gw2bot/cogs/daily.py` (`Daily`): `send_daily_notifs`, `refresh_dailies`, `cache_dailies`, `/daily`
 and `daily_embed`. The cog starts its loops in `cog_load`. Set up with `/notifier daily` (channel, categories
-dropdown, pin, behaviour: none / autodelete / autoedit). That command stays in the old cog's `/notifier` group until
-the notifiers move, and gets its example notification from the `Daily` cog.
+dropdown, pin, behaviour: none / autodelete / autoedit), in the `Notifiers` cog; it gets its example notification
+from the `Daily` cog.
 
 - **Schedule.**
   - `refresh_dailies` runs every 15 minutes and caches today's and tomorrow's rotation in `config.cache.dailies`
@@ -109,7 +109,7 @@ with `/reminder event` (event name, minutes before, 0–60).
 ## Boss notifier
 
 **Moved** to `gw2bot/cogs/events.py` (`Events`): `boss_notifier`. Set up with `/notifier bosses` (channel,
-behaviour: delete (default) / edit), which stays in the old cog's `/notifier` group until it moves.
+behaviour: delete (default) / edit), in the `Notifiers` cog. *Fixed:* `enabled:False` with a channel enabled it.
 
 - **Schedule.** Every 5 minutes, but each run sleeps until the next world boss spawns plus 1 s. In practice it
   posts once per boss slot.
@@ -159,7 +159,8 @@ moves, and updates the cog through `set_previews_enabled()`.
 
 ## News
 
-`notifiers.py: news_checker, check_news, send_news`. Set up with `/notifier news` (channel, optional role).
+**Moved** to `gw2bot/cogs/notifiers.py` (`Notifiers`): `news_checker`, `check_news`, `send_news`. Set up with
+`/notifier news` (channel, optional role).
 
 - **Schedule.** Every 3 minutes.
 - **Behaviour.**
@@ -172,14 +173,17 @@ moves, and updates the cog through `set_previews_enabled()`.
 - **Known issues.**
   - *Fixed:* a feed response that isn't XML (an error or challenge page) stopped the loop. It's logged now.
   - Items whose title changes are posted again.
+  - *Fixed:* `/notifier news enabled:False` with a channel enabled it.
 - **Tests.**
-  - Existing: the first run posting nothing, new items, filtering, and a non-XML response (`test_notifiers.py`).
-  - To write: the role mention, and `Forbidden` turning news off.
+  - Existing: the first run posting nothing, new items, filtering, the role mention, `Forbidden` turning news off,
+    and a non-XML response (`test_notifiers.py`); `/notifier news` (`test_notifier_commands.py`).
 
 ## Game updates
 
-`notifiers.py: game_update_checker, game_build_changed, send_update_notifs, update_notification`,
-`update_notes.py`, `database.py: rebuild_database`. Set up with `/notifier update` (channel, optional role).
+**Moved** to `gw2bot/cogs/notifiers.py` (`Notifiers`): `game_update_checker`, `game_build_changed`,
+`send_update_notifs`, `update_notification`; the parser is `gw2bot/utils/update_notes.py`. The rebuild
+(`database.py: rebuild_database`) is still the old cog's, called through `bot.get_cog("GuildWars2")`. Set up with
+`/notifier update` (channel, optional role).
 
 - **Schedule.** Every minute.
 - **Behaviour.**
@@ -203,12 +207,12 @@ moves, and updates the cog through `set_previews_enabled()`.
 - **Tests.**
   - Existing: notes parsing and which posts to send (`test_update_notes.py`, 18 tests); a bad build page or
     missing config (`test_notifiers.py`).
-  - To write: the build check (changed / unchanged / bad page), sending to servers (mention or none, minor
-    posts, text without embed permission), and the rebuild's status and owner DM using a fake API.
+    The build check, sending to servers (mention, hotfixes, text without embed permission) are covered too.
+  - To write: the rebuild's status and owner DM using a fake API (with the game data cache's move).
 
 ## Gem tracker
 
-`notifiers.py: gem_tracker`, `/gem track` (`commerce.py`).
+**Moved** to `gw2bot/cogs/notifiers.py` (`Notifiers`): `gem_tracker`. Set up with `/gem track` (`commerce.py`).
 
 - **Schedule.** Every 5 minutes.
 - **Behaviour.** Fetches the price of 400 gems (`commerce.gem_price`). For each user whose `gemtrack` is above
@@ -221,7 +225,7 @@ moves, and updates the cog through `set_previews_enabled()`.
 - **Tests.**
   - Existing: `/gem track` and `gem_price` (`test_commerce.py`); notifying and clearing, and an API error
     (`test_notifiers.py`).
-  - To write: closed DMs and users the bot can't see.
+    Users it can't DM are kept and retried (`test_notifiers.py`).
 
 ## EVTC autopost and uploads
 
@@ -274,7 +278,7 @@ moves, and updates the cog through `set_previews_enabled()`.
 
 ## Forced account names
 
-`notifiers.py: forced_account_names`, `guildmanage.py: force_guild_account_names`,
+`guildmanage.py: forced_account_names, force_guild_account_names`,
 `/server force_account_names`.
 
 - **Schedule.** Every 5 minutes, for each server with `force_account_names`: every cached member with a key whose
@@ -345,7 +349,9 @@ Least risky first. Each item is one PR.
 3. Chat link previews and `/server preview_chat_links`.
 4. News, game updates, the gem tracker and the `/notifier` commands.
 5. EVTC.
-6. `/key` and the API key role.
-7. Guild sync, forced account names and the rest of `/server`.
+6. The game data cache: `database.py`'s owner `>database` commands and `rebuild_database`, which game updates
+   trigger.
+7. `/key` and the API key role.
+8. Guild sync, forced account names and the rest of `/server`.
 
 The guild sync purge issue was the exception, fixed ahead of the order in #194 because it affected live servers.

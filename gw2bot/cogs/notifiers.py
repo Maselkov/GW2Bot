@@ -1,22 +1,24 @@
+"""Server notifiers: the /notifier group, and the news, game update and gem
+price checks."""
 import asyncio
-import datetime
-import json
+import logging
 import unicodedata
 import xml.etree.ElementTree as et
 
 import aiohttp
-
 import discord
 from bs4 import BeautifulSoup
 from discord import app_commands
 from discord.app_commands import Choice
 from discord.ext import tasks
 
-from ..commerce import gem_price
-from . import update_notes
-from ..daily import DAILY_CATEGORIES
-from .exceptions import APIError
+from gw2bot.utils import update_notes
 from gw2bot.utils.markdown import html_to_markdown
+
+from ..gw2api.errors import APIError
+from .base import GW2Cog
+from .commerce import gem_price
+from .daily import DAILY_CATEGORIES
 
 
 class DailyCategoriesDropdown(discord.ui.Select):
@@ -47,8 +49,7 @@ class DailyCategoriesDropdown(discord.ui.Select):
         self.view.selected_options = self.values
         await interaction.response.defer(ephemeral=True)
         categories = self.values
-        # The Daily cog builds the example until /notifier moves out of this
-        # cog too (a command group can't span cogs)
+        # The example notification is the Daily cog's
         daily = self.cog.bot.get_cog("Daily")
         try:
             embed = await daily.daily_embed(categories, interaction=interaction) if daily else None
@@ -78,7 +79,21 @@ class DailyCategoriesDropdown(discord.ui.Select):
         self.view.stop()
 
 
-class NotiifiersMixin:
+class Notifiers(GW2Cog):
+
+    def __init__(self, bot):
+        super().__init__(bot)
+        self.log = logging.getLogger(__name__)
+
+    async def cog_load(self):
+        self.news_checker.start()
+        self.game_update_checker.start()
+        self.gem_tracker.start()
+
+    async def cog_unload(self):
+        self.news_checker.cancel()
+        self.game_update_checker.cancel()
+        self.gem_tracker.cancel()
     @app_commands.guild_only()
     @app_commands.default_permissions(manage_guild=True)
     class NotifierGroup(
@@ -182,14 +197,14 @@ class NotiifiersMixin:
             )
         doc = await self.bot.data.guilds.get(interaction.guild.id)
         already_enabled = doc.get("news", {}).get("on", False)
-        if not already_enabled and not channel:
+        if not enabled and not already_enabled:
             return await interaction.response.send_message(
                 "News notifier is aleady disabled. If "
                 "you were trying to enable it, make sure to fill out "
                 "the `channel` argument.",
                 ephemeral=True,
             )
-        if already_enabled and not channel:
+        if not enabled:
             await self.bot.data.guilds.update(interaction.guild.id, {"news.on": False})
             return await interaction.response.send_message(
                 "News notifier disabled.", ephemeral=True
@@ -300,14 +315,14 @@ class NotiifiersMixin:
             return await interaction.followup.send("You must specify a channel.")
         key = "bossnotifs"
         doc = await self.bot.data.guilds.get(interaction.guild.id)
-        enabled = doc.get(key, {}).get("on", False)
-        if not enabled and not channel:
+        already_enabled = doc.get(key, {}).get("on", False)
+        if not enabled and not already_enabled:
             return await interaction.followup.send(
                 "Boss notifier is aleady disabled. If "
                 "you were trying to enable it, make sure to fill out "
                 "the `channel` argument."
             )
-        if enabled and not channel:
+        if not enabled:
             await self.bot.data.guilds.update(interaction.guild.id, {f"{key}.on": False})
             return await interaction.followup.send("Boss notifier disabled.")
         settings = {
@@ -341,7 +356,7 @@ class NotiifiersMixin:
         async def fetch(url):
             """(status, body) for a GET."""
             timeout = aiohttp.ClientTimeout(total=30)
-            async with self.session.get(url, timeout=timeout) as response:
+            async with self.bot.session.get(url, timeout=timeout) as response:
                 return response.status, await response.text()
 
         status, feed = await fetch(update_notes.FEED_URL)
@@ -393,7 +408,7 @@ class NotiifiersMixin:
             return []
         last_news = doc["cache"]["news"]
         url = "https://www.guildwars2.com/en/feed/"
-        async with self.session.get(url) as r:
+        async with self.bot.session.get(url) as r:
             feed = et.fromstring(await r.text())[0]
         to_post = []
         if last_news:
@@ -431,7 +446,7 @@ class NotiifiersMixin:
             return False
         current_build = doc["cache"]["build"]
         url = "http://assetcdn.101.arenanetworks.com/latest/101"
-        async with self.session.get(url) as r:
+        async with self.bot.session.get(url) as r:
             some_weird_numbers: str = await r.text()
         some_weird_numbers = some_weird_numbers.split()
         build = some_weird_numbers[0]
@@ -506,7 +521,7 @@ class NotiifiersMixin:
                             channel.permissions_for(channel.guild.me).embed_links
                             and embed_available
                         ):
-                            message = mention + " Guild Wars 2 has just updated!"
+                            message = f"{mention} Guild Wars 2 has just updated!".strip()
                             await channel.send(message, embed=embed)
                         else:
                             await channel.send(text)
@@ -540,7 +555,10 @@ class NotiifiersMixin:
     async def game_update_checker(self):
         try:
             if await self.game_build_changed():
-                await self.rebuild_database()
+                # The game data cache is still the old cog's
+                old_cog = self.bot.get_cog("GuildWars2")
+                if old_cog:
+                    await old_cog.rebuild_database()
             await self.send_update_notifs()
         except Exception:
             # An escaping exception would stop the loop for good
@@ -581,18 +599,6 @@ class NotiifiersMixin:
     async def before_gem_tracker(self):
         await self.bot.wait_until_ready()
 
-    @tasks.loop(minutes=5)
-    async def forced_account_names(self):
-        cursor = self.bot.data.guilds.find({"force_account_names": True})
-        async for doc in cursor:
-            try:
-                guild = self.bot.get_guild(doc["_id"])
-                await self.force_guild_account_names(guild)
-            except asyncio.CancelledError:
-                return
-            except Exception:
-                pass
 
-    @forced_account_names.before_loop
-    async def before_forced_account_names(self):
-        await self.bot.wait_until_ready()
+async def setup(bot):
+    await bot.add_cog(Notifiers(bot))

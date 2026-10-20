@@ -12,7 +12,6 @@ from .guild import GuildSync
 from .guild.sync import GuildSyncPromptUserConfirmView
 from .guildmanage import GuildManageMixin
 from .key import KeyMixin
-from .notifiers import NotiifiersMixin
 
 class GuildWars2(
     GW2Cog,
@@ -22,7 +21,6 @@ class GuildWars2(
     GuildSync,
     GuildManageMixin,
     KeyMixin,
-    NotiifiersMixin,
 ):
     """Guild Wars 2 commands"""
 
@@ -33,9 +31,6 @@ class GuildWars2(
         self.tasks = []
         self.waiting_for = []
         self.tasks = [
-            self.game_update_checker,
-            self.news_checker,
-            self.gem_tracker,
             self.guild_synchronizer,
             self.forced_account_names,
             self.post_evtc_notifications,

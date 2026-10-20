@@ -594,19 +594,14 @@ class UpdateNotesChecker:
     (sent counts, blocked flag) between checks like the running bot does."""
 
     def __init__(self, pages):
-        # (sic) the class name has a doubled "i"
-        from gw2bot.cogs.guildwars2.notifiers import NotiifiersMixin
+        from gw2bot.cogs.notifiers import Notifiers
 
-        class Notifier(NotiifiersMixin):
-            pass
-
-        self.notifier = Notifier()
+        self.notifier = Notifiers(MagicMock())
         self.notifier.log = logging.getLogger("tests.update_notes")
-        self.notifier.bot = MagicMock()
         self.updates = FakeCollection()
         self.notifier.bot.data.gw2.updates = self.updates
         self.pages = pages
-        self.notifier.session = FakePageSession(pages)
+        self.notifier.bot.session = FakePageSession(pages)
 
     async def check(self):
         """[(title, markdown, minor)] for the notes the bot would send."""
@@ -1400,12 +1395,9 @@ async def set_event_reminder(**options):
 
 
 def _notifier_cog(session=None, users=None):
-    from gw2bot.cogs.guildwars2.notifiers import NotiifiersMixin
+    from gw2bot.cogs.notifiers import Notifiers
 
-    class Cog(NotiifiersMixin, _Harness):
-        pass
-
-    return Cog(session, users)
+    return Notifiers(_fake_bot(session, users))
 
 
 async def run_gem_tracker(responses, tracked):
@@ -1498,7 +1490,7 @@ async def run_news_checker(feed, cached_titles, guilds, channels):
     from unittest.mock import AsyncMock
 
     cog = _notifier_cog()
-    cog.session = FakeWikiSession({"https://www.guildwars2.com/en/feed/": feed})
+    cog.bot.session = FakeWikiSession({"https://www.guildwars2.com/en/feed/": feed})
     cog.bot.data.config.get = AsyncMock(return_value={"cache": {"news": cached_titles}})
     cog.bot.data.config.update = AsyncMock()
     cog.bot.data.guilds = MemoryGuilds(guilds)
@@ -1516,19 +1508,62 @@ async def run_news_checker(feed, cached_titles, guilds, channels):
 async def run_game_update_checker(config, build_page):
     """One run of the game update checker with the bot's `config` document
     and `build_page` as the build number page. Returns anything it raised."""
+    return (await check_game_updates(config, build_page))["error"]
+
+
+async def check_game_updates(config, build_page, *, notes=None, servers=None, channels=()):
+    """One run of the game update checker. `notes` are what the update
+    notes check finds, [(embed, text, minor)]; `servers` settings by id,
+    `channels` RecordingChannels. Returns {"error", "rebuilt", "config"
+    (writes)}."""
     from unittest.mock import AsyncMock
 
     cog = _notifier_cog()
-    cog.session = FakeWikiSession({"http://assetcdn.101.arenanetworks.com/latest/101": build_page})
+    cog.bot.session = FakeWikiSession({"http://assetcdn.101.arenanetworks.com/latest/101": build_page})
     cog.bot.data.config.get = AsyncMock(return_value=config)
     cog.bot.data.config.update = AsyncMock()
-    cog.rebuild_database = AsyncMock()
-    cog.update_notification = AsyncMock(return_value=None)
+    cog.bot.data.guilds = MemoryGuilds(servers or {})
+    cog.bot.get_channel = {c.id: c for c in channels}.get
+    # The game data cache is rebuilt by the old cog
+    old_cog = MagicMock()
+    old_cog.rebuild_database = AsyncMock()
+    cog.bot.get_cog = {"GuildWars2": old_cog}.get
+    cog.update_notification = AsyncMock(return_value=notes)
     try:
         await type(cog).game_update_checker.coro(cog)
+        error = None
     except Exception as e:
-        return e
-    return None
+        error = e
+    return {
+        "error": error,
+        "rebuilt": old_cog.rebuild_database.await_count == 1,
+        "config": [call.args[0] for call in cog.bot.data.config.update.await_args_list],
+    }
+
+
+async def notifier_command(command, *, settings=None, channel=None, **options):
+    """Run /notifier news, update or bosses on server 10 with its saved
+    `settings`. `channel` is a RecordingChannel (or None). Returns (reply,
+    server settings writes)."""
+    from gw2bot.cogs.notifiers import Notifiers
+
+    handler = {"news": Notifiers.newsfeed, "update": Notifiers.updatenotifier,
+               "bosses": Notifiers.bossnotifier}[command]
+    guilds = MemoryGuilds({10: settings or {}})
+
+    def cog_for(session, users):
+        cog = _notifier_cog(session, users)
+        cog.bot.data.guilds = guilds
+        return cog
+
+    def in_server(interaction):
+        interaction.guild.id = 10
+
+    if channel is not None:
+        channel.mention = f"<#{channel.id}>"
+    sent, _ = await run_command(cog_for, handler, [], permissions=(), on_interaction=in_server, channel=channel,
+                                **options)
+    return sent, guilds.writes
 
 
 async def run_daily_notifier(settings, *, previous_message_exists=True, channel_exists=True, can_send=True,
@@ -1724,7 +1759,7 @@ async def notifier_daily(*, choose=None, enabled=True, already_enabled=False, **
 
     import discord
 
-    from gw2bot.cogs.guildwars2.notifiers import NotiifiersMixin
+    from gw2bot.cogs.notifiers import Notifiers
 
     guilds = MemoryGuilds({10: {"daily": {"on": already_enabled}}})
     final = []
@@ -1747,10 +1782,7 @@ async def notifier_daily(*, choose=None, enabled=True, already_enabled=False, **
     interactions = []
 
     def cog_for(session, users):
-        class Cog(NotiifiersMixin, _Harness):
-            pass
-
-        cog = Cog(session, users)
+        cog = _notifier_cog(session, users)
         cog.bot.data.guilds = guilds
         config = {"cache": {"dailies": DAILY_CACHE, "dailies_tomorrow": DAILY_CACHE}}
         cog.bot.data.config.get = AsyncMock(return_value=config)
@@ -1768,7 +1800,7 @@ async def notifier_daily(*, choose=None, enabled=True, already_enabled=False, **
     channel.permissions_for.return_value.send_messages = True
     channel.permissions_for.return_value.embed_links = True
     with patch.object(discord.ui.View, "wait", wait):
-        sent, _ = await run_command(cog_for, NotiifiersMixin.daily_notifier, [], permissions=(),
+        sent, _ = await run_command(cog_for, Notifiers.daily_notifier, [], permissions=(),
                                     on_interaction=in_server, enabled=enabled,
                                     channel=channel if enabled else None, **options)
     if choose is None and enabled:
