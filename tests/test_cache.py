@@ -1,5 +1,4 @@
 """The game data cache: copying items, skills and so on from the API."""
-import pytest
 
 import subject
 

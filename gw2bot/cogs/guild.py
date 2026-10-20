@@ -219,7 +219,7 @@ class Guild(GW2Cog):
             return ""
 
         embeds = []
-        for order in ranks:
+        for _ in ranks:
             for member in results:
                 # Filter invited members
                 if member['rank'] != "invited":

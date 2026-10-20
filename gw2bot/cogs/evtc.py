@@ -179,7 +179,6 @@ class Evtc(GW2Cog):
             return await r.json()
 
     async def upload_embed(self, destination, data, permalink):
-        force_emoji = True if not destination else False
         lines = []
         targets = data["phases"][0]["targets"]
         group_dps = 0

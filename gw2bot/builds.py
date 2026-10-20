@@ -177,8 +177,8 @@ class Build:
                             for palette_id, skill_id_2 in profession_doc[
                                 "skills_by_palette"
                             ]:
-                                if skill_id == skill_id_2:
-                                    skill_doc["palette_id"] = palette_id
+                                if utility_skill == skill_id_2:
+                                    utility_palettes.append(palette_id)
                                     break
                         legend_doc["utility_palettes"] = utility_palettes
                         legend_docs.append(legend_doc)

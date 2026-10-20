@@ -5,6 +5,7 @@ import subject
 from gw2bot.gw2api.errors import (
     APIBadRequest,
     APIConnectionError,
+    APIError,
     APIForbidden,
     APIInactiveError,
     APIInvalidKey,
@@ -74,7 +75,7 @@ async def test_error_statuses(status, body, error):
 )
 async def test_client_errors_are_not_retried(status, body):
     session = Session((status, body))
-    with pytest.raises(Exception):
+    with pytest.raises(APIError):
         await subject.api_get(session, "account")
     assert len(session.requests) == 1
     assert session.delays == []

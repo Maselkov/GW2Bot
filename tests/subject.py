@@ -1452,7 +1452,6 @@ async def key_command(command, stored, responses=(), *, in_guild=False, **option
     """Run /key add, remove, switch or info for user 1 with settings
     `stored`. Returns (reply, settings writes, the other cogs' syncs run
     for the user: ["guildsync", "key role"])."""
-    from unittest.mock import AsyncMock
 
     from gw2bot.cogs.keys import Keys
 
@@ -1635,7 +1634,6 @@ async def server_command(command, server, *, users=None, settings=None, response
     """Run a /server command (force_account_names, sync_now or
     default_guild) on `server`. Returns (replies, settings writes, other
     work started: ["rename", "guildsync"])."""
-    from unittest.mock import AsyncMock
 
     from gw2bot.cogs.server import Server
 
@@ -1675,7 +1673,6 @@ async def server_command(command, server, *, users=None, settings=None, response
 async def run_forced_account_names(server, users):
     """One run of the 5-minute forced account names loop. Returns
     {member id: new nickname} for members renamed."""
-    from unittest.mock import AsyncMock
 
     from gw2bot.cogs.server import Server
 

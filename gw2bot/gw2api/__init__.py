@@ -1,3 +1,5 @@
 """Guild Wars 2 API client."""
 from .client import Client
-from .errors import *  # noqa: F401,F403
+from .errors import *  # noqa: F403
+
+__all__ = ["Client"]
