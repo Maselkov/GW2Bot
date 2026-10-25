@@ -115,6 +115,9 @@ class FakeServer:
     def get_role(self, role_id):
         return self.roles.get(role_id)
 
+    async def fetch_roles(self):
+        return [self.everyone, *self.roles.values()]
+
     def get_member(self, member_id):
         return next((m for m in self.members if m.id == member_id), None)
 

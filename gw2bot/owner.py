@@ -1,4 +1,6 @@
 """Owner-only text commands, ported from Toothy's owner cog."""
+import io
+import json
 import traceback
 
 import discord
@@ -60,6 +62,21 @@ class Owner(commands.Cog):
                 len(registered), ", ".join(registered)
             )
         )
+
+    @commands.command(name="guildsync_repair")
+    async def guildsync_repair(self, ctx, mode: str = "dry-run"):
+        """Link guild sync ranks back to the roles they had before guild sync
+        replaced them, from an attached JSON list of syncs and their old and
+        replacement role ids. A dry run unless `>guildsync_repair apply`."""
+        if not ctx.message.attachments:
+            return await ctx.send("Attach the JSON file of roles to relink")
+        apply = mode == "apply"
+        entries = json.loads(await ctx.message.attachments[0].read())
+        async with ctx.typing():
+            counts, lines = await self.bot.get_cog("GuildSync").repair_replaced_roles(entries, apply=apply)
+        summary = "\n".join(f"{outcome}: {count}" for outcome, count in sorted(counts.items()))
+        report = discord.File(io.BytesIO("\n".join(lines).encode()), filename="guildsync-repair.txt")
+        await ctx.send(f"{'Applied' if apply else 'Dry run, nothing changed'}:\n```\n{summary}\n```", file=report)
 
 
 async def setup(bot):
