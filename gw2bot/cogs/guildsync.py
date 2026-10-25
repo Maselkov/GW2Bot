@@ -3,10 +3,13 @@ optional purge of members in no synced guild, and /guildsync."""
 from __future__ import annotations
 
 import asyncio
+import collections
 import logging
 from datetime import datetime
 
 import discord
+from bson import ObjectId
+from bson.errors import InvalidId
 from discord import app_commands
 from discord.app_commands import Choice
 from discord.ext import commands, tasks
@@ -164,6 +167,8 @@ class GuildSync(GW2Cog):
     def __init__(self, bot):
         super().__init__(bot)
         self.log = logging.getLogger(__name__)
+        # One sync of a server at a time, so two never create the same roles
+        self.sync_locks = collections.defaultdict(asyncio.Lock)
 
     async def cog_load(self):
         # Authorization prompts' buttons keep working across restarts
@@ -830,6 +835,10 @@ class GuildSync(GW2Cog):
             return False
 
     async def run_guildsyncs(self, guild: discord.Guild, *, sync_for=None):
+        async with self.sync_locks[guild.id]:
+            await self._run_guildsyncs(guild, sync_for=sync_for)
+
+    async def _run_guildsyncs(self, guild, *, sync_for=None):
         guild_doc = await self.bot.data.guilds.get(guild.id)
         guildsync_doc = guild_doc.get("guildsync", {})
         enabled = guildsync_doc.get("enabled", False)
@@ -891,6 +900,81 @@ class GuildSync(GW2Cog):
                             )
                         except discord.Forbidden:
                             pass
+
+    async def repair_replaced_roles(self, entries, *, apply=False):
+        """Link synced ranks back to the roles they had before guild sync
+        replaced them with new ones, and delete the replacements.
+
+        `entries` are {"sync": sync id, "guild_id": server id,
+        "roles": {rank: [old role id, replacement role id]}}. A rank is
+        only relinked if it still points at the replacement and the old
+        role still exists, below the bot's top role. Nothing changes
+        unless `apply`. Returns (counts of each outcome, a line per sync).
+        """
+        counts = collections.Counter()
+        lines = []
+        for entry in entries:
+            guild_id = int(entry["guild_id"])
+            guild = self.bot.get_guild(guild_id)
+            if not guild:
+                outcome, details = "bot not in server", ""
+            else:
+                async with self.sync_locks[guild_id]:
+                    outcome, details = await self._repair_sync(guild, entry, apply, counts)
+            counts[f"sync {outcome}"] += 1
+            lines.append(f"{guild_id} {entry['sync']}: {outcome}" + (f" - {details}" if details else ""))
+        return counts, lines
+
+    async def _repair_sync(self, guild, entry, apply, counts):
+        """Repair one sync (see repair_replaced_roles). Returns its outcome
+        and what happened to each rank."""
+        try:
+            sync_id = ObjectId(entry["sync"])
+        except InvalidId:
+            sync_id = entry["sync"]
+        doc = await self.db.guildsyncs.find_one({"_id": sync_id, "guild_id": guild.id})
+        if not doc:
+            return "sync removed", ""
+        if not guild.me.guild_permissions.manage_roles:
+            return "can't manage roles", ""
+        # From Discord rather than the cache, to be sure a role is gone
+        try:
+            roles = {role.id: role for role in await guild.fetch_roles()}
+        except discord.HTTPException:
+            return "couldn't fetch roles", ""
+        rank_roles = dict(doc["rank_roles"])
+        relinked, replacements, skipped = [], [], []
+        for rank, (old_id, new_id) in entry["roles"].items():
+            old_id, new_id = int(old_id), int(new_id)
+            old = roles.get(old_id)
+            if rank_roles.get(rank) != new_id:
+                reason = "changed since"
+            elif not old:
+                reason = "old role deleted"
+            elif not old < guild.me.top_role:
+                reason = "old role above the bot's"
+            else:
+                rank_roles[rank] = old_id
+                relinked.append(rank)
+                if new_id in roles:
+                    replacements.append(roles[new_id])
+                continue
+            skipped.append(f"{rank} ({reason})")
+            counts[f"rank kept: {reason}"] += 1
+        counts["rank relinked"] += len(relinked)
+        if apply and relinked:
+            await self.db.guildsyncs.update_one({"_id": doc["_id"]}, {"$set": {"rank_roles": rank_roles}})
+            for role in replacements:
+                try:
+                    await role.delete(reason="Guild sync repair: the rank uses its old role again")
+                    counts["replacement deleted"] += 1
+                except discord.HTTPException:
+                    skipped.append(f"couldn't delete {role.name} ({role.id})")
+                    counts["replacement not deleted"] += 1
+        details = [f"relinked {', '.join(relinked)}"] if relinked else []
+        if skipped:
+            details.append(f"kept {', '.join(skipped)}")
+        return "repaired" if relinked else "nothing to relink", "; ".join(details)
 
     @tasks.loop(seconds=60)
     async def guild_synchronizer(self):

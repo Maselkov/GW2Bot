@@ -1545,6 +1545,55 @@ async def run_guild_synchronizer(server, users, responses, syncs, *, settings=No
     return [url for url, _, _ in session.requests]
 
 
+async def repair_replaced_roles(server, syncs, entries, *, apply=False):
+    """Run the guild sync role repair. Returns (outcome counts, report
+    lines, the syncs afterwards)."""
+    cog, _ = _guildsync_cog(server, {}, None, syncs)
+    counts, lines = await cog.repair_replaced_roles(entries, apply=apply)
+    return dict(counts), lines, cog.db.guildsyncs.docs
+
+
+async def sync_while_locked(server, syncs):
+    """Start a full guild sync of `server` while something else holds its
+    sync lock. Returns (API requests made before the lock is released,
+    whether the sync ran after)."""
+    ranks = [{"id": "Leader", "order": 1}, {"id": "Member", "order": 2}]
+    cog, session = _guildsync_cog(server, {}, [(200, ranks), (200, [])], syncs)
+    async with cog.sync_locks[server.id]:
+        task = asyncio.create_task(cog.run_guildsyncs(server))
+        await asyncio.sleep(0.01)
+        waited = list(session.requests)
+    await task
+    return waited, bool(session.requests)
+
+
+async def owner_guildsync_repair(mode, attachment=None):
+    """>guildsync_repair [mode], with `attachment` (bytes) attached and a
+    stub repair that relinks one rank. Returns (whether the repair was
+    applied or None if it didn't run, the reply, the attached report)."""
+    import contextlib
+    from unittest.mock import AsyncMock
+
+    from gw2bot.owner import Owner
+
+    calls = []
+
+    async def repair(entries, *, apply):
+        calls.append((entries, apply))
+        return {"sync repaired": 1, "rank relinked": 1}, ["10 SYNC: repaired - relinked Leader"]
+
+    bot = SimpleNamespace(get_cog={"GuildSync": SimpleNamespace(repair_replaced_roles=repair)}.get)
+    ctx = MagicMock()
+    ctx.message.attachments = [MagicMock(read=AsyncMock(return_value=attachment))] if attachment else []
+    ctx.typing = contextlib.nullcontext
+    ctx.send = AsyncMock()
+    await Owner.guildsync_repair.callback(Owner(bot), ctx, mode)
+    call = ctx.send.await_args
+    report = call.kwargs["file"].fp.read().decode() if "file" in call.kwargs else None
+    assert not calls or calls[0][0] == [{"sync": "SYNC"}]
+    return (calls[0][1] if calls else None), call.args[0], report
+
+
 async def guildsync_command(command, server, *, users=None, responses=(), syncs=(), settings=None, confirm=None,
                             **options):
     """Run /guildsync add, edit, toggle, purge or diagnose (user 1, an admin
