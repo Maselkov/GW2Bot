@@ -72,6 +72,9 @@ class GW2Bot(commands.AutoShardedBot):
             owner_id=settings.owner_id,
             case_insensitive=True,
             intents=intents(),
+            # Chunking every server takes many minutes of gateway rate
+            # limits; what needs a server's members chunks it first
+            chunk_guilds_at_startup=False,
         )
         self.settings = settings
         self.data = Data(settings.mongo_uri, settings.mongo_db)
@@ -84,8 +87,23 @@ class GW2Bot(commands.AutoShardedBot):
         self.session = None
         self.gw2api = None
         self.test_guild = settings.test_guild
+        # Users fetched because they weren't cached, by id
+        self.fetched_users = {}
         self.uptime = datetime.datetime.now(datetime.timezone.utc)
         self.tree.on_error = self.on_app_command_error
+
+    async def get_or_fetch_user(self, user_id):
+        """A user from the cache, or else fetched from Discord once and
+        remembered. None if there's no such user."""
+        user = self.get_user(user_id) or self.fetched_users.get(user_id)
+        if user:
+            return user
+        try:
+            user = await self.fetch_user(user_id)
+        except discord.NotFound:
+            return None
+        self.fetched_users[user_id] = user
+        return user
 
     async def setup_hook(self):
         self.session = aiohttp.ClientSession()

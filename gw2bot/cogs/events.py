@@ -336,7 +336,7 @@ class Events(GW2Cog):
         cursor = self.bot.data.users.find({"event_reminders": {"$exists": True, "$ne": []}})
         async for doc in cursor:
             try:
-                user = self.bot.get_user(doc["_id"])
+                user = await self.bot.get_or_fetch_user(doc["_id"])
                 if not user:
                     continue
                 for i, reminder in enumerate(doc["event_reminders"]):

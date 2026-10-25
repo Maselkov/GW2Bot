@@ -104,7 +104,7 @@ class GuildSyncPromptUserConfirmView(discord.ui.View):
             return await interaction.followup.send(
                 content="It seems like the server no longer exists"
             )
-        requesting_user = self.cog.bot.get_user(doc["requester_id"])
+        requesting_user = await self.cog.bot.get_or_fetch_user(doc["requester_id"])
         if not requesting_user:
             return await interaction.followup.send(
                 content="It seems like the requesting user no " "longer exists"

@@ -94,6 +94,16 @@ async def test_syncs_read_the_users_once(job):
     assert reads[0][1] == {"_id": {"$in": [1, 2, 3]}}
 
 
+@pytest.mark.parametrize("job", ["guild sync", "key role", "forced names"])
+async def test_member_loops_chunk_the_server_first(job):
+    # The bot doesn't chunk servers at startup
+    server, users = members("Member.3333")
+    server.chunked = False
+    await subject.user_reads(job, server, users, responses=[(200, [])],
+                             syncs=[subject.guildsync_doc(ranks=False, tag=False)])
+    server.chunk.assert_awaited_once()
+
+
 async def test_the_api_key_role_still_follows_keys():
     role = subject.KEY_ROLE
     members_ = [subject.server_member(1), subject.server_member(2, role)]
