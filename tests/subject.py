@@ -1564,6 +1564,13 @@ async def repair_replaced_roles(server, syncs, entries, *, apply=False):
     return dict(counts), lines, cog.db.guildsyncs.docs
 
 
+async def inspect_guildsync(server, syncs, responses):
+    """The owner's guild sync report for `server`; `responses` are each
+    sync's guild/:id/ranks in turn."""
+    cog, _ = _guildsync_cog(server, {}, responses, syncs)
+    return await cog.inspect_server(server.id)
+
+
 async def sync_while_locked(server, syncs):
     """Start a full guild sync of `server` while something else holds its
     sync lock. Returns (API requests made before the lock is released,

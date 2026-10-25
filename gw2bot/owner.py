@@ -78,6 +78,14 @@ class Owner(commands.Cog):
         report = discord.File(io.BytesIO("\n".join(lines).encode()), filename="guildsync-repair.txt")
         await ctx.send(f"{'Applied' if apply else 'Dry run, nothing changed'}:\n```\n{summary}\n```", file=report)
 
+    @commands.command(name="guildsync_inspect")
+    async def guildsync_inspect(self, ctx, server_id: int):
+        """What guild sync sees in a server: saved roles, the bot's cache,
+        Discord's roles and the in-game ranks"""
+        async with ctx.typing():
+            report = await self.bot.get_cog("GuildSync").inspect_server(server_id)
+        await ctx.send(file=discord.File(io.BytesIO(report.encode()), filename=f"guildsync-{server_id}.txt"))
+
 
 async def setup(bot):
     await bot.add_cog(Owner(bot))

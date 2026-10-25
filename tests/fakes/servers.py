@@ -39,6 +39,10 @@ class FakeRole:
     def __repr__(self):
         return f"<role {self.name}>"
 
+    @property
+    def members(self):
+        return [member for member in self.server.members if self in member.roles]
+
     async def delete(self, reason=None):
         self.server.deleted.append(self.name)
         self.server.roles.pop(self.id, None)
@@ -90,6 +94,8 @@ class FakeServer:
         self.me = SimpleNamespace(top_role=FakeRole(self, 1, "GW2Bot", 50),
                                   guild_permissions=SimpleNamespace(manage_roles=can_manage_roles))
         self.chunk = AsyncMock()
+        # Roles on Discord the bot's cache doesn't have
+        self.uncached = set()
 
     def role(self, name, position=10, role_id=None):
         role = FakeRole(self, role_id or 100 + len(self.roles), name, position)
@@ -113,7 +119,7 @@ class FakeServer:
         return member
 
     def get_role(self, role_id):
-        return self.roles.get(role_id)
+        return None if role_id in self.uncached else self.roles.get(role_id)
 
     async def fetch_roles(self):
         return [self.everyone, *self.roles.values()]

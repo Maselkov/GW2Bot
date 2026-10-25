@@ -1,5 +1,6 @@
-"""The owner's repair for ranks whose roles guild sync replaced: relink each
-rank to its old role, and delete the replacement."""
+"""The owner's repair for ranks whose roles guild sync replaced (relink
+each rank to its old role, and delete the replacement), and the report of
+what guild sync sees in a server."""
 from bson import ObjectId
 
 import subject
@@ -104,3 +105,32 @@ async def test_owner_command_needs_the_mapping():
     applied, reply, _ = await subject.owner_guildsync_repair("apply")
     assert applied is None
     assert reply == "Attach the JSON file of roles to relink"
+
+
+# --- >guildsync_inspect -----------------------------------------------------------------------
+
+
+async def test_inspect_shows_what_guild_sync_sees():
+    server, old, new = replaced_server()
+    server.uncached.add(old["Leader"].id)
+    ranks = [{"id": "Leader", "order": 1}, {"id": "Member ", "order": 2}]
+    report = await subject.inspect_guildsync(server, [sync({"Leader": 201, "Member": 302})], [(200, ranks)])
+    assert report.splitlines() == [
+        "Server 'Example Server' (10), chunked: True",
+        "Bot's top role: 'GW2Bot' at 50, manage roles: True",
+        "Roles cached: 4, on Discord: 5",
+        "Guild sync enabled: True, purge: None",
+        "",
+        f"Sync {SYNC_ID}: 'Alpha Guild' [A] GUILD-A",
+        "  enabled: {'ranks': True, 'tag': False}, error: None",
+        "  rank roles saved:",
+        "    'Leader' -> 201 (int): cache: MISSING | Discord: 'Leader' at 10, 1 members",
+        "    'Member' -> 302 (int): cache: 'Member' at 10, 0 members | Discord: 'Member' at 10, 0 members",
+        "  in-game ranks: ['Leader', 'Member ']",
+        "  roles on Discord named like a rank:",
+        "    201: 'Leader' at 10, 1 members, cached: False",
+        "    301: 'Leader' at 10, 1 members, cached: True",
+        "    202: 'Member' at 10, 0 members, cached: True",
+        "    302: 'Member' at 10, 0 members, cached: True",
+    ]
+    assert "LEADER" not in report

@@ -901,6 +901,62 @@ class GuildSync(GW2Cog):
                         except discord.Forbidden:
                             pass
 
+    async def inspect_server(self, guild_id):
+        """What guild sync sees in a server, for debugging: each sync's
+        saved roles, whether the bot's cache and Discord have them, the
+        in-game ranks, and every role named like a rank. Never the key."""
+        guild = self.bot.get_guild(guild_id)
+        if not guild:
+            return f"Not in server {guild_id}"
+        me = guild.me
+        try:
+            fetched = {role.id: role for role in await guild.fetch_roles()}
+        except discord.HTTPException as e:
+            fetched = {}
+            lines = [f"Couldn't fetch roles from Discord: {e}"]
+        else:
+            lines = []
+
+        def describe(role):
+            members = f", {len(role.members)} members" if guild.chunked else ""
+            return f"{role.name!r} at {role.position}{members}"
+
+        def lookup(role_id):
+            cached, live = guild.get_role(role_id), fetched.get(role_id)
+            return (f"cache: {describe(cached) if cached else 'MISSING'} | "
+                    f"Discord: {describe(live) if live else 'MISSING'}")
+
+        lines[:0] = [
+            f"Server {guild.name!r} ({guild.id}), chunked: {guild.chunked}",
+            f"Bot's top role: {me.top_role.name!r} at {me.top_role.position}, "
+            f"manage roles: {me.guild_permissions.manage_roles}",
+            f"Roles cached: {len(guild.roles)}, on Discord: {len(fetched)}",
+        ]
+        settings = (await self.bot.data.guilds.get(guild.id)).get("guildsync", {})
+        lines.append(f"Guild sync enabled: {settings.get('enabled')}, purge: {settings.get('purge')}")
+        async for doc in self.db.guildsyncs.find({"guild_id": guild.id}):
+            lines += ["", f"Sync {doc['_id']}: {doc.get('name')!r} [{doc.get('tag')}] {doc.get('gid')}",
+                      f"  enabled: {doc.get('enabled')}, error: {doc.get('error')!r}"]
+            tag_role = doc.get("tag_role")
+            if tag_role:
+                lines.append(f"  tag role {tag_role} ({type(tag_role).__name__}): {lookup(tag_role)}")
+            lines.append("  rank roles saved:")
+            for rank, role_id in doc.get("rank_roles", {}).items():
+                lines.append(f"    {rank!r} -> {role_id} ({type(role_id).__name__}): {lookup(role_id)}")
+            try:
+                ranks = await self.call_api(f"guild/{doc['gid']}/ranks", key=doc["key"])
+            except APIError as e:
+                lines.append(f"  in-game ranks: couldn't read ({type(e).__name__}: {e})")
+                continue
+            lines.append(f"  in-game ranks: {[rank['id'] for rank in ranks]!r}")
+            names = {rank["id"].strip().lower() for rank in ranks}
+            names |= {rank.strip().lower() for rank in doc.get("rank_roles", {})}
+            alike = [role for role in fetched.values() if role.name.strip().lower() in names]
+            lines.append("  roles on Discord named like a rank:")
+            for role in sorted(alike, key=lambda r: (r.name.lower(), r.id)):
+                lines.append(f"    {role.id}: {describe(role)}, cached: {guild.get_role(role.id) is not None}")
+        return "\n".join(lines)
+
     async def repair_replaced_roles(self, entries, *, apply=False):
         """Link synced ranks back to the roles they had before guild sync
         replaced them with new ones, and delete the replacements.
