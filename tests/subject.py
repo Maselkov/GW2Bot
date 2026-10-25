@@ -748,10 +748,13 @@ async def character_choices(current, stored, responses=(), *, now):
 # --- Guilds --------------------------------------------------------------------
 
 async def guild_command(command, responses, *, permissions=("account", "guilds"), items=(), users=None,
-                        discord_members=None, **options):
+                        discord_members=None, chunked=True, **options):
     """Run /guild <command>. `users` are other users' settings by Discord
     id (the caller is id 1); `discord_members` the Discord server's members
-    by id, as {id: mention}, or None to run it in DMs."""
+    by id, as {id: mention}, or None to run it in DMs. Unless `chunked`,
+    the bot only knows them once it chunks the server."""
+    from unittest.mock import AsyncMock
+
     from gw2bot.cogs.guild import Guild
 
     handler = getattr(Guild, "guild_" + command)
@@ -766,8 +769,16 @@ async def guild_command(command, responses, *, permissions=("account", "guilds")
         if discord_members is None:
             interaction.guild = None
             return
-        interaction.guild.get_member = (
-            lambda user_id: MagicMock(mention=discord_members[user_id]) if user_id in discord_members else None
+        guild = interaction.guild
+        guild.chunked = chunked
+
+        async def chunk():
+            guild.chunked = True
+
+        guild.chunk = AsyncMock(side_effect=chunk)
+        guild.get_member = (
+            lambda user_id: MagicMock(mention=discord_members[user_id])
+            if guild.chunked and user_id in discord_members else None
         )
 
     return await run_command(cog_for, handler, responses, permissions=permissions, users=repo,

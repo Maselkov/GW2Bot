@@ -597,7 +597,10 @@ class Evtc(GW2Cog):
         cursor = self.db.evtc.notifications.find({"posted": False})
         async for doc in cursor:
             try:
-                user = self.bot.get_user(doc["user_id"])
+                user = await self.bot.get_or_fetch_user(doc["user_id"])
+                if not user:
+                    # Deleted their Discord account
+                    continue
                 destinations = await self.db.evtc.destinations.find(
                     {"user_id": user.id}
                 ).to_list(None)

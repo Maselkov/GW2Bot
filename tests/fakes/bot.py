@@ -57,6 +57,11 @@ def fake_bot(session=None, users=None):
         bot.data.users = users
         bot.keys = ApiKeys(users)
     bot.gw2_emojis = StubEmojis()
+
+    async def get_or_fetch_user(user_id):
+        return bot.get_user(user_id)
+
+    bot.get_or_fetch_user = get_or_fetch_user
     return bot
 
 

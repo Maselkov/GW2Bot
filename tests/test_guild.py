@@ -84,6 +84,15 @@ async def test_members_mention_people_on_the_server():
     ])
 
 
+async def test_members_chunk_the_server_first():
+    users = {2: subject.stored_key(["account"], account_name="Officer.3333")}
+    embed, _ = await subject.guild_command(
+        "members", [(200, BASE), (200, MEMBERS), (200, RANKS)], users=users, discord_members={1: "<@1>", 2: "<@2>"},
+        chunked=False, guild=GUILD,
+    )
+    assert fields(embed)[0][1].startswith("**Example.1234** - <@1>\n*Leader*\n**Officer.3333** - <@2>")
+
+
 async def test_members_over_several_pages():
     members = [{"name": f"Member{i:03}.{i:04}", "rank": "Member"} for i in range(300)]
     embed, _ = await subject.guild_command(

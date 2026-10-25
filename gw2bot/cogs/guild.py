@@ -194,6 +194,9 @@ class Guild(GW2Cog):
                 "You don't have enough permissions in game to "
                 "use this command",
                 ephemeral=True)
+        if interaction.guild and not interaction.guild.chunked:
+            # To mention the members on this server
+            await interaction.guild.chunk()
         embed = discord.Embed(
             colour=await self.get_embed_color(interaction),
             title=base["name"],

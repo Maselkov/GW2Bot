@@ -162,6 +162,33 @@ async def test_bot_requests_the_intents_the_cog_needs(bot):
     assert not bot.intents.presences
 
 
+async def test_servers_are_chunked_when_needed_not_at_startup(bot):
+    # Chunking thousands of servers at startup takes many minutes of gateway
+    # rate limits; what needs a server's members chunks it first
+    assert not bot._connection._chunk_guilds
+
+
+async def test_users_are_fetched_once_when_not_cached(bot):
+    from unittest.mock import AsyncMock, MagicMock
+
+    import discord
+
+    cached, fetched = MagicMock(id=1), MagicMock(id=2)
+
+    async def fetch_user(user_id):
+        if user_id == 2:
+            return fetched
+        raise discord.NotFound(MagicMock(status=404), "Unknown User")
+
+    bot.get_user = {1: cached}.get
+    bot.fetch_user = AsyncMock(side_effect=fetch_user)
+    assert await bot.get_or_fetch_user(1) is cached
+    assert await bot.get_or_fetch_user(2) is fetched
+    assert await bot.get_or_fetch_user(2) is fetched
+    assert await bot.get_or_fetch_user(3) is None
+    assert [call.args[0] for call in bot.fetch_user.await_args_list] == [2, 3]
+
+
 def test_auto_sync_setting():
     assert Settings.from_env({"DISCORD_TOKEN": "tok"}).auto_sync is True
     assert Settings.from_env({"DISCORD_TOKEN": "tok", "AUTO_SYNC": "false"}).auto_sync is False

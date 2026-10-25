@@ -179,6 +179,8 @@ class Server(GW2Cog):
         await self.bot.wait_until_ready()
 
     async def force_guild_account_names(self, guild):
+        if not guild.chunked:
+            await guild.chunk()
         users = await self.users_by_id(member.id for member in guild.members)
         for member in guild.members:
             name = (users.get(member.id, {}).get("key") or {}).get("account_name")
