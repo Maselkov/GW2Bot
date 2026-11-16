@@ -8,7 +8,17 @@ from discord.app_commands import Choice
 from gw2bot.utils.chat import embed_list_lines, zero_width_space
 
 from ..gw2api.errors import APIError, APIForbidden, APINotFound
+from ..i18n import N_, localized
 from .base import GW2Cog
+
+INVALID_GUILD = N_("Invalid guild name")
+NO_PERMISSIONS = N_("You don't have enough permissions in game to use this command")
+GUILD_CURRENCIES = {
+    "influence": N_("Influence"),
+    "aetherium": N_("Aetherium"),
+    "resonance": N_("Resonance"),
+    "favor": N_("Favor"),
+}
 
 
 def utcnow():
@@ -57,8 +67,9 @@ async def guild_name_autocomplete(interaction: discord.Interaction,
         doc = await bot.data.guilds.get(interaction.guild.id)
         guild_id = doc.get("guild_ingame")
         if guild_id:
+            lang = await cog.lang(interaction)
             choices.append(
-                Choice(name="Server's default guild", value=guild_id))
+                Choice(name=cog.t(lang, N_("Server's default guild")), value=guild_id))
     doc = await bot.data.users.get(interaction.user.id)
     if not key:
         return choices
@@ -132,21 +143,19 @@ class Guild(GW2Cog):
     @app_commands.autocomplete(guild=guild_name_autocomplete)
     async def guild_info(self, interaction: discord.Interaction, guild: str):
         """General guild stats"""
+        lang = await self.lang(interaction)
         endpoint = "guild/" + guild
         await interaction.response.defer()
         try:
             results = await self.call_api(endpoint, interaction.user,
                                           ["guilds"])
         except (IndexError, APINotFound):
-            return await interaction.followup.send(
-                "Invalid guild name", ephemeral=True)
+            return await interaction.followup.send(self.t(lang, INVALID_GUILD), ephemeral=True)
         except APIForbidden:
             return await interaction.followup.send(
-                "You don't have enough permissions in game to "
-                "use this command",
+                self.t(lang, NO_PERMISSIONS),
                 ephemeral=True)
-        data = discord.Embed(description='General Info about {0}'.format(
-            results["name"]),
+        data = discord.Embed(description=self.t(lang, N_("General Info about {guild}"), guild=results["name"]),
                              colour=await self.get_embed_color(interaction))
         data.set_author(name="{} [{}]".format(results["name"], results["tag"]))
         guild_currencies = [
@@ -154,21 +163,21 @@ class Guild(GW2Cog):
         ]
         for cur in guild_currencies:
             if cur == "member_count":
-                data.add_field(name='Members',
+                data.add_field(name=self.t(lang, N_("Members")),
                                value="{} {}/{}".format(
                                    self.get_emoji(interaction, "friends"),
                                    results["member_count"],
                                    str(results["member_capacity"])))
             else:
-                data.add_field(name=cur.capitalize(),
+                data.add_field(name=self.t(lang, GUILD_CURRENCIES[cur]),
                                value='{} {}'.format(
                                    self.get_emoji(interaction, cur),
                                    results[cur]))
         if "motd" in results:
-            data.add_field(name='Message of the day:',
+            data.add_field(name=self.t(lang, N_("Message of the day:")),
                            value=results["motd"],
                            inline=False)
-        data.set_footer(text='A level {} guild'.format(results["level"]))
+        data.set_footer(text=self.t(lang, N_("A level {level} guild"), level=results["level"]))
         await interaction.followup.send(embed=data)
 
     @guild_group.command(name="members")
@@ -177,6 +186,8 @@ class Guild(GW2Cog):
     async def guild_members(self, interaction: discord.Interaction,
                             guild: str):
         """Shows a list of members and their ranks."""
+        lang = await self.lang(interaction)
+        members_heading = "> **{}**".format(self.t(lang, N_("Members")).upper())
         user = interaction.user
         scopes = ["guilds"]
         await interaction.response.defer()
@@ -187,12 +198,10 @@ class Guild(GW2Cog):
             base, results, ranks = await self.call_multiple(
                 endpoints, user, scopes)
         except (IndexError, APINotFound):
-            return await interaction.followup.send("Invalid guild name",
-                                                   ephemeral=True)
+            return await interaction.followup.send(self.t(lang, INVALID_GUILD), ephemeral=True)
         except APIForbidden:
             return await interaction.followup.send(
-                "You don't have enough permissions in game to "
-                "use this command",
+                self.t(lang, NO_PERMISSIONS),
                 ephemeral=True)
         if interaction.guild and not interaction.guild.chunked:
             # To mention the members on this server
@@ -243,7 +252,7 @@ class Guild(GW2Cog):
                                     embeds.append(
                                         embed_list_lines(embed,
                                                          lines,
-                                                         "> **MEMBERS**",
+                                                         members_heading,
                                                          inline=True))
                                     lines = [line]
                                     embed = discord.Embed(
@@ -253,11 +262,11 @@ class Guild(GW2Cog):
 
             order_id += 1
         embeds.append(
-            embed_list_lines(embed, lines, "> **MEMBERS**", inline=True))
+            embed_list_lines(embed, lines, members_heading, inline=True))
         if len(embeds) == 1:
             return await interaction.followup.send(embed=embed)
         for i, embed in enumerate(embeds, start=1):
-            embed.set_footer(text="Page {}/{}".format(i, len(embeds)))
+            embed.set_footer(text=self.t(lang, N_("Page {page}/{pages}"), page=i, pages=len(embeds)))
         view = PaginatedEmbeds(embeds, interaction.user)
         out = await interaction.followup.send(embed=embeds[0], view=view)
         view.response = out
@@ -268,6 +277,7 @@ class Guild(GW2Cog):
     async def guild_treasury(self, interaction: discord.Interaction,
                              guild: str):
         """Get list of current and needed items for upgrades"""
+        lang = await self.lang(interaction)
         await interaction.response.defer()
         endpoints = [f"guild/{guild}", f"guild/{guild}/treasury"]
         try:
@@ -275,12 +285,10 @@ class Guild(GW2Cog):
                                                       interaction.user,
                                                       ["guilds"])
         except (IndexError, APINotFound):
-            return await interaction.followup.send("Invalid guild name",
-                                                   ephemeral=True)
+            return await interaction.followup.send(self.t(lang, INVALID_GUILD), ephemeral=True)
         except APIForbidden:
             return await interaction.followup.send(
-                "You don't have enough permissions in game to "
-                "use this command",
+                self.t(lang, NO_PERMISSIONS),
                 ephemeral=True)
         embed = discord.Embed(description=zero_width_space,
                               colour=await self.get_embed_color(interaction))
@@ -291,7 +299,7 @@ class Guild(GW2Cog):
         itemlist = []
         for item in treasury:
             res = await self.fetch_item(item["item_id"])
-            itemlist.append(res or {"name": "Unknown item"})
+            itemlist.append({"name": localized(res, lang)} if res else {"name": self.t(lang, N_("Unknown item"))})
         # Collect amounts
         if treasury:
             for item in treasury:
@@ -309,8 +317,9 @@ class Guild(GW2Cog):
                 amount = 0
                 item_counter += 1
         else:
-            return await interaction.followup.send("Treasury is empty!")
-        embed = embed_list_lines(embed, lines, "> **TREASURY**", inline=True)
+            return await interaction.followup.send(self.t(lang, N_("Treasury is empty!")))
+        embed = embed_list_lines(embed, lines, "> **{}**".format(self.t(lang, N_("Treasury")).upper()),
+                                 inline=True)
         await interaction.followup.send(embed=embed)
 
     @guild_group.command(name="log")
@@ -324,6 +333,11 @@ class Guild(GW2Cog):
     async def guild_log(self, interaction: discord.Interaction, log_type: str,
                         guild: str):
         """Get log of last 20 entries of stash/treasury/members"""
+        lang = await self.lang(interaction)
+
+        def t(text, **fields):
+            return self.t(lang, text, **fields)
+
         member_list = [
             "invited", "joined", "invite_declined", "rank_change", "kick"
         ]
@@ -334,12 +348,10 @@ class Guild(GW2Cog):
             base, log = await self.call_multiple(endpoints, interaction.user,
                                                  ["guilds"])
         except (IndexError, APINotFound):
-            return await interaction.followup.send("Invalid guild name",
-                                                   ephemeral=True)
+            return await interaction.followup.send(self.t(lang, INVALID_GUILD), ephemeral=True)
         except APIForbidden:
             return await interaction.followup.send(
-                "You don't have enough permissions in game to "
-                "use this command",
+                self.t(lang, NO_PERMISSIONS),
                 ephemeral=True)
 
         data = discord.Embed(description=zero_width_space,
@@ -357,23 +369,22 @@ class Guild(GW2Cog):
                     quantity = entry["count"]
                     if entry["item_id"] == 0:
                         item_name = self.gold_to_coins(interaction,
-                                                       entry["coins"])
+                                                       entry["coins"], lang)
                         quantity = ""
                         multiplier = ""
                     else:
                         itemdoc = await self.fetch_item(entry["item_id"])
-                        item_name = itemdoc["name"] if itemdoc else "Unknown item"
+                        item_name = localized(itemdoc, lang) if itemdoc else t(N_("Unknown item"))
                         multiplier = "x"
                     if log_type == "stash":
                         if entry["operation"] == "withdraw":
-                            operator = " withdrew"
+                            action = N_("{user} withdrew {amount}")
                         else:
-                            operator = " deposited"
+                            action = N_("{user} deposited {amount}")
                     else:
-                        operator = " donated"
-                    line = "**{}**\n*{}*".format(
-                        timedate, user + "{} {}{} {}".format(
-                            operator, quantity, multiplier, item_name))
+                        action = N_("{user} donated {amount}")
+                    amount = "{}{} {}".format(quantity, multiplier, item_name)
+                    line = "**{}**\n*{}*".format(timedate, t(action, user=user, amount=amount))
                     if length_lines + len(line) < 5500:
                         length_lines += len(line)
                         lines.append(line)
@@ -387,40 +398,39 @@ class Guild(GW2Cog):
                     user = entry["user"]
                     if entry["type"] == "invited":
                         invited_by = entry["invited_by"]
-                        entry_string = (f"{invited_by} has "
-                                        f"invited {user} to the guild.")
+                        entry_string = t(N_("{inviter} has invited {user} to the guild."),
+                                         inviter=invited_by, user=user)
                     elif entry["type"] == "joined":
-                        entry_string = f"{user} has joined the guild."
+                        entry_string = t(N_("{user} has joined the guild."), user=user)
                     elif entry["type"] == "kick":
                         kicked_by = entry["kicked_by"]
                         if kicked_by == user:
-                            entry_string = "{} has left the guild.".format(
-                                user)
+                            entry_string = t(N_("{user} has left the guild."), user=user)
                         else:
-                            entry_string = "{} has been kicked by {}.".format(
-                                user, kicked_by)
+                            entry_string = t(N_("{user} has been kicked by {kicker}."),
+                                             user=user, kicker=kicked_by)
                     elif entry["type"] == "rank_change":
                         old_rank = entry["old_rank"]
                         new_rank = entry["new_rank"]
                         if "changed_by" in entry:
                             changed_by = entry["changed_by"]
-                            entry_string = (
-                                f"{changed_by} has changed "
-                                f"the role of {user} from {old_rank} "
-                                f"to {new_rank}.")
+                            entry_string = t(
+                                N_("{changer} has changed the role of {user} from {old_rank} to {new_rank}."),
+                                changer=changed_by, user=user, old_rank=old_rank, new_rank=new_rank)
                         else:
-                            entry_string = (
-                                f"{user} changed their "
-                                f"role from {old_rank} to {new_rank}.")
+                            entry_string = t(N_("{user} changed their role from {old_rank} to {new_rank}."),
+                                             user=user, old_rank=old_rank, new_rank=new_rank)
                     line = "**{}**\n*{}*".format(timedate, entry_string)
                     if length_lines + len(line) < 5500:
                         length_lines += len(line)
                         lines.append(line)
         if not lines:
-            return await interaction.followup.send(
-                "No {} log entries yet for {}".format(log_type, base["name"]))
-        data = embed_list_lines(data, lines,
-                                "> **{0} Log**".format(log_type.capitalize()))
+            no_entries = {"stash": N_("No stash log entries yet for {guild}"),
+                          "treasury": N_("No treasury log entries yet for {guild}"),
+                          "members": N_("No members log entries yet for {guild}")}
+            return await interaction.followup.send(t(no_entries[log_type], guild=base["name"]))
+        headings = {"stash": N_("Stash Log"), "treasury": N_("Treasury Log"), "members": N_("Members Log")}
+        data = embed_list_lines(data, lines, "> **{}**".format(t(headings[log_type])))
         await interaction.followup.send(embed=data)
 
 

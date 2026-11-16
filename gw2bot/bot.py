@@ -1,4 +1,5 @@
 """The bot itself, ported from Toothy (toothy/toothy.py at 329c6eb)."""
+import asyncio
 import datetime
 import hashlib
 import json
@@ -16,6 +17,7 @@ from .emojis import Emojis
 from .errors import error_message
 from .gamedata import load_gamedata
 from .gw2api import Client
+from .i18n import N_, Catalog, GW2Translator, interaction_language
 from .keys import ApiKeys
 
 log = logging.getLogger(__name__)
@@ -48,18 +50,35 @@ def intents():
     return intents
 
 
-def command_tree_hash(tree):
-    """Hash of the global command payload that tree.sync() would send."""
-    payload = sorted(
-        (command.to_dict(tree) for command in tree.get_commands()),
-        key=lambda c: (c.get("type", 1), c["name"]),
-    )
+async def command_tree_hash(tree):
+    """Hash of the global command payload that tree.sync() would send,
+    translations included."""
+    translator = tree.translator
+    if translator:
+        payload = [await command.get_translated_payload(tree, translator) for command in tree.get_commands()]
+    else:
+        payload = [command.to_dict(tree) for command in tree.get_commands()]
+    payload.sort(key=lambda c: (c.get("type", 1), c["name"]))
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
 
-def readable_permissions(permissions):
+# The permissions commands check, as Discord names them
+PERMISSION_NAMES = {
+    "embed_links": N_("Embed Links"),
+    "kick_members": N_("Kick Members"),
+    "manage_channels": N_("Manage Channels"),
+    "manage_guild": N_("Manage Server"),
+    "manage_nicknames": N_("Manage Nicknames"),
+    "manage_roles": N_("Manage Roles"),
+    "use_external_emojis": N_("Use External Emoji"),
+}
+
+
+def readable_permissions(permissions, translate=lambda text: text):
     return ", ".join(
-        p.replace("guild", "server").replace("_", " ").title() for p in permissions
+        translate(PERMISSION_NAMES[p]) if p in PERMISSION_NAMES
+        else p.replace("guild", "server").replace("_", " ").title()
+        for p in permissions
     )
 
 
@@ -80,7 +99,8 @@ class GW2Bot(commands.AutoShardedBot):
         self.data = Data(settings.mongo_uri, settings.mongo_db)
         self.state = self.data.state
         self.gamedata, self.instabilities = load_gamedata()
-        self.keys = ApiKeys(self.data.users)
+        self.catalog = Catalog.load()
+        self.keys = ApiKeys(self.data.users, self.catalog)
         # Not self.emojis: discord.py's Client.emojis is the emoji cache
         self.gw2_emojis = Emojis(self, self.data.config)
         self.available = True
@@ -115,6 +135,7 @@ class GW2Bot(commands.AutoShardedBot):
         await self.data.ensure_indexes()
         await self.data.config.ensure_defaults(CONFIG_DEFAULTS)
         await self.gw2_emojis.load()
+        await self.tree.set_translator(GW2Translator(self.catalog))
         for extension in extensions():
             await self.load_extension(extension)
         if self.settings.auto_sync:
@@ -128,7 +149,7 @@ class GW2Bot(commands.AutoShardedBot):
 
         Returns whether a sync happened.
         """
-        digest = command_tree_hash(self.tree)
+        digest = await command_tree_hash(self.tree)
         doc = await self.state.find_one({"_id": "command_tree"})
         if doc and doc.get("hash") == digest:
             log.info("Commands unchanged since the last sync")
@@ -143,7 +164,7 @@ class GW2Bot(commands.AutoShardedBot):
             {"_id": "command_tree"},
             {
                 "$set": {
-                    "hash": digest or command_tree_hash(self.tree),
+                    "hash": digest or await command_tree_hash(self.tree),
                     "synced_at": datetime.datetime.now(datetime.timezone.utc),
                 }
             },
@@ -165,43 +186,53 @@ class GW2Bot(commands.AutoShardedBot):
             await self.session.close()
         await self.data.close()
 
+    async def interaction_language(self, interaction):
+        """See GW2Cog.lang; English if the settings can't be read quickly
+        (an error is still answered before the interaction expires)."""
+        try:
+            return await asyncio.wait_for(interaction_language(self.data.users, interaction), 2)
+        except Exception:
+            log.exception("Couldn't read the user's language")
+            return "en"
+
     async def on_app_command_error(
         self, interaction: discord.Interaction, error: app_commands.AppCommandError
     ):
+        lang = await self.interaction_language(interaction)
+
+        def t(text, **fields):
+            return self.catalog.t(lang, text, **fields)
+
         msg = ""
         if isinstance(error, app_commands.CommandInvokeError):
-            msg = error_message(error.original)
+            msg = error_message(error.original, lang, self.catalog)
             cog = getattr(interaction.command, "binding", None)
             if not msg and hasattr(cog, "cog_error_handler"):
                 msg = await cog.cog_error_handler(interaction, error.original)
             if not msg:
                 log.exception("Exception in command", exc_info=error.original)
-                msg = (
+                msg = t(N_(
                     "Something went wrong. If this problem persists, please "
                     "report it or ask about it in the support server."
-                )
+                ))
         elif isinstance(error, app_commands.NoPrivateMessage):
-            msg = "This command cannot be used in DMs"
+            msg = t(N_("This command cannot be used in DMs"))
         elif isinstance(error, app_commands.CommandOnCooldown):
-            msg = "You cannot use this command again for the next {:.2f} seconds".format(
-                error.retry_after
-            )
+            msg = t(N_("You cannot use this command again for the next {seconds} seconds"),
+                    seconds=f"{error.retry_after:.2f}")
         elif isinstance(error, app_commands.MissingPermissions):
-            msg = "You're missing the following permissions to use this command: `{}`".format(
-                readable_permissions(error.missing_permissions)
-            )
+            msg = t(N_("You're missing the following permissions to use this command: `{permissions}`"),
+                    permissions=readable_permissions(error.missing_permissions, t))
         elif isinstance(error, app_commands.BotMissingPermissions):
-            msg = (
+            msg = t(N_(
                 "The bot is missing the following permissions to be able to "
-                "run this command:\n`{}`\nPlease add them then try again".format(
-                    readable_permissions(error.missing_permissions)
-                )
-            )
+                "run this command:\n`{permissions}`\nPlease add them then try again"
+            ), permissions=readable_permissions(error.missing_permissions, t))
         elif isinstance(error, app_commands.CommandNotFound):
-            msg = (
+            msg = t(N_(
                 "The command you used could not be found. The bot owner "
                 "probably forgot to sync commands. Try again later."
-            )
+            ))
         if not msg:
             return
         if interaction.response.is_done():

@@ -10,26 +10,35 @@ from discord.ext import commands
 from gw2bot.builds import Build
 from gw2bot.utils.wiki import page_url
 
+from ..gamedata import CRAFTING
+from ..i18n import N_, localized
 from .base import GW2Cog
 from .skills import skill_embed
 
 CHATCODE_REGEX = re.compile(r"\[\&(?=[^\s\[\]]*\])(.*?)\]")
 # By the link's first byte, from 1
 LINK_TYPES = [
-    "Coin",
-    "Item",
-    "NPC text string",
-    "Map link",
-    "PvP Game",
-    "Skill",
-    "Trait",
-    "User",
-    "Recipe",
-    "Wardrobe",
-    "Outfit",
-    "WvW objective",
-    "Build template",
+    N_("Coin"),
+    N_("Item"),
+    N_("NPC text string"),
+    N_("Map link"),
+    N_("PvP Game"),
+    N_("Skill"),
+    N_("Trait"),
+    N_("User"),
+    N_("Recipe"),
+    N_("Wardrobe"),
+    N_("Outfit"),
+    N_("WvW objective"),
+    N_("Build template"),
 ]
+# Points of interest by the API's type: the name shown (and its emoji's)
+POI_TYPES = {
+    "landmark": N_("Point of Interest"),
+    "waypoint": N_("Waypoint"),
+    "vista": N_("Vista"),
+    "unlock": N_("Unlock"),
+}
 TILESERVICE_BASE_URL = "https://tiles.guildwars2.com/"
 
 
@@ -51,8 +60,10 @@ class ChatLinks(GW2Cog):
         else:
             self.previews_disabled.add(guild_id)
 
-    async def get_wiki_url(self, name):
-        return await page_url(self.bot.session, name)
+    async def get_wiki_url(self, doc, lang):
+        """The wiki page for a cached document's name, in `lang`'s wiki if
+        it has one."""
+        return await page_url(self.bot.session, localized(doc, lang), lang, english_name=doc["name"])
 
     @commands.Cog.listener("on_message")
     async def find_chatcodes(self, message: discord.Message):
@@ -76,22 +87,30 @@ class ChatLinks(GW2Cog):
             return
         link_type = LINK_TYPES[data[0] - 1]
         try:
-            embed = discord.Embed(title=link_type, color=self.embed_color)
+            if message.guild:
+                lang = await self.guild_lang(message.guild)
+            else:
+                lang = await self.user_lang(message.author.id)
+
+            def t(text, **fields):
+                return self.t(lang, text, **fields)
+
+            embed = discord.Embed(title=t(link_type), color=self.embed_color)
             embed.set_author(
                 name=message.author.display_name,
                 icon_url=message.author.display_avatar.url,
             )
             if message.guild:
                 embed.set_footer(
-                    text=(
+                    text=t(N_(
                         "Server admins can opt out of chat link "
                         'previewing by using the "/server preview_chat_links" command'
-                    ),
+                    )),
                     icon_url=self.bot.user.display_avatar.url,
                 )
             else:
                 embed.set_footer(icon_url=self.bot.user.display_avatar.url)
-            embed.description = "Chat link preview"
+            embed.description = t(N_("Chat link preview"))
             reference = None
             if message.guild:
                 me = message.guild.me
@@ -108,13 +127,13 @@ class ChatLinks(GW2Cog):
                     item_doc = await self.fetch_item(item_id)
                     if not item_doc:
                         return
-                    embed.title = item_doc["name"]
+                    embed.title = localized(item_doc, lang)
                     embed.set_thumbnail(url=item_doc["icon"])
                     embed.color = int(
                         self.gamedata["items"]["rarity_colors"][item_doc["rarity"]], 16
                     )
                     suffix = ""
-                    wiki_url = await self.get_wiki_url(item_doc["name"])
+                    wiki_url = await self.get_wiki_url(item_doc, lang)
                     if wiki_url:
                         embed.url = wiki_url
                     if len(data) > 5:
@@ -133,11 +152,11 @@ class ChatLinks(GW2Cog):
                             skin_id = skin_id[0]
                             skin_doc = await self.db.skins.find_one({"_id": skin_id})
                             if not skin_doc:
-                                name = "Unknown"
+                                name = t(N_("Unknown"))
                             else:
-                                name = skin_doc["name"]
+                                name = localized(skin_doc, lang)
                                 embed.set_thumbnail(url=skin_doc["icon"])
-                            embed.add_field(name="Skin", value=name)
+                            embed.add_field(name=t(N_("Skin")), value=name)
                             offset += 4
                         upgrades = []
                         for upgrade in flags[1:]:
@@ -152,14 +171,14 @@ class ChatLinks(GW2Cog):
                                 {"_id": upgrade_id}
                             )
                             if not upgrade_doc:
-                                upgrades.append("Unknown upgrade")
+                                upgrades.append(t(N_("Unknown upgrade")))
                                 continue
-                            upgrades.append(upgrade_doc["name"])
+                            upgrades.append(localized(upgrade_doc, lang))
                             if not suffix:
-                                suffix = upgrade_doc["details"].get("suffix", "")
+                                suffix = localized(upgrade_doc, lang, "details.suffix") or ""
                         if upgrades:
-                            field_name = "Upgrades" if len(upgrades) > 1 else "Upgrade"
-                            embed.add_field(name=field_name, value="\n".join(upgrades))
+                            field_name = N_("Upgrades") if len(upgrades) > 1 else N_("Upgrade")
+                            embed.add_field(name=t(field_name), value="\n".join(upgrades))
                         if suffix:
                             embed.title = f"{embed.title} {suffix}"
                     if quantity > 1:
@@ -187,12 +206,10 @@ class ChatLinks(GW2Cog):
                     # await message.channel.send(file=file)
                     # API SUCKS
                     # TODO More detail
-                    poi_type = poi_doc["type"].title()
-                    if poi_type == "Landmark":
-                        poi_type = "Point of Interest"
+                    poi_type = POI_TYPES.get(poi_doc["type"], poi_doc["type"].title())
                     emoji = self.get_emoji(message, poi_type)
                     embed.add_field(
-                        name=emoji + poi_type, value=poi_doc.get("name", "Unnamed")
+                        name=emoji + t(poi_type), value=localized(poi_doc, lang) or t(N_("Unnamed"))
                     )
                     return await message.channel.send(
                         embed=embed, reference=reference, mention_author=False
@@ -206,7 +223,7 @@ class ChatLinks(GW2Cog):
                     skill_doc = await self.db.skills.find_one({"_id": skill_id})
                     if not skill_doc:
                         return
-                    new_embed = await skill_embed(self, skill_doc, message)
+                    new_embed = await skill_embed(self, skill_doc, message, lang)
                     new_embed.set_footer(
                         text=embed.footer.text, icon_url=embed.footer.icon_url
                     )
@@ -219,7 +236,7 @@ class ChatLinks(GW2Cog):
                     trait_doc = await self.db.traits.find_one({"_id": trait_id})
                     if not trait_doc:
                         return
-                    new_embed = await skill_embed(self, trait_doc, message)
+                    new_embed = await skill_embed(self, trait_doc, message, lang)
                     new_embed.set_footer(
                         text=embed.footer.text, icon_url=embed.footer.icon_url
                     )
@@ -237,9 +254,8 @@ class ChatLinks(GW2Cog):
                         return
                     output = await self.fetch_item(recipe_doc["output_item_id"])
                     if output:
-                        count = recipe_doc["output_item_count"]
-                        name = output["name"]
-                        embed.title = f"Recipe: {count} {name}"
+                        embed.title = t(N_("Recipe: {count} {name}"), count=recipe_doc["output_item_count"],
+                                        name=localized(output, lang))
                     emojis = message.channel.permissions_for(me).external_emojis
                     disciplines = recipe_doc.get("disciplines", [])
                     if emojis:
@@ -248,20 +264,18 @@ class ChatLinks(GW2Cog):
                             value.append(self.get_emoji(message, disc))
                         value = "".join(value)
                     else:
-                        value = "\n".join(disciplines)
+                        value = "\n".join(t(CRAFTING.get(disc, disc)) for disc in disciplines)
                     if value:
-                        embed.add_field(name="Crafting disciplines", value=value)
+                        embed.add_field(name=t(N_("Crafting disciplines")), value=value)
                     ingredients = recipe_doc.get("ingredients", [])
                     value = []
                     for ingredient in ingredients:
                         item_doc = await self.fetch_item(ingredient["item_id"])
                         if item_doc:
-                            name = item_doc["name"]
-                            count = ingredient["count"]
-                            value.append(f"{count} {name}")
+                            value.append(f"{ingredient['count']} {localized(item_doc, lang)}")
                     value = "\n".join(value)
                     if value:
-                        embed.add_field(name="Ingredients", value=value)
+                        embed.add_field(name=t(N_("Ingredients")), value=value)
                     return await message.channel.send(
                         embed=embed, reference=reference, mention_author=False
                     )
@@ -272,7 +286,7 @@ class ChatLinks(GW2Cog):
                     if not skin_doc:
                         return
                     embed.set_thumbnail(url=skin_doc["icon"])
-                    embed.title = skin_doc["name"]
+                    embed.title = localized(skin_doc, lang)
                     return await message.channel.send(
                         embed=embed, reference=reference, mention_author=False
                     )
@@ -283,7 +297,7 @@ class ChatLinks(GW2Cog):
                     if not outfit_doc:
                         return
                     embed.set_thumbnail(url=outfit_doc["icon"])
-                    embed.title = outfit_doc["name"]
+                    embed.title = localized(outfit_doc, lang)
                     return await message.channel.send(
                         embed=embed, reference=reference, mention_author=False
                     )

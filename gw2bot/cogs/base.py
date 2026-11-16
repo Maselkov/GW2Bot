@@ -7,6 +7,7 @@ from discord.app_commands import Choice
 from discord.ext import commands
 
 from ..gw2api.errors import APIError
+from ..i18n import DEFAULT_LANGUAGE, N_, interaction_language, localized, resolve_language
 from ..utils.db import prepare_search
 
 EMBED_COLOR = 0xC12D2B
@@ -79,22 +80,51 @@ class GW2Cog(commands.Cog):
         key=None,
         schema_version=None,
         schema_string=None,
+        lang=None,
     ):
-        """GET an endpoint with `key`, or else `user`'s key (checking `scopes`)."""
+        """GET an endpoint with `key`, or else `user`'s key (checking
+        `scopes`), with its text in `lang` (default English)."""
         if key is None and user:
             key = (await self.fetch_key(user, scopes))["key"]
-        data = await self.api.get(endpoint, key=key, schema=schema_version or schema_string)
+        data = await self.api.get(endpoint, key=key, schema=schema_version or schema_string, lang=lang)
         if endpoint == "account" and user:
             self.keys.check_account_rename_later(user, key, data)
         return data
 
     async def call_multiple(
-        self, endpoints, user=None, scopes=None, key=None, schema_version=None, schema_string=None
+        self, endpoints, user=None, scopes=None, key=None, schema_version=None, schema_string=None, lang=None
     ):
         """GET several endpoints with one key; results are in input order."""
         if key is None and user:
             key = (await self.fetch_key(user, scopes))["key"]
-        return await self.api.get_many(endpoints, key=key, schema=schema_version or schema_string)
+        return await self.api.get_many(endpoints, key=key, schema=schema_version or schema_string, lang=lang)
+
+    async def lang(self, interaction):
+        """The language to answer `interaction` in: the user's /language
+        setting, else their Discord client's language, else English."""
+        return await interaction_language(self.bot.data.users, interaction)
+
+    async def guild_lang(self, guild):
+        """The language to post in `guild` in: its /server language setting,
+        else its Discord language (community servers set one), else
+        English."""
+        settings = await self.bot.data.guilds.get(guild.id)
+        return resolve_language(settings.get("language"), guild.preferred_locale)
+
+    def settings_lang(self, settings, guild=None):
+        """The language to post in a server in, from its settings document
+        when it's already read (in loops over servers)."""
+        return resolve_language(settings.get("language"), guild.preferred_locale if guild else None)
+
+    async def user_lang(self, user_id):
+        """The language for a message to a user outside an interaction (a
+        DM): their /language setting, else English."""
+        settings = await self.bot.data.users.get(user_id)
+        return resolve_language(settings.get("language"))
+
+    def t(self, lang, text, /, **fields):
+        """`text` in `lang`; see gw2bot.i18n.Catalog.t."""
+        return self.bot.catalog.t(lang, text, **fields)
 
     def get_emoji(self, ctx, emoji, **kwargs):
         """See gw2bot.emojis.Emojis.get."""
@@ -105,31 +135,45 @@ class GW2Cog(commands.Cog):
         """Registered emoji ids by name."""
         return self.bot.gw2_emojis.ids
 
-    def gold_to_coins(self, ctx, money):
-        """Copper as gold/silver/copper, with their emojis where usable."""
+    def gold_to_coins(self, ctx, money, lang=DEFAULT_LANGUAGE):
+        """Copper as gold/silver/copper, with their emojis where usable,
+        else their names in `lang`."""
         gold, remainder = divmod(money, 10000)
         silver, copper = divmod(remainder, 100)
-        kwargs = {"fallback": True, "fallback_fmt": " {} "}
-        gold = "{}{}".format(gold, self.get_emoji(ctx, "gold", **
-                                                  kwargs)) if gold else ""
-        silver = "{}{}".format(silver, self.get_emoji(
-            ctx, "silver", **kwargs)) if silver else ""
-        copper = "{}{}".format(copper, self.get_emoji(
-            ctx, "copper", **kwargs)) if copper else ""
-        return "".join(filter(None, [gold, silver, copper]))
+        coins = ((gold, "gold", N_("gold")), (silver, "silver", N_("silver")), (copper, "copper", N_("copper")))
+        text = ""
+        for amount, emoji_name, name in coins:
+            if amount:
+                emoji = self.get_emoji(ctx, emoji_name)
+                text += f"{amount}{emoji}" if emoji else f"{amount} {self.t(lang, name)} "
+        return text
 
     async def fetch_item(self, item):
         """The cached item document."""
         return await self.db.items.find_one({"_id": item})
 
-    async def name_choices(self, collection, current, **filters):
+    async def find_by_name(self, collection, current, lang=DEFAULT_LANGUAGE, limit=25, **filters):
+        """Up to `limit` cached documents matching `filters` whose name in
+        `lang` starts with `current`, then those whose English name does."""
+        search = prepare_search(current)
+        docs = []
+        if lang != DEFAULT_LANGUAGE:
+            docs = await collection.find({f"l10n.{lang}.name": search, **filters}).to_list(limit)
+        if len(docs) < limit:
+            found = [doc["_id"] for doc in docs]
+            docs += await collection.find({"name": search, "_id": {"$nin": found}, **filters}).to_list(
+                limit - len(docs))
+        return docs
+
+    async def name_choices(self, collection, current, lang=DEFAULT_LANGUAGE, **filters):
         """Autocomplete choices (value: the id) for up to 25 cached
         documents whose name starts with `current` and that match
-        `filters`."""
+        `filters`, named in `lang`."""
         if not current:
             return []
-        docs = await collection.find({"name": prepare_search(current), **filters}).to_list(25)
-        return [Choice(name=doc["name"], value=str(doc["_id"])) for doc in docs]
+        docs = await self.find_by_name(collection, current, lang, **filters)
+        # Discord's limit on a choice's name
+        return [Choice(name=localized(doc, lang)[:100], value=str(doc["_id"])) for doc in docs]
 
     async def resolve_id(self, interaction, value, autocomplete):
         """The id an option names: picked from its autocomplete, or else the
@@ -140,14 +184,14 @@ class GW2Cog(commands.Cog):
         choices = await autocomplete(interaction, value)
         return int(choices[0].value) if choices else None
 
-    async def get_title(self, title_id):
-        """A title's name, or "" if it isn't cached."""
+    async def get_title(self, title_id, lang=DEFAULT_LANGUAGE):
+        """A title's name in `lang`, or "" if it isn't cached."""
         try:
             results = await self.db.titles.find_one({"_id": title_id})
-            title = results["name"]
-        except (KeyError, TypeError):
+            title = localized(results, lang)
+        except (KeyError, TypeError, AttributeError):
             return ""
-        return title
+        return title or ""
 
     def rarity_to_color(self, rarity):
         return int(self.gamedata["items"]["rarity_colors"][rarity], 0)
@@ -268,12 +312,14 @@ class GW2Cog(commands.Cog):
         return counts
 
     async def guild_subdocs(self, field, query):
-        """Each matching guild's `field` settings, with the guild's _id and
-        the discord.Guild (or None) as _obj."""
+        """Each matching guild's `field` settings, with the guild's _id, the
+        discord.Guild (or None) as _obj, and its /server language setting
+        as _language."""
         async for doc in self.bot.data.guilds.find(query):
             settings = doc.get(field)
             if isinstance(settings, dict):
-                yield {**settings, "_id": doc["_id"], "_obj": self.bot.get_guild(doc["_id"])}
+                yield {**settings, "_id": doc["_id"], "_obj": self.bot.get_guild(doc["_id"]),
+                       "_language": doc.get("language")}
 
     async def get_embed_color(self, ctx):
         # Toothy's per-user embed_color only ever applied to text commands

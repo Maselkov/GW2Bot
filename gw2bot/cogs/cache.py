@@ -1,6 +1,9 @@
 """The game data cache: items, achievements, skills and more copied from the
 API into MongoDB, rebuilt when the game updates, and the owner's >database
-commands."""
+commands.
+
+Documents are the API's English ones, with their text in German, French and
+Spanish under "l10n" (see gw2bot.i18n)."""
 import logging
 import time
 
@@ -9,7 +12,16 @@ from discord.ext import commands
 from pymongo import ReplaceOne
 from pymongo.errors import BulkWriteError
 
+from ..i18n import LANGUAGES, l10n_diff
 from .base import GW2Cog
+
+SCHEMA = "2021-07-15T13:00:00.000Z"
+# Languages fetched besides English
+OTHER_LANGUAGES = LANGUAGES[1:]
+# Endpoints without text to translate: recipes and legends are ids and numbers
+UNTRANSLATED = {"recipes", "legends"}
+# Collections searched by name (autocomplete), in every language
+NAME_INDEXED = ["items", "achievements", "titles", "skins", "currencies", "skills"]
 
 
 class Cache(GW2Cog):
@@ -58,21 +70,37 @@ class Cache(GW2Cog):
             except BulkWriteError:
                 self.log.exception("BWE while caching continents")
 
-        continents = await self.call_api("continents?ids=all")
-        pois = []
-        for continent in continents:
-            floors = await self.call_api(
-                f"continents/{continent['id']}/floors?ids=all")
+        def floor_pois(floors):
             for floor in floors:
                 for region in floor["regions"].values():
                     for game_map in region["maps"].values():
-                        for poi in game_map["points_of_interest"].values():
-                            del poi["chat_link"]
-                            poi["continent_id"] = continent["id"]
-                            pois.append(poi)
-                            if len(pois) > 200:
-                                await bulk_write(pois)
-                                pois = []
+                        yield from game_map["points_of_interest"].values()
+
+        continents = await self.call_api("continents?ids=all")
+        pois = []
+        for continent in continents:
+            path = f"continents/{continent['id']}/floors?ids=all"
+            # Only the names of the other languages' floors are kept: the
+            # floors are big
+            names = {}
+            for language in OTHER_LANGUAGES:
+                for poi in floor_pois(await self.call_api(path, lang=language)):
+                    if "name" in poi:
+                        names.setdefault(poi["id"], {})[language] = poi["name"]
+            for poi in floor_pois(await self.call_api(path)):
+                del poi["chat_link"]
+                poi["continent_id"] = continent["id"]
+                l10n = {
+                    language: {"name": name}
+                    for language, name in names.get(poi["id"], {}).items()
+                    if name != poi.get("name")
+                }
+                if l10n:
+                    poi["l10n"] = l10n
+                pois.append(poi)
+                if len(pois) > 200:
+                    await bulk_write(pois)
+                    pois = []
         if pois:
             await bulk_write(pois)
 
@@ -90,24 +118,32 @@ class Cache(GW2Cog):
                 self.log.exception("BWE while caching {}".format(endpoint),
                                    exc_info=e)
 
-        items = await self.call_api(endpoint,
-                                    schema_string="2021-07-15T13:00:00.000Z")
+        translate = endpoint not in UNTRANSLATED
+        items = await self.call_api(endpoint, schema_string=SCHEMA)
         if not all_at_once:
             counter = 0
             while True:
                 ids = ",".join(str(x) for x in items[counter:counter + 200])
                 if not ids:
                     break
-                itemgroup = await self.call_api(
-                    f"{endpoint}?ids={ids}",
-                    schema_string="2021-07-15T13:00:00.000Z")
-                await bulk_write(itemgroup)
+                await bulk_write(await self.fetch_documents(f"{endpoint}?ids={ids}", translate))
                 counter += 200
         else:
-            itemgroup = await self.call_api(
-                "{}?ids=all".format(endpoint),
-                schema_string="2021-07-15T13:00:00.000Z")
-            await bulk_write(itemgroup)
+            await bulk_write(await self.fetch_documents(f"{endpoint}?ids=all", translate))
+
+    async def fetch_documents(self, path, translate=True):
+        """The API's documents at `path`, in English, with what differs in
+        the other languages under "l10n"."""
+        docs = await self.call_api(path, schema_string=SCHEMA)
+        if not translate:
+            return docs
+        for language in OTHER_LANGUAGES:
+            others = {doc["id"]: doc for doc in await self.call_api(path, schema_string=SCHEMA, lang=language)}
+            for doc in docs:
+                diff = l10n_diff(doc, others.get(doc["id"], {}))
+                if diff:
+                    doc.setdefault("l10n", {})[language] = diff
+        return docs
 
     async def rebuild_database(self):
         start = time.time()
@@ -130,13 +166,10 @@ class Cache(GW2Cog):
                     msg = "Caching {} failed".format(e)
                     self.log.exception(msg)
                     await self.tell_owner(msg)
-            await self.db.items.create_index("name")
-            await self.db.achievements.create_index("name")
-            await self.db.titles.create_index("name")
+            for collection in NAME_INDEXED:
+                for field in ["name"] + [f"l10n.{language}.name" for language in OTHER_LANGUAGES]:
+                    await self.db[collection].create_index(field)
             await self.db.recipes.create_index("output_item_id")
-            await self.db.skins.create_index("name")
-            await self.db.currencies.create_index("name")
-            await self.db.skills.create_index("name")
             await self.cache_raids()
             await self.cache_pois()
         finally:

@@ -226,3 +226,31 @@ async def test_uncached_items_in_transactions_and_deliveries():
     box = {"coins": 0, "items": [{"id": 99, "count": 2}]}
     embed, _ = await subject.commerce("tp_delivery", [(200, box)], items=ITEMS)
     assert fields(embed) == [("Coins", "Currently no coins for pickup."), ("Unknown item", "x 2")]
+
+
+# --- Languages ----------------------------------------------------------------------------
+
+
+async def test_price_in_the_users_language():
+    import discord
+
+    ecto = {**ECTO, "l10n": {"de": {"name": "Ektoplasmakugel"}}}
+    prices = {"id": 19721, "buys": {"quantity": 900, "unit_price": 1598}, "sells": {"quantity": 0, "unit_price": 0}}
+    embed, _ = await subject.commerce("tp_price", [(200, prices)], items=[ecto], item="19721",
+                                      locale=discord.Locale.german)
+    assert embed["title"] == "Ektoplasmakugel"
+    # German capitalizes nouns
+    assert embed["description"] == "Handwerksmaterial der Stufe 0 (Exotisch)"
+    # Coins in words where their emojis can't be used
+    assert fields(embed) == [("Kaufpreis", "15 Silber 98 Kupfer "), ("Verkaufspreis", "Keine Verkaufsangebote")]
+
+
+async def test_item_descriptions_are_lowercase_within_a_sentence_in_french():
+    import discord
+
+    prices = {"id": 19721, "buys": {"quantity": 0, "unit_price": 0}, "sells": {"quantity": 0, "unit_price": 0}}
+    embed, _ = await subject.commerce("tp_price", [(200, prices)], items=[ECTO], item="19721",
+                                      locale=discord.Locale.french)
+    # The item has no French name cached: its English one
+    assert embed["title"] == "Glob of Ectoplasm"
+    assert embed["description"] == "Matériau d'artisanat de niveau 0, rareté : exotique"

@@ -13,29 +13,52 @@ from gw2bot.builds import Build, profession_info
 from gw2bot.utils.chat import embed_list_lines, format_age, zero_width_space
 from gw2bot.utils.wiki import profession_icon_url
 
+from ..gamedata import CRAFTING, WEAPONS
+from ..i18n import DEFAULT_LANGUAGE, N_, Catalog, localized
 from ..gw2api.errors import APIError, APINotFound
 from .base import GW2Cog
 
 LETTERS = ["🇦", "🇧", "🇨", "🇩", "🇪", "🇫", "🇬", "🇭", "🇮", "🇯"]
 
+# Untranslated text, for callers that don't give a language
+ENGLISH = Catalog()
+
+# Attributes as /character gear shows them (readable_attribute's names)
+ATTRIBUTE_NAMES = {
+    "Power": N_("Power"), "Toughness": N_("Toughness"), "Vitality": N_("Vitality"),
+    "Precision": N_("Precision"), "Ferocity": N_("Ferocity"), "Condition Damage": N_("Condition Damage"),
+    "Expertise": N_("Expertise"), "Concentration": N_("Concentration"),
+    "Agony Resistance": N_("Agony Resistance"), "Armor": N_("Armor"), "Health": N_("Health"),
+    "Critical Chance": N_("Critical Chance"), "Critical Damage": N_("Critical Damage"),
+    "Healing Power": N_("Healing Power"), "Condition Duration": N_("Condition Duration"),
+    "Boon Duration": N_("Boon Duration"),
+}
+# Items' weapon types that the skills' weapon types spell differently
+ITEM_WEAPON_TYPES = {"LongBow": "Longbow", "ShortBow": "Shortbow", "Harpoon": "Spear"}
+RACES = {"Asura": N_("Asura"), "Charr": N_("Charr"), "Human": N_("Human"), "Norn": N_("Norn"),
+         "Sylvari": N_("Sylvari")}
+GENDERS = {"Male": N_("Male"), "Female": N_("Female")}
+
 
 class CharacterGearDropdown(discord.ui.Select):
 
-    def __init__(self, tabs, tab_type, emojis):
+    def __init__(self, tabs, tab_type, emojis, t=ENGLISH.t, lang=DEFAULT_LANGUAGE):
         options = []
         self.is_equipment = tab_type == "equipment"
+        label = N_("Equipment Tab {number}") if self.is_equipment else N_("Build Tab {number}")
         for i, tab in enumerate(tabs):
             try:
                 emoji = emojis[i]
             except IndexError:
                 emoji = None
             options.append(
-                discord.SelectOption(label=f"{tab_type.title()} Tab {i+1}",
+                discord.SelectOption(label=t(lang, label, number=i + 1),
                                      value=i,
                                      emoji=emoji,
                                      description=tab["name"]))
 
-        super().__init__(placeholder=f"Select {tab_type} template",
+        placeholder = N_("Select equipment template") if self.is_equipment else N_("Select build template")
+        super().__init__(placeholder=t(lang, placeholder),
                          min_values=1,
                          max_values=1,
                          options=options)
@@ -52,8 +75,12 @@ class CharacterGearDropdown(discord.ui.Select):
 class CharacterGearView(discord.ui.View):
 
     def __init__(self, equipment_options, build_options, character, emojis,
-                 emoji_cache, user):
+                 emoji_cache, user, t=ENGLISH.t, lang=DEFAULT_LANGUAGE, profession=None):
         super().__init__()
+        self.t = t
+        self.lang = lang
+        # The profession as it's named in `lang`, if not the build's own
+        self.profession = profession
         self.value = None
         self.emojis = emojis
         self.character = character
@@ -61,9 +88,9 @@ class CharacterGearView(discord.ui.View):
         self.equipments = equipment_options
         self.active_build = character["active_build_tab"] - 1
         self.active_equipment = character["active_equipment_tab"] - 1
-        self.add_item(CharacterGearDropdown(build_options, "build", emojis))
+        self.add_item(CharacterGearDropdown(build_options, "build", emojis, t, lang))
         self.add_item(
-            CharacterGearDropdown(equipment_options, "equipment", emojis))
+            CharacterGearDropdown(equipment_options, "equipment", emojis, t, lang))
         self.emojis_cache = emoji_cache
         self.user = user
         self.response = None
@@ -84,7 +111,8 @@ class CharacterGearView(discord.ui.View):
         for field in equipment["fields"]:
             embed.add_field(name=field[0], value=field[1], inline=field[2])
         profession = build["build"].profession
-        description = ["Build template:"]
+        name = self.profession or profession.name
+        description = [self.t(self.lang, N_("Build template:"))]
         line = ""
         for i in range(len(self.builds)):
             if i == self.active_build:
@@ -95,7 +123,7 @@ class CharacterGearView(discord.ui.View):
         if build["name"]:
             line += f" *{build['name']}*"
         description.append("> " + line)
-        description.append("Equipment template:")
+        description.append(self.t(self.lang, N_("Equipment template:")))
         line = ""
         for i in range(len(self.equipments)):
             if i == self.active_equipment:
@@ -109,10 +137,9 @@ class CharacterGearView(discord.ui.View):
         description = "\n".join(description)
         embed.description = description
         embed.color = profession.color
-        embed.set_footer(text="A level {} {} ".format(self.character["level"],
-                                                      profession.name.lower()))
+        embed.set_footer(text=level_line(self.t, self.lang, self.character["level"], name))
         embed.set_author(name=self.character["name"], icon_url=profession.icon)
-        embed.add_field(name="Build code",
+        embed.add_field(name=self.t(self.lang, N_("Build code")),
                         value=build["build"].code,
                         inline=False)
         embed.set_image(url=build["url"])
@@ -164,6 +191,14 @@ class Character:
         info = {"name": name, "icon": icon}
         self.spec_cache[mode] = info
         return info
+
+
+def level_line(t, lang, level, profession):
+    """"A level 80 weaver", as the character embeds' footers say it."""
+    # German capitalizes nouns
+    profession = profession if lang == "de" else profession.lower()
+    line = t(lang, N_("A level {level} {profession}"), level=level, profession=profession)
+    return line[:1].upper() + line[1:] + " "
 
 
 def utcnow():
@@ -241,11 +276,12 @@ class Characters(GW2Cog):
     async def character_fashion(self, interaction: discord.Interaction,
                                 character: str):
         """Displays the fashion wars of given character"""
+        lang = await self.lang(interaction)
         await interaction.response.defer()
         try:
             results = await self.get_character(interaction, character)
         except APINotFound:
-            return await interaction.followup.send("Invalid character name")
+            return await interaction.followup.send(self.t(lang, N_("Invalid character name")))
         except APIError:
             raise
         eq = [
@@ -258,7 +294,7 @@ class Characters(GW2Cog):
             "Backpack", "WeaponA1", "WeaponA2", "WeaponB1", "WeaponB2"
         ]
         gear = {piece: {} for piece in pieces}
-        profession = await self.get_profession_by_character(results)
+        profession = await self.get_profession_by_character(results, lang)
         level = results["level"]
         for item in eq:
             slot = item["slot"]
@@ -270,7 +306,7 @@ class Characters(GW2Cog):
                 if dye:
                     doc = await self.db.colors.find_one({"_id": dye})
                     if doc:
-                        dyes.append(doc["name"])
+                        dyes.append(localized(doc, lang))
                         continue
                 dyes.append(None)
             gear[slot]["dyes"] = dyes
@@ -278,12 +314,12 @@ class Characters(GW2Cog):
             if skin:
                 doc = await self.db.skins.find_one({"_id": skin})
                 if doc:
-                    gear[slot]["name"] = doc["name"]
+                    gear[slot]["name"] = localized(doc, lang)
                     continue
             doc = await self.db.items.find_one({"_id": item["id"]})
-            gear[slot]["name"] = doc["name"] if doc else "Unknown item"
+            gear[slot]["name"] = localized(doc, lang) if doc else self.t(lang, N_("Unknown item"))
 
-        embed = discord.Embed(description="Fashion", colour=profession.color)
+        embed = discord.Embed(description=self.t(lang, N_("Fashion")), colour=profession.color)
         for piece in pieces:
             info = gear[piece]
             if not info:
@@ -291,14 +327,13 @@ class Characters(GW2Cog):
             value = []
             for i, dye in enumerate(info["dyes"], start=1):
                 if dye:
-                    value.append(f"Channel {i}: {dye}")
+                    value.append(self.t(lang, N_("Channel {number}: {dye}"), number=i, dye=dye))
             value = "\n".join(value)
             if not value:
                 value = zero_width_space
             embed.add_field(name=info["name"], value=value, inline=False)
         embed.set_author(name=character)
-        embed.set_footer(text="A level {} {} ".format(level,
-                                                      profession.name.lower()),
+        embed.set_footer(text=level_line(self.t, lang, level, profession.name),
                          icon_url=profession.icon)
         await interaction.followup.send(embed=embed)
 
@@ -308,46 +343,57 @@ class Characters(GW2Cog):
     async def character_info(self, interaction: discord.Interaction,
                              character: str):
         """Info about the given character"""
+        lang = await self.lang(interaction)
+
+        def t(text, **fields):
+            return self.t(lang, text, **fields)
+
         await interaction.response.defer()
         try:
             results = await self.get_character(interaction, character)
         except APINotFound:
-            return await interaction.followup.send("Invalid character name")
+            return await interaction.followup.send(t(N_("Invalid character name")))
         except APIError:
             raise
-        age = format_age(results["age"])
+        age = format_age(results["age"], translate=t)
         created = results["created"].split("T", 1)[0]
         deaths = results["deaths"]
         hours = results["age"] / 3600
         deathsperhour = round(deaths / hours, 1) if hours else 0.0
         if "title" in results:
-            title = await self.get_title(results["title"])
+            title = await self.get_title(results["title"], lang)
         else:
             title = None
-        profession = await self.get_profession_by_character(results)
+        profession = await self.get_profession_by_character(results, lang)
         gender = results["gender"]
         race = results["race"].lower()
         guild = results["guild"]
         embed = discord.Embed(description=title, colour=profession.color)
         embed.set_thumbnail(url=profession.icon)
-        embed.add_field(name="Created at", value=created)
-        embed.add_field(name="Played for", value=age)
+        embed.add_field(name=t(N_("Created at")), value=created)
+        embed.add_field(name=t(N_("Played for")), value=age)
         if guild is not None:
             endpoint = "guild/{0}".format(results["guild"])
             guild = await self.call_api(endpoint)
             gname = guild["name"]
             gtag = guild["tag"]
-            embed.add_field(name="Guild", value="[{}] {}".format(gtag, gname))
-        embed.add_field(name="Deaths", value=deaths)
-        embed.add_field(name="Deaths per hour",
+            embed.add_field(name=t(N_("Guild")), value="[{}] {}".format(gtag, gname))
+        embed.add_field(name=t(N_("Deaths")), value=deaths)
+        embed.add_field(name=t(N_("Deaths per hour")),
                         value=str(deathsperhour),
                         inline=False)
-        craft_list = self.get_crafting(results)
+        craft_list = self.get_crafting(results, lang)
         if craft_list:
-            embed.add_field(name="Crafting", value="\n".join(craft_list))
+            embed.add_field(name=t(N_("Crafting")), value="\n".join(craft_list))
         embed.set_author(name=character)
-        embed.set_footer(text="A {} {} {}".format(gender.lower(), race,
-                                                  profession.name.lower()))
+        gender, race = t(GENDERS.get(gender, gender)), t(RACES.get(race.title(), race))
+        # Within a sentence, as common words: German capitalizes nouns
+        if lang != "de":
+            gender, race, profession_name = gender.lower(), race.lower(), profession.name.lower()
+        else:
+            profession_name = profession.name
+        footer = t(N_("A {gender} {race} {profession}"), gender=gender, race=race, profession=profession_name)
+        embed.set_footer(text=footer[:1].upper() + footer[1:])
         await interaction.followup.send(embed=embed)
 
     @character_group.command(name="list")
@@ -362,6 +408,11 @@ class Characters(GW2Cog):
                              interaction: discord.Interaction,
                              info: str = "name"):
         """Lists all your characters."""
+        lang = await self.lang(interaction)
+
+        def t(text, **fields):
+            return self.t(lang, text, **fields)
+
         await interaction.response.defer()
 
         def get_sort_key():
@@ -375,17 +426,17 @@ class Characters(GW2Cog):
 
         def extra_info(char):
             if info == "age":
-                return ": " + format_age(char.age, short=True)
+                return ": " + format_age(char.age, short=True, translate=t)
             if info == "created":
                 return f": <t:{int(char.created.timestamp())}:f>"
             is_80 = char.level == 80
-            return "" + (" (Level {})".format(char.level) if not is_80 else "")
+            return "" + (" ({})".format(t(N_("Level {level}"), level=char.level)) if not is_80 else "")
 
         user = interaction.user
         scopes = ["characters", "builds"]
         doc = await self.fetch_key(user, scopes)
         characters = await self.get_all_characters(user)
-        embed = discord.Embed(title="Your characters",
+        embed = discord.Embed(title=t(N_("Your characters")),
                               colour=await self.get_embed_color(interaction))
         embed.set_author(name=doc["account_name"],
                          icon_url=user.display_avatar.url)
@@ -399,11 +450,13 @@ class Characters(GW2Cog):
                                fallback_fmt="**({})** "), character.name,
                 extra_info(character)))
         info = {
-            "created": "date of creation",
-            "age": "time played"
+            "created": N_("date of creation"),
+            "age": N_("time played"),
+            "profession": N_("profession"),
+            "name": N_("name"),
         }.get(info, info)
-        embed = embed_list_lines(embed, output, "List")
-        embed.description = "Sorted by " + info
+        embed = embed_list_lines(embed, output, t(N_("List")))
+        embed.description = t(N_("Sorted by {order}"), order=t(info))
         await interaction.followup.send(embed=embed)
 
     @character_group.command(name="gear")
@@ -413,6 +466,14 @@ class Characters(GW2Cog):
     async def character_gear(self, interaction: discord.Interaction,
                              character: str):
         """Displays the gear, attributes and build of given character"""
+        lang = await self.lang(interaction)
+
+        def t(text, **fields):
+            return self.t(lang, text, **fields)
+
+        def attribute_name(name):
+            return t(ATTRIBUTE_NAMES.get(name, name))
+
         await interaction.response.defer()
 
         numbers = []
@@ -444,7 +505,7 @@ class Characters(GW2Cog):
                     if item["slot"] == piece:
                         item_doc = await self.fetch_item(item["id"])
                         if not item_doc:
-                            line = "Unknown item"
+                            line = t(N_("Unknown item"))
                             continue
                         line = self.get_emoji(
                             interaction, f"{item_doc['rarity']}_{piece_name}")
@@ -455,14 +516,14 @@ class Characters(GW2Cog):
                                                                         )
                                     if not upgrade_doc:
                                         upgrades_to_display.append(
-                                            "Unknown upgrade")
+                                            t(N_("Unknown upgrade")))
                                         continue
                                     details = upgrade_doc["details"]
                                     if details["type"] == "Rune":
-                                        runes[upgrade_doc["name"]] += 1
+                                        runes[localized(upgrade_doc, lang)] += 1
                                     if details["type"] == "Sigil":
                                         upgrades_to_display.append(
-                                            upgrade_doc["name"])
+                                            localized(upgrade_doc, lang))
                                     if "infix_upgrade" in details:
                                         if "attributes" in details[
                                                 "infix_upgrade"]:
@@ -474,24 +535,26 @@ class Characters(GW2Cog):
                                                         "modifier"]
                         if "stats" in item:
                             stat_name = await self.fetch_statname(
-                                item["stats"]["id"])
+                                item["stats"]["id"], lang)
                         else:
                             try:
                                 stat_id = item_doc["details"]["infix_upgrade"][
                                     "id"]
-                                stat_name = await self.fetch_statname(stat_id)
+                                stat_name = await self.fetch_statname(stat_id, lang)
                             except KeyError:
                                 pass
                         line += stat_name
                         if piece.startswith("Weapon"):
-                            line += " " + readable_attribute(
-                                item_doc["details"]["type"])
+                            weapon = item_doc["details"]["type"]
+                            weapon = ITEM_WEAPON_TYPES.get(weapon, weapon)
+                            line += " " + (t(WEAPONS[weapon]) if weapon in WEAPONS
+                                           else readable_attribute(weapon))
                         if upgrades_to_display:
                             line += "\n*{}*".format(
                                 "\n".join(upgrades_to_display))
                 if not line and not piece.startswith("Weapon"):
                     line = self.get_emoji(interaction,
-                                          f"basic_{piece_name}") + "NONE"
+                                          f"basic_{piece_name}") + t(N_("NONE"))
                 if piece in armors:
                     armor_lines.append(line)
                 elif piece in weapons:
@@ -504,22 +567,26 @@ class Characters(GW2Cog):
             if runes:
                 for rune, count in runes.items():
                     lines.append(f"*{rune}* ({count}/6)")
-            fields.append(("> **ARMOR**", "\n".join(lines), True))
+            def heading(text, **fields):
+                return "> **{}**".format(t(text, **fields).upper())
+
+            fields.append((heading(N_("Armor")), "\n".join(lines), True))
             if any(weapon_sets["A"]):
                 fields.append(
-                    ("> **WEAPON SET #1**", "\n".join(weapon_sets["A"]), True))
+                    (heading(N_("Weapon set #{number}"), number=1), "\n".join(weapon_sets["A"]), True))
             if any(weapon_sets["B"]):
                 fields.append(
-                    ("> **WEAPON SET #2**", "\n".join(weapon_sets["B"]), True))
-            fields.append(("> **TRINKETS**", "\n".join(trinket_lines), False))
+                    (heading(N_("Weapon set #{number}"), number=2), "\n".join(weapon_sets["B"]), True))
+            fields.append((heading(N_("Trinkets")), "\n".join(trinket_lines), False))
             upgrade_lines = []
             for bonus, count in bonuses.items():
                 bonus = readable_attribute(bonus)
+                # Emojis are registered by English name
                 emoji = self.get_emoji(interaction, f"attribute_{bonus}")
-                upgrade_lines.append(f"{emoji}**{bonus}**: {count}")
+                upgrade_lines.append(f"{emoji}**{attribute_name(bonus)}**: {count}")
             if not upgrade_lines:
-                upgrade_lines = ["None found"]
-            fields.append(("> **BONUSES FROM UPGRADES**",
+                upgrade_lines = [t(N_("None found"))]
+            fields.append((heading(N_("Bonuses from upgrades")),
                            "\n".join(upgrade_lines), False))
             attributes = await self.calculate_character_attributes(results, eq)
             column_1 = []
@@ -527,12 +594,12 @@ class Characters(GW2Cog):
                         zero_width_space]  # cause power is in a different row
             for index, (name, value) in enumerate(attributes.items()):
                 line = self.get_emoji(interaction, f"attribute_{name}")
-                line += f"**{name}**: {value}"
+                line += f"**{attribute_name(name)}**: {value}"
                 if index < 9:
                     column_1.append(line)
                 else:
                     column_2.append(line)
-            fields.append(("> **ATTRIBUTES**", "\n".join(column_1), True))
+            fields.append((heading(N_("Attributes")), "\n".join(column_1), True))
             fields.append((zero_width_space, "\n".join(column_2), True))
             return fields
 
@@ -561,17 +628,15 @@ class Characters(GW2Cog):
                                return_obj=True))
         cog_doc = await self.bot.data.config.get()
         if not cog_doc:
-            return await interaction.followup.send("Eror reading configuration"
-                                                   )
+            return await interaction.followup.send(t(N_("Eror reading configuration")))
         image_channel = self.bot.get_channel(cog_doc.get("image_channel"))
         if not image_channel:
             return await interaction.followup.send(
-                "The owner must set the image"
-                " channel using $imagechannel command.")
+                t(N_("The owner must set the image channel using $imagechannel command.")))
         try:
             results = await self.get_character(interaction, character)
         except APINotFound:
-            return await interaction.followup.send("Invalid character name")
+            return await interaction.followup.send(t(N_("Invalid character name")))
         build_tabs = results["build_tabs"]
         equipment_tabs = results["equipment_tabs"]
         builds = []
@@ -619,8 +684,9 @@ class Characters(GW2Cog):
                 if tab["tab"] == tab_id:
                     tab["url"] = url
                     break
+        profession = await self.get_profession_by_character(results, lang)
         view = CharacterGearView(equipments, builds, results, numbers,
-                                 emojis_cache, interaction.user)
+                                 emojis_cache, interaction.user, self.t, lang, profession.name)
         embed = view.generate_embed()
         out = await interaction.followup.send(embed=embed, view=view)
         view.response = out
@@ -628,6 +694,7 @@ class Characters(GW2Cog):
     @character_group.command(name="birthdays")
     async def character_birthdays(self, interaction: discord.Interaction):
         """Lists days until the next birthday for each of your characters."""
+        lang = await self.lang(interaction)
 
         def suffix(year):
             if year == 1:
@@ -654,7 +721,7 @@ class Characters(GW2Cog):
             fields[next_bd].append(
                 ("{} {}".format(self.get_emoji(interaction, spec["name"]),
                                 character.name), days_left))
-        embed = discord.Embed(title="Days until...",
+        embed = discord.Embed(title=self.t(lang, N_("Days until...")),
                               colour=await self.get_embed_color(interaction))
         embed.set_author(name=doc["account_name"],
                          icon_url=interaction.user.display_avatar.url)
@@ -663,8 +730,9 @@ class Characters(GW2Cog):
                 "{}: **{}**".format(*line)
                 for line in sorted(v, key=lambda line: line[1])
             ]
+            # The English ordinal's suffix; other languages use their own
             embed = embed_list_lines(embed, lines,
-                                     "{}{} Birthday".format(k, suffix(k)))
+                                     self.t(lang, N_("{number}{suffix} Birthday"), number=k, suffix=suffix(k)))
         await interaction.followup.send(embed=embed)
 
     async def calculate_character_attributes(self, character, eq):
@@ -991,18 +1059,19 @@ class Characters(GW2Cog):
         """
         character = character_or_all.title()
         user = interaction.user
+        lang = await self.lang(interaction)
         await interaction.response.defer()
         key = await self.fetch_key(user, ["characters"])
         results = await self.call_api("characters", key=key["key"])
         if character not in results and character != "All":
-            return await interaction.followup.send("Invalid character name")
+            return await interaction.followup.send(self.t(lang, N_("Invalid character name")))
         characters = [character] if character != "All" else results
         output = []
         for char in characters:
             doc = await self.db.characters.find_one({"name": char})
             if doc:
                 await self.db.characters.delete_one({"name": char})
-                output.append(char + " is now private")
+                output.append(self.t(lang, N_("{character} is now private"), character=char))
             else:
                 await self.db.characters.insert_one({
                     "name":
@@ -1012,12 +1081,12 @@ class Characters(GW2Cog):
                     "owner_acc_name":
                     key["account_name"]
                 })
-                output.append(char + " is now public")
-        await interaction.followup.send(
+                output.append(self.t(lang, N_("{character} is now public"), character=char))
+        await interaction.followup.send(self.t(lang, N_(
             "Character status successfully changed. Anyone can "
             "check public characters gear and build - the rest is "
             "still private. To make character private "
-            "again, type the same command.")
+            "again, type the same command.")))
         if character == "All":
             await user.send("\n".join(output))
 
@@ -1025,10 +1094,11 @@ class Characters(GW2Cog):
     async def character_crafting(self, interaction: discord.Interaction):
         """Displays your characters and their crafting level"""
         endpoint = "characters?page=0&page_size=200"
+        lang = await self.lang(interaction)
         await interaction.response.defer()
         doc = await self.fetch_key(interaction.user, ["characters"])
         characters = await self.call_api(endpoint, key=doc["key"])
-        data = discord.Embed(description='Crafting overview',
+        data = discord.Embed(description=self.t(lang, N_("Crafting overview")),
                              colour=await self.get_embed_color(interaction))
         data.set_author(name=doc["account_name"],
                         icon_url=interaction.user.display_avatar.url)
@@ -1036,7 +1106,7 @@ class Characters(GW2Cog):
         for character in characters:
             if counter == 25:
                 break
-            craft_list = self.get_crafting(character)
+            craft_list = self.get_crafting(character, lang)
             if craft_list:
                 data.add_field(name=character["name"],
                                value="\n".join(craft_list))
@@ -1048,6 +1118,7 @@ class Characters(GW2Cog):
     async def sab_unlocks(self, interaction: discord.Interaction,
                           character: str):
         """Displays missing SAB unlocks for specified character"""
+        lang = await self.lang(interaction)
         await interaction.response.defer()
 
         def readable(_id):
@@ -1059,7 +1130,7 @@ class Characters(GW2Cog):
         try:
             results = await self.call_api(endpoint, interaction.user, scopes)
         except APINotFound:
-            return await interaction.followup.send("Invalid character name")
+            return await interaction.followup.send(self.t(lang, N_("Invalid character name")))
         except APIError:
             raise
         unlocked = [u["name"] for u in results["unlocks"]]
@@ -1069,17 +1140,18 @@ class Characters(GW2Cog):
         ]
         if missing:
             return await interaction.followup.send(
-                "This character is missing the following SAB "
-                "upgrades:\n```fix\n{}\n```".format("\n".join(missing)))
-        await interaction.followup.send(
+                self.t(lang, N_("This character is missing the following SAB upgrades:"))
+                + "\n```fix\n{}\n```".format("\n".join(missing)))
+        await interaction.followup.send(self.t(lang, N_(
             "You have unlocked all the upgrades on "
-            "this character! Congratulations!")
+            "this character! Congratulations!")))
 
     @sab_group.command(name="zones")
     @app_commands.autocomplete(character=character_autocomplete)
     async def sab_zones(self, interaction: discord.Interaction,
                         character: str):
         """Displays missing SAB zones for specified character"""
+        lang = await self.lang(interaction)
         await interaction.response.defer()
 
         def missing_zones(zones):
@@ -1097,8 +1169,9 @@ class Characters(GW2Cog):
                             "mode": mode
                         }
                         if zone_dict not in zones:
-                            missing.append("W{}Z{} {} mode".format(
-                                world, zone, mode.title()))
+                            # The modes' names are as the game's English
+                            missing.append(self.t(lang, N_("W{world}Z{zone} {mode} mode"),
+                                                  world=world, zone=zone, mode=mode.title()))
             return missing
 
         scopes = ["characters", "progression"]
@@ -1107,16 +1180,16 @@ class Characters(GW2Cog):
         try:
             results = await self.call_api(endpoint, interaction.user, scopes)
         except APINotFound:
-            return await interaction.followup.send("Invalid character name")
+            return await interaction.followup.send(self.t(lang, N_("Invalid character name")))
         except APIError:
             raise
         missing = missing_zones(results["zones"])
         if missing:
             return await interaction.followup.send(
-                "This character is missing the following SAB "
-                "zones:\n```fix\n{}\n```".format("\n".join(missing)))
-        await interaction.followup.send("You have unlocked all zones on "
-                                        "this character! Congratulations!")
+                self.t(lang, N_("This character is missing the following SAB zones:"))
+                + "\n```fix\n{}\n```".format("\n".join(missing)))
+        await interaction.followup.send(self.t(lang, N_("You have unlocked all zones on "
+                                                        "this character! Congratulations!")))
 
     @commands.command(name="imagechannel")
     @commands.guild_only()
@@ -1156,15 +1229,18 @@ class Characters(GW2Cog):
                 return results
             raise APINotFound
 
-    def get_crafting(self, character):
+    def get_crafting(self, character, lang=DEFAULT_LANGUAGE):
         craft_list = []
         for crafting in character["crafting"]:
             rating = crafting["rating"]
             discipline = crafting["discipline"]
-            craft_list.append("Level {} {}".format(rating, discipline))
+            craft_list.append(self.t(lang, N_("Level {level} {discipline}"), level=rating,
+                                     discipline=self.t(lang, CRAFTING.get(discipline, discipline))))
         return craft_list
 
-    async def get_profession_by_character(self, character):
+    async def get_profession_by_character(self, character, lang=DEFAULT_LANGUAGE):
+        """The character's profession (or elite specialization), named in
+        `lang`; its icon is the English name's."""
         active_tab = None
         for tab in character["build_tabs"]:
             if tab["is_active"]:
@@ -1178,14 +1254,21 @@ class Characters(GW2Cog):
                 spec_doc = await self.db.specializations.find_one(
                     {"_id": spec["id"]})
             specializations.append(spec_doc)
-        return profession_info(self.gamedata, character["profession"],
-                               specializations)
+        profession = profession_info(self.gamedata, character["profession"],
+                                     specializations)
+        elite = specializations[-1] if specializations else None
+        if elite and elite.get("elite"):
+            name = localized(elite, lang).title()
+        else:
+            # The professions' names are translated for /pvp's choices
+            name = self.t(lang, character["profession"].title())
+        return profession._replace(name=name)
 
-    async def fetch_statname(self, item):
+    async def fetch_statname(self, item, lang=DEFAULT_LANGUAGE):
         statset = await self.db.itemstats.find_one({"_id": item})
         try:
-            name = statset["name"]
-        except (KeyError, TypeError):
+            name = localized(statset, lang) or ""
+        except (KeyError, TypeError, AttributeError):
             name = ""
         return name
 

@@ -13,6 +13,7 @@ from discord.ext import tasks
 from gw2bot.utils.chat import en_space, tab
 
 from ..gw2api.errors import APIError
+from ..i18n import DEFAULT_LANGUAGE, LANGUAGES, N_
 from .base import GW2Cog
 
 DAILY_CATEGORIES = [
@@ -82,6 +83,12 @@ def daily_rotation(categories, names):
     return rotation
 
 
+def raid_bounty(name):
+    """A raid bounty achievement's encounter: "Raid Bounty: Gorseval",
+    "Prime de raid : Gorseval"... -> "Gorseval"."""
+    return name.partition(":")[2].strip() or name
+
+
 class Daily(GW2Cog):
 
     def __init__(self, bot):
@@ -110,6 +117,7 @@ class Daily(GW2Cog):
                     category: str,
                     tomorrow: bool = False):
         """Show today's daily achievements"""
+        lang = await self.lang(interaction)
         await interaction.response.defer()
         tomorrow = bool(tomorrow)
         if category == "all":
@@ -119,10 +127,11 @@ class Daily(GW2Cog):
         try:
             embed = await self.daily_embed(category,
                                            interaction=interaction,
-                                           tomorrow=tomorrow)
+                                           tomorrow=tomorrow,
+                                           lang=lang)
         except ValueError:
             return await interaction.followup.send(
-                "Dailies are currently unavailable. Try again in a bit",
+                self.t(lang, N_("Dailies are currently unavailable. Try again in a bit")),
                 ephemeral=True)
         await interaction.followup.send(embed=embed)
 
@@ -140,22 +149,26 @@ class Daily(GW2Cog):
                           *,
                           doc=None,
                           interaction=None,
-                          tomorrow=False):
+                          tomorrow=False,
+                          lang=DEFAULT_LANGUAGE):
+        def t(text, **fields):
+            return self.t(lang, text, **fields)
+
         if not doc:
             doc = await self.bot.data.config.get()
         if interaction:
             color = await self.get_embed_color(interaction)
         else:
             color = self.embed_color
-        embed = discord.Embed(title="Dailies", color=color)
-        if tomorrow:
-            embed.title += " tomorrow"
+        embed = discord.Embed(title=t(N_("Dailies tomorrow") if tomorrow else N_("Dailies")), color=color)
         key = "dailies" if not tomorrow else "dailies_tomorrow"
         dailies = doc["cache"].get(key)
         if not dailies or "raids" not in dailies:
             # Not cached yet, or still in the format from before the
             # Wizard's Vault
             raise ValueError
+        # The achievements' names in `lang`, by their English names
+        names = dict(doc["cache"].get("daily_names", {}).get(lang, [])) if lang != DEFAULT_LANGUAGE else {}
         categories = normalize_categories(categories)
         for category in categories:
             if category == "psna":
@@ -163,43 +176,44 @@ class Daily(GW2Cog):
             elif category == "fractals":
                 fractals = self.get_fractals(dailies["fractals"],
                                              interaction,
-                                             tomorrow=tomorrow)
+                                             tomorrow=tomorrow,
+                                             lang=lang)
                 if fractals[0]:
-                    embed.add_field(name="> Daily Fractals",
+                    embed.add_field(name="> " + t(N_("Daily Fractals")),
                                     value="\n".join(fractals[0]))
-                embed.add_field(name="> CM Instabilities", value=fractals[2])
+                embed.add_field(name="> " + t(N_("CM Instabilities")), value=fractals[2])
                 if fractals[1]:
                     embed.add_field(
-                        name="> Recommended Fractals",
+                        name="> " + t(N_("Recommended Fractals")),
                         value="\n".join(fractals[1]),
                         inline=False,
                     )
             elif category == "raids":
                 emoji = self.get_emoji(interaction, "daily strike")
                 lines = [
-                    emoji + name.removeprefix("Raid Bounty: ")
+                    emoji + (raid_bounty(names[name]) if name in names else name.removeprefix("Raid Bounty: "))
                     for name in dailies["raids"]
                 ]
                 if lines:
-                    embed.add_field(name="RAID BOUNTIES",
+                    embed.add_field(name=t(N_("Raid Bounties")).upper(),
                                     value="\n".join(lines),
                                     inline=False)
             elif category == "lw":
                 for season in "3", "4":
                     emoji = self.get_emoji(interaction, f"daily lws{season}")
                     lines = [
-                        emoji + name.removeprefix("Daily ")
+                        emoji + names.get(name, name.removeprefix("Daily "))
                         for name in dailies[f"lws{season}"]
                     ]
                     if lines:
                         embed.add_field(
-                            name=f"LIVING WORLD SEASON {season}",
+                            name=t(N_("Living World Season {season}"), season=season).upper(),
                             value="\n".join(lines),
                             inline=False)
         if "fractals" in categories:
             embed.set_footer(
                 text=self.bot.user.name +
-                " | Instabilities shown only apply to the highest scale",
+                " | " + t(N_("Instabilities shown only apply to the highest scale")),
                 icon_url=self.bot.user.display_avatar.url,
             )
         else:
@@ -227,7 +241,10 @@ class Daily(GW2Cog):
                         value=self.get_psna(next_reset),
                         inline=False)
 
-    def get_fractals(self, fractals, ctx, tomorrow=False):
+    def get_fractals(self, fractals, ctx, tomorrow=False, lang=DEFAULT_LANGUAGE):
+        """(daily fractal lines, recommended fractal lines, CM instabilities),
+        from the English achievement names, with fractal and instability
+        names in `lang`."""
         recommended_fractals = []
         daily_fractals = []
         fractals_data = self.gamedata["fractals"]
@@ -237,13 +254,14 @@ class Daily(GW2Cog):
             if re.match("[0-9]{1,3}", fractal_level):
                 recommended_fractals.append(fractal_level)
             else:
-                line = self.get_emoji(ctx, "daily fractal") + re.sub(
-                    r"(?:Daily|Tier 4) ", "", fractal)
+                line = self.get_emoji(ctx, "daily fractal") + self.t(
+                    lang, re.sub(r"(?:Daily|Tier 4) ", "", fractal))
                 try:
                     scale = self.gamedata["fractals"][fractal[13:]][-1]
                     instabilities = self.get_instabilities(scale,
                                                            ctx=ctx,
-                                                           tomorrow=tomorrow)
+                                                           tomorrow=tomorrow,
+                                                           lang=lang)
                     if instabilities:
                         line += f"\n{instabilities}"
                 except (IndexError, KeyError):
@@ -254,12 +272,12 @@ class Daily(GW2Cog):
                 if int(level) in v:
                     recommended_fractals[i] = "{}{} {}".format(
                         self.get_emoji(ctx, "daily recommended fractal"),
-                        level, k)
+                        level, self.t(lang, k))
 
         return (
             daily_fractals,
             recommended_fractals,
-            self.get_cm_instabilities(ctx=ctx, tomorrow=tomorrow),
+            self.get_cm_instabilities(ctx=ctx, tomorrow=tomorrow, lang=lang),
         )
 
     def get_psna(self, when=None):
@@ -268,7 +286,7 @@ class Daily(GW2Cog):
             when = datetime.datetime.now(datetime.timezone.utc)
         return self.gamedata["pact_supply"][(when - PSNA_RESET).weekday()]
 
-    def get_instabilities(self, fractal_level, *, tomorrow=False, ctx=None):
+    def get_instabilities(self, fractal_level, *, tomorrow=False, ctx=None, lang=DEFAULT_LANGUAGE):
         fractal_level = str(fractal_level)
         day = self.get_year_day(tomorrow=tomorrow)
         if fractal_level not in self.instabilities["instabilities"]:
@@ -277,21 +295,23 @@ class Daily(GW2Cog):
         names = []
         for instab in levels:
             name = self.instabilities["instability_names"][instab]
+            emoji = self.get_emoji(ctx, name.replace(",", "")) if ctx else None
+            name = self.t(lang, name)
             if ctx:
-                name = (en_space + tab +
-                        self.get_emoji(ctx, name.replace(",", "")) + name)
+                name = en_space + tab + emoji + name
             names.append(name)
         return "\n".join(names)
 
-    def get_cm_instabilities(self, *, ctx=None, tomorrow=False):
+    def get_cm_instabilities(self, *, ctx=None, tomorrow=False, lang=DEFAULT_LANGUAGE):
         cm_instabs = []
         cm_fractals = "Nightmare", "Shattered Observatory", "Sunqua Peak", "Silent Surf", "Lonely Tower"
         for fractal in cm_fractals:
             scale = self.gamedata["fractals"][fractal][-1]
-            line = self.get_emoji(ctx, "daily fractal") + fractal
+            line = self.get_emoji(ctx, "daily fractal") + self.t(lang, fractal)
             instabilities = self.get_instabilities(scale,
                                                    ctx=ctx,
-                                                   tomorrow=tomorrow)
+                                                   tomorrow=tomorrow,
+                                                   lang=lang)
             cm_instabs.append(line + "\n" + instabilities)
         return "\n".join(cm_instabs)
 
@@ -309,10 +329,26 @@ class Daily(GW2Cog):
             "achievements?ids=" + ",".join(str(i) for i in sorted(achievement_ids)))
         names = {achievement["id"]: achievement["name"] for achievement in achievements}
         rotation = daily_rotation(categories, names)
-        await self.bot.data.config.update({
+        update = {
             "cache.dailies": rotation["today"],
             "cache.dailies_tomorrow": rotation["tomorrow"]
-        })
+        }
+        # The names in the other languages, for display: [[English, translation]]
+        # (English names can have dots, which MongoDB keys can't)
+        for lang in LANGUAGES:
+            if lang == DEFAULT_LANGUAGE:
+                continue
+            try:
+                translated = await self.call_api(
+                    "achievements?ids=" + ",".join(str(i) for i in sorted(achievement_ids)), lang=lang)
+            except APIError as e:
+                self.log.warning("Couldn't cache dailies in %s: %s", lang, e)
+                continue
+            update[f"cache.daily_names.{lang}"] = [
+                [names[achievement["id"]], achievement["name"]]
+                for achievement in translated if achievement["id"] in names
+            ]
+        await self.bot.data.config.update(update)
 
     @tasks.loop(minutes=15)
     async def refresh_dailies(self):
@@ -345,6 +381,7 @@ class Daily(GW2Cog):
 
             if not channel:
                 return
+            lang = self.settings_lang({"language": doc.get("_language")}, channel.guild)
             can_embed = channel.permissions_for(channel.guild.me).embed_links
             can_send = channel.permissions_for(channel.guild.me).send_messages
             can_see_history = channel.permissions_for(
@@ -353,19 +390,15 @@ class Daily(GW2Cog):
             if not can_send:
                 return
             if not can_embed:
-                return await channel.send(
-                    "Need permission to "
-                    "embed links in order "
-                    "to send daily "
-                    "notifs!"
-                )
+                return await channel.send(self.t(lang, N_(
+                    "Need permission to embed links in order to send daily notifs!")))
             try:
                 embed = await self.daily_embed(
-                    categories, doc=daily_doc, interaction=channel, tomorrow=True
+                    categories, doc=daily_doc, interaction=channel, tomorrow=True, lang=lang
                 )
             except ValueError:
                 return
-            embed.title = "Dailies"
+            embed.title = self.t(lang, N_("Dailies"))
             tomorrow = datetime.datetime.now(
                 datetime.timezone.utc
             ) + datetime.timedelta(days=1)

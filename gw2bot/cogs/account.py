@@ -11,12 +11,46 @@ from discord import app_commands
 from discord.app_commands import Choice
 
 from gw2bot.utils.chat import embed_list_lines, format_age
-from gw2bot.utils.db import prepare_search
 
 from ..gw2api.errors import APIError, APINotFound
+from ..i18n import N_, localized
 from .achievements import account_ap, total_possible_ap
 from .base import GW2Cog
 from .wvw import WVW_ACCOUNT_SCHEMA, team_name
+
+# Places items are found in, as find_items_in_account names them
+PLACES = {
+    "bank": N_("bank"),
+    "shared": N_("shared"),
+    "material storage": N_("material storage"),
+    "legendary armory": N_("legendary armory"),
+    "TP delivery": N_("TP delivery"),
+}
+# /li's raid trophies (gamedata.json raid_trophies), and their groups
+TROPHY_TITLES = {"Insights": N_("{count} Legendary Insights earned")}
+TROPHY_GROUPS = {"Refined Armor": N_("Refined Armor"), "Perfected Armor": N_("Perfected Armor")}
+
+# /bosses: raid wings and encounters by the API's ids (/v2/raids). Others
+# are shown from their ids ("spirit_vale" -> "Spirit Vale"), in English
+RAID_NAMES = {
+    "spirit_vale": N_("Spirit Vale"), "vale_guardian": N_("Vale Guardian"), "spirit_woods": N_("Spirit Woods"),
+    "gorseval": N_("Gorseval"), "sabetha": N_("Sabetha"),
+    "salvation_pass": N_("Salvation Pass"), "slothasor": N_("Slothasor"), "bandit_trio": N_("Bandit Trio"),
+    "matthias": N_("Matthias"),
+    "stronghold_of_the_faithful": N_("Stronghold of the Faithful"), "escort": N_("Escort"),
+    "keep_construct": N_("Keep Construct"), "twisted_castle": N_("Twisted Castle"), "xera": N_("Xera"),
+    "bastion_of_the_penitent": N_("Bastion of the Penitent"), "cairn": N_("Cairn"),
+    "mursaat_overseer": N_("Mursaat Overseer"), "samarog": N_("Samarog"), "deimos": N_("Deimos"),
+    "hall_of_chains": N_("Hall of Chains"), "soulless_horror": N_("Soulless Horror"),
+    "river_of_souls": N_("River of Souls"), "statues_of_grenth": N_("Statues of Grenth"),
+    "voice_in_the_void": N_("Voice in the Void"),
+    "mythwright_gambit": N_("Mythwright Gambit"), "conjured_amalgamate": N_("Conjured Amalgamate"),
+    "twin_largos": N_("Twin Largos"), "qadim": N_("Qadim"),
+    "the_key_of_ahdashim": N_("The Key of Ahdashim"), "gate": N_("Gate"), "adina": N_("Adina"),
+    "sabir": N_("Sabir"), "qadim_the_peerless": N_("Qadim the Peerless"),
+    "mount_balrior": N_("Mount Balrior"), "camp": N_("Camp"), "greer": N_("Greer"), "decima": N_("Decima"),
+    "ura": N_("Ura"),
+}
 
 CHARACTERS = "characters?page=0&page_size=200"
 # First schema with characters' equipment and build tabs
@@ -36,6 +70,11 @@ class Account(GW2Cog):
 
         Required permissions: account
         """
+        lang = await self.lang(interaction)
+
+        def t(text, **fields):
+            return self.t(lang, text, **fields)
+
         await interaction.response.defer()
         user = interaction.user
         doc = await self.fetch_key(user, ["account"])
@@ -44,12 +83,12 @@ class Account(GW2Cog):
                                       schema_string=WVW_ACCOUNT_SCHEMA)
         accountname = doc["account_name"]
         created = results["created"].split("T", 1)[0]
-        hascommander = "Yes" if results["commander"] else "No"
+        hascommander = t(N_("Yes")) if results["commander"] else t(N_("No"))
         embed = discord.Embed(colour=await self.get_embed_color(interaction))
-        embed.add_field(name="Created account on", value=created)
+        embed.add_field(name=t(N_("Created account on")), value=created)
         wvw = results.get("wvw", {})
         if wvw.get("team_id"):
-            embed.add_field(name="WvW team",
+            embed.add_field(name=t(N_("WvW team")),
                             value=team_name(self.gamedata, wvw["team_id"]))
         if "progression" in doc["permissions"]:
             endpoints = ["account/achievements", "account"]
@@ -57,28 +96,28 @@ class Account(GW2Cog):
                 endpoints, user, ["progression"])
             possible_ap = await total_possible_ap(self.db.achievements)
             user_ap = await account_ap(self.db.achievements, achievements, account)
-            embed.add_field(name="Achievement Points",
-                            value="{} earned out of {} possible".format(
-                                user_ap, possible_ap),
+            embed.add_field(name=t(N_("Achievement Points")),
+                            value=t(N_("{earned} earned out of {possible} possible"),
+                                    earned=user_ap, possible=possible_ap),
                             inline=False)
-        embed.add_field(name="Commander tag", value=hascommander, inline=False)
+        embed.add_field(name=t(N_("Commander tag")), value=hascommander, inline=False)
         if "fractal_level" in results:
             fractallevel = results["fractal_level"]
-            embed.add_field(name="Fractal level", value=fractallevel)
+            embed.add_field(name=t(N_("Fractal level")), value=fractallevel)
         if "rank" in wvw:
-            embed.add_field(name="WvW rank", value=wvw["rank"])
+            embed.add_field(name=t(N_("WvW rank")), value=wvw["rank"])
         if "pvp" in doc["permissions"]:
             pvp = await self.call_api("pvp/stats", user)
             pvprank = pvp["pvp_rank"] + pvp["pvp_rank_rollovers"]
-            embed.add_field(name="PVP rank", value=pvprank)
+            embed.add_field(name=t(N_("PVP rank")), value=pvprank)
         if "characters" in doc["permissions"]:
             characters = await self.call_api(CHARACTERS, user,
                                              schema_string=CHARACTERS_SCHEMA)
             total_played = 0
             for character in characters:
                 total_played += character["age"]
-            embed.add_field(name="Total time played",
-                            value=format_age(total_played),
+            embed.add_field(name=t(N_("Total time played")),
+                            value=format_age(total_played, translate=t),
                             inline=False)
         if "access" in results:
             access = results["access"]
@@ -97,7 +136,7 @@ class Account(GW2Cog):
 
             access = "\n".join([format_name(e) for e in access])
             if access:
-                embed.add_field(name="Expansion access", value=access)
+                embed.add_field(name=t(N_("Expansion access")), value=access)
         embed.set_author(name=accountname, icon_url=user.display_avatar.url)
         embed.set_footer(text=self.bot.user.name,
                          icon_url=self.bot.user.display_avatar.url)
@@ -106,6 +145,11 @@ class Account(GW2Cog):
     @app_commands.command()
     async def li(self, interaction: discord.Interaction):
         """Shows how many Legendary Insights you have earned"""
+        lang = await self.lang(interaction)
+
+        def t(text, **fields):
+            return self.t(lang, text, **fields)
+
         await interaction.response.defer()
         user = interaction.user
         scopes = ["inventories", "characters", "wallet"]
@@ -128,7 +172,7 @@ class Account(GW2Cog):
                     if currency_result["id"] == trophy["wallet"]:
                         trophy_total += currency_result["value"]
                         breakdown.append(
-                            f"Wallet - **{currency_result['value']}**")
+                            f"{t(N_('Wallet'))} - **{currency_result['value']}**")
                         break
             for group in trophy["items"]:
                 if "reduced_worth" in group:
@@ -149,8 +193,9 @@ class Account(GW2Cog):
                             amount - reduced_amount, 0) * group["worth"]
                     if sum_set:
                         trophy_total += sum_set
+                        group_name = t(TROPHY_GROUPS.get(group["name"], group["name"]))
                         breakdown.append(
-                            f"{amount} {group['name']} - **{sum_set}**")
+                            f"{amount} {group_name} - **{sum_set}**")
                         if group["crafted"]:
                             crafted_total += sum_set
                     continue
@@ -162,20 +207,22 @@ class Account(GW2Cog):
                         if group["crafted"]:
                             crafted_total += sum_item
                         item_doc = await self.fetch_item(item)
-                        name = item_doc["name"] if item_doc else "Unknown item"
+                        name = localized(item_doc, lang) if item_doc else t(N_("Unknown item"))
                         line = f"{name} - **{sum_item}**"
                         if group["worth"] != 1:
                             line = f"{amount} " + line
                         breakdown.append(line)
             if trophy_total:
-                name = f"{trophy_total} Legendary {trophy['name']} earned"
+                title = TROPHY_TITLES.get(trophy["name"])
+                name = (t(title, count=trophy_total) if title
+                        else f"{trophy_total} Legendary {trophy['name']} earned")
                 embed.add_field(name=name,
                                 value="\n".join(breakdown),
                                 inline=False)
                 total += trophy_total
-        embed.title = f"{total} Raid trophies earned".format(total)
-        embed.description = "{} on hand, {} used in crafting".format(
-            total - crafted_total, crafted_total)
+        embed.title = t(N_("{count} Raid trophies earned"), count=total)
+        embed.description = t(N_("{on_hand} on hand, {crafted} used in crafting"),
+                              on_hand=total - crafted_total, crafted=crafted_total)
         embed.set_author(name=doc["account_name"],
                          icon_url=user.display_avatar.url)
         embed.set_thumbnail(
@@ -188,6 +235,7 @@ class Account(GW2Cog):
     @app_commands.command()
     async def kp(self, interaction: discord.Interaction):
         """Shows completed raids, fractals, and strikes, as well as important challenges"""
+        lang = await self.lang(interaction)
         await interaction.response.defer()
         user = interaction.user
         scopes = ["progression"]
@@ -243,7 +291,7 @@ class Account(GW2Cog):
                 # progressed far enough
                 return "-✖"
 
-        embed = discord.Embed(title="Kill Proof",
+        embed = discord.Embed(title=self.t(lang, N_("Kill Proof")),
                               color=await self.get_embed_color(interaction))
         embed.set_author(name=doc["account_name"],
                          icon_url=user.display_avatar.url)
@@ -251,20 +299,21 @@ class Account(GW2Cog):
             value = ["```diff"]
             encounters = area["encounters"]
             for encounter in encounters:
-                value.append(is_completed(encounter) + encounter["name"])
+                value.append(is_completed(encounter) + self.t(lang, encounter["name"]))
             value.append("```")
-            embed.add_field(name=area["name"], value="\n".join(value))
+            embed.add_field(name=self.t(lang, area["name"]), value="\n".join(value))
 
-        embed.description = ("Achievements were checked to find "
-                             "completed encounters.")
-        embed.set_footer(text="Green (+) means completed. Red (-) means not. "
-                         "CM stands for Challenge Mode.")
+        embed.description = self.t(lang, N_("Achievements were checked to find "
+                                            "completed encounters."))
+        embed.set_footer(text=self.t(lang, N_("Green (+) means completed. Red (-) means not. "
+                                              "CM stands for Challenge Mode.")))
 
         await interaction.followup.send(embed=embed)
 
     @app_commands.command()
     async def bosses(self, interaction: discord.Interaction):
         """Shows your raid progression for the week"""
+        lang = await self.lang(interaction)
         await interaction.response.defer()
         user = interaction.user
         scopes = ["progression"]
@@ -278,7 +327,7 @@ class Account(GW2Cog):
                                                    "%Y-%m-%dT%H:%M:%Sz")
         raids = await self.get_raids()
         embed = await self.boss_embed(interaction, raids, results,
-                                      doc["account_name"], last_modified)
+                                      doc["account_name"], last_modified, lang)
         embed.set_author(name=doc["account_name"],
                          icon_url=user.display_avatar.url)
         await interaction.followup.send(embed=embed)
@@ -288,10 +337,12 @@ class Account(GW2Cog):
         if not current:
             return []
 
+        lang = await self.lang(interaction)
+
         def consolidate_duplicates(items):
             unique_items = collections.OrderedDict()
             for item in items:
-                item_tuple = item["name"], item["rarity"], item["type"]
+                item_tuple = localized(item, lang), item["rarity"], item["type"]
                 if item_tuple not in unique_items:
                     unique_items[item_tuple] = []
                 unique_items[item_tuple].append(item["_id"])
@@ -308,14 +359,10 @@ class Account(GW2Cog):
                 })
             return unique_list
 
-        query = prepare_search(current)
-        query = {
-            "name": query,
-        }
-        items = await self.db.items.find(query).to_list(25)
+        items = await self.find_by_name(self.db.items, current, lang)
         items = sorted(consolidate_duplicates(items), key=lambda c: c["name"])
         return [
-            Choice(name=f"{it['name']} - {it['rarity']}", value=it["ids"])
+            Choice(name=f"{it['name']} - {self.t(lang, it['rarity'])}"[:100], value=it["ids"])
             for it in items
         ]
 
@@ -325,6 +372,11 @@ class Account(GW2Cog):
     @app_commands.autocomplete(item=item_autocomplete)
     async def search(self, interaction: discord.Interaction, item: str):
         """Find items on your account"""
+        lang = await self.lang(interaction)
+
+        def t(text, **fields):
+            return self.t(lang, text, **fields)
+
         await interaction.response.defer()
         try:
             ids = [int(it) for it in item.split(" ")]
@@ -334,29 +386,34 @@ class Account(GW2Cog):
                 ids = [int(it) for it in choices[0].value.split(" ")]
             except (ValueError, IndexError):
                 return await interaction.followup.send(
-                    "Could not find any items with that name.")
+                    t(N_("Could not find any items with that name.")))
         item_doc = await self.fetch_item(ids[0])
         if not item_doc:
             # The results show its name, rarity and icon
             return await interaction.followup.send(
-                "Could not find any items with that name.")
+                t(N_("Could not find any items with that name.")))
+        item_name = localized(item_doc, lang)
+
+        def place(name):
+            """A place's name, upper case, as the results show it."""
+            return t(PLACES[name]).upper() if name in PLACES else name.upper()
 
         async def generate_results_embed(results, characters):
-            seq = [k for k, v in results.items() if v]
+            seq = [place(k) for k, v in results.items() if v]
             if not seq:
                 return None
-            longest = len(max(seq, key=len))
-            if longest < 8:
-                longest = 8
+            location, total_label = t(N_("LOCATION")), t(N_("TOTAL:"))
+            # The columns are aligned for "LOCATION" and "TOTAL:" at least
+            longest = max(len(max(seq, key=len)), 8, len(location) - 3, len(total_label) - 4)
             if 'is_upgrade' in item_doc and item_doc['is_upgrade']:
                 output = [
-                    "LOCATION{}INV / GEAR".format(" " * (longest - 5)),
+                    location.ljust(longest + 3) + t(N_("INV / GEAR")),
                     "--------{}|-----".format("-" * (longest - 6))
                 ]
                 align = 110
             else:
                 output = [
-                    "LOCATION{}COUNT".format(" " * (longest - 5)),
+                    location.ljust(longest + 3) + t(N_("COUNT")),
                     "--------{}|-----".format("-" * (longest - 6))
                 ]
                 align = 80
@@ -367,6 +424,7 @@ class Account(GW2Cog):
             for character in characters:
                 char_names.append(character["name"])
             for k, v in storage_counts.items():
+                name = place(k)
                 if v:
                     if 'is_upgrade' in item_doc and item_doc['is_upgrade']:
                         total += v[0]
@@ -378,23 +436,23 @@ class Account(GW2Cog):
                             else:
                                 inf = "/ {} ".format(slotted_upg)
                             output.append("{} {} | {} {}".format(
-                                k.upper(), " " * (longest - len(k)), v[0],
+                                name, " " * (longest - len(name)), v[0],
                                 inf))
                         else:
                             output.append("{} {} | {}".format(
-                                k.upper(), " " * (longest - len(k)), v[0]))
+                                name, " " * (longest - len(name)), v[0]))
                     else:
                         total += v[0]
                         total += v[1]
                         output.append("{} {} | {}".format(
-                            k.upper(), " " * (longest - len(k)), v[0] + v[1]))
+                            name, " " * (longest - len(name)), v[0] + v[1]))
             output.append("--------{}------".format("-" * (longest - 5)))
-            output.append("TOTAL:{}{}".format(" " * (longest - 2), total))
+            output.append(total_label.ljust(longest + 4) + str(total))
             color = int(
                 self.gamedata["items"]["rarity_colors"][item_doc["rarity"]],
                 16)
             icon_url = item_doc["icon"]
-            data = discord.Embed(description="Search results" + " " * align +
+            data = discord.Embed(description=t(N_("Search results")) + " " * align +
                                  u'\u200b',
                                  color=color)
             value = "\n".join(output)
@@ -409,7 +467,7 @@ class Account(GW2Cog):
                     value += line + "\n"
                 if value:
                     values.append(value)
-                data.add_field(name=item_doc["name"],
+                data.add_field(name=item_name,
                                value="```ml\n{}```".format(values[0]),
                                inline=False)
                 for v in values[1:]:
@@ -418,12 +476,12 @@ class Account(GW2Cog):
                         value="```ml\n{}```".format(v),
                         inline=False)
             else:
-                data.add_field(name=item_doc["name"],
+                data.add_field(name=item_name,
                                value="```ml\n{}\n```".format(value))
             data.set_author(name=doc["account_name"],
                             icon_url=user.display_avatar.url)
             if 'is_upgrade' in item_doc and item_doc['is_upgrade']:
-                data.set_footer(text="Amount in inventory / Amount in gear",
+                data.set_footer(text=t(N_("Amount in inventory / Amount in gear")),
                                 icon_url=self.bot.user.display_avatar.url)
             else:
                 data.set_footer(text=self.bot.user.name,
@@ -448,12 +506,13 @@ class Account(GW2Cog):
         embed = await generate_results_embed(search_results, storage[3])
         if not embed:
             return await interaction.followup.send(
-                content=f"`{item_doc['name']}`: Not found on your account.")
+                content=t(N_("`{item}`: Not found on your account."), item=item_name))
         return await interaction.followup.send(embed=embed)
 
     @app_commands.command()
     async def cats(self, interaction: discord.Interaction):
         """Displays the cats you haven't unlocked yet"""
+        lang = await self.lang(interaction)
         await interaction.response.defer()
         user = interaction.user
         endpoint = "account/home/cats"
@@ -466,11 +525,10 @@ class Account(GW2Cog):
                 lines.append(cat["guide"])
         if not lines:
             return await interaction.followup.send(
-                "You have collected all the "
-                "cats! Congratulations! :cat2:")
+                self.t(lang, N_("You have collected all the cats! Congratulations!")) + " :cat2:")
         embed = discord.Embed(color=await self.get_embed_color(interaction))
         embed = embed_list_lines(embed, lines,
-                                 "Cats you haven't collected yet")
+                                 self.t(lang, N_("Cats you haven't collected yet")))
         embed.set_author(name=doc["account_name"],
                          icon_url=user.display_avatar.url)
         embed.set_footer(text=self.bot.user.name,
@@ -480,6 +538,7 @@ class Account(GW2Cog):
     @app_commands.command()
     async def nodes(self, interaction: discord.Interaction):
         """Displays the home instance nodes you have not yet unlocked."""
+        lang = await self.lang(interaction)
         await interaction.response.defer()
         user = interaction.user
         endpoint = "account/home/nodes"
@@ -492,10 +551,10 @@ class Account(GW2Cog):
                 lines.append(nodes["guide"])
         if not lines:
             return await interaction.followup.send(
-                "You've collected all home instance nodes! Congratulations!")
+                self.t(lang, N_("You've collected all home instance nodes! Congratulations!")))
         embed = discord.Embed(color=await self.get_embed_color(interaction))
         embed = embed_list_lines(embed, lines,
-                                 "Nodes you haven't collected yet:")
+                                 self.t(lang, N_("Nodes you haven't collected yet:")))
         embed.set_author(name=doc["account_name"],
                          icon_url=user.display_avatar.url)
         embed.set_footer(text=self.bot.user.name,
@@ -503,7 +562,10 @@ class Account(GW2Cog):
         await interaction.followup.send(embed=embed)
 
     async def boss_embed(self, ctx, raids, results, account_name,
-                         last_modified):
+                         last_modified, lang="en"):
+        def t(text, **fields):
+            return self.t(lang, text, **fields)
+
         boss_to_id = defaultdict(list)
         for boss_id, boss in self.gamedata["bosses"].items():
             if "api_name" in boss:
@@ -519,6 +581,9 @@ class Account(GW2Cog):
                 x.capitalize() if x not in dont_capitalize else x for x in _id
             ])
             return title[0].upper() + title[1:]
+
+        def raid_name(_id):
+            return t(RAID_NAMES.get(_id) or readable_id(_id))
 
         monday = last_modified - datetime.timedelta(
             days=last_modified.weekday())
@@ -551,7 +616,7 @@ class Account(GW2Cog):
             return await cursor.to_list(None)
 
         not_completed = []
-        embed = discord.Embed(title="Bosses",
+        embed = discord.Embed(title=t(N_("Bosses")),
                               color=await self.get_embed_color(ctx))
         wings = [wing for raid in raids for wing in raid["wings"]]
         cotm = self.get_emoji(ctx, "call_of_the_mists")
@@ -573,7 +638,7 @@ class Account(GW2Cog):
                     not_completed.append(boss)
                 reports = await get_dps_reports(boss["id"])
                 if reports:
-                    boss_name = (f"[{readable_id(boss['id'])}]"
+                    boss_name = (f"[{raid_name(boss['id'])}]"
                                  f"({reports[0]['permalink']})")
                     if len(reports) > 1:
                         links = []
@@ -581,9 +646,9 @@ class Account(GW2Cog):
                             links.append(f"[{i}]({report['permalink']})")
                         boss_name += f" ({', '.join(links)})"
                 else:
-                    boss_name = readable_id(boss["id"])
+                    boss_name = raid_name(boss["id"])
                 value.append("> " + is_killed(boss) + boss_name)
-            name = readable_id(wing["id"])
+            name = raid_name(wing["id"])
             if index == cotm_index:
                 name = f"{cotm}{name}"
             elif index == emboldened_index:
@@ -593,32 +658,28 @@ class Account(GW2Cog):
             else:
                 name += " :x:"
             embed.add_field(name=f"**{name}**", value="\n".join(value))
+        outdated = now > next_reset_time
         if len(not_completed) == 0:
-            description = "Everything completed this week :star:"
+            description = t(N_("Everything completed that week") if outdated
+                            else N_("Everything completed this week")) + " :star:"
         else:
             bosses = list(filter(lambda b: b["type"] == "Boss", not_completed))
             events = list(
                 filter(lambda b: b["type"] == "Checkpoint", not_completed))
             if bosses:
-                suffix = ""
-                if len(bosses) > 1:
-                    suffix = "es"
-                bosses = "{} boss{}".format(len(bosses), suffix)
+                bosses = t(N_("{count} bosses") if len(bosses) > 1 else N_("{count} boss"), count=len(bosses))
             if events:
-                suffix = ""
-                if len(events) > 1:
-                    suffix = "s"
-                events = "{} event{}".format(len(events), suffix)
-            description = (", ".join(filter(None, [bosses, events])) +
-                           " not completed this week")
-        if now > next_reset_time:
-            description = description.replace("this", "that")
-            description += ("\n❗Warning❗\n Data outdated for this week. Log "
-                            "into GW2 in order to update.")
+                events = t(N_("{count} events") if len(events) > 1 else N_("{count} event"), count=len(events))
+            description = t(N_("{missing} not completed that week") if outdated
+                            else N_("{missing} not completed this week"),
+                            missing=", ".join(filter(None, [bosses, events])))
+        if outdated:
+            description += "\n❗{}❗\n {}".format(
+                t(N_("Warning")), t(N_("Data outdated for this week. Log into GW2 in order to update.")))
         embed.description = description
-        embed.set_footer(text="Logs uploaded via evtc will "
-                         "appear here with links - they don't have to be "
-                         "uploaded by you",
+        embed.set_footer(text=t(N_("Logs uploaded via evtc will "
+                                   "appear here with links - they don't have to be "
+                                   "uploaded by you")),
                          icon_url=self.bot.user.display_avatar.url)
         return embed
 

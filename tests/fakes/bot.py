@@ -4,9 +4,10 @@ import json
 import pathlib
 from unittest.mock import AsyncMock, MagicMock
 
+import discord
 import time_machine
 
-from .db import FakeUserRepo
+from .db import FakeUserRepo, MemorySettings
 from .http import FakeSession
 
 DATA_DIR = pathlib.Path(__file__).resolve().parents[2] / "gw2bot" / "data"
@@ -45,16 +46,21 @@ def client(session):
 def fake_bot(session=None, users=None):
     """A bot with the services cogs use: game data, the API client (over
     `session`), users' keys (over the `users` settings) and emojis."""
+    from gw2bot.i18n import Catalog
     from gw2bot.keys import ApiKeys
 
     bot = MagicMock()
+    bot.catalog = Catalog.load()
     bot.user.name = "GW2Bot"
     bot.gamedata = GAMEDATA
     bot.instabilities = INSTABILITIES
     bot.session = session
     bot.gw2api = client(session) if session is not None else None
+    # No settings unless given: users and servers get the defaults (the
+    # language of their Discord, ...)
+    bot.data.users = users if users is not None else MemorySettings()
+    bot.data.guilds = MemorySettings()
     if users is not None:
-        bot.data.users = users
         bot.keys = ApiKeys(users)
     bot.gw2_emojis = StubEmojis()
 
@@ -80,7 +86,7 @@ def stored_key(permissions, account_name="Example.1234"):
 
 
 async def run_command(cog_for, command, responses, *, permissions, users=None, pages=(), head_error=None,
-                      on_interaction=None, **options):
+                      on_interaction=None, locale=discord.Locale.american_english, **options):
     """Run a slash command's handler with a fake interaction.
 
     cog_for(session, users) builds the cog; `responses` are the API
@@ -91,12 +97,14 @@ async def run_command(cog_for, command, responses, *, permissions, users=None, p
     deferred, else the direct response's. `pages` are the wiki pages that
     exist, and `head_error` makes checking them fail (see FakeSession).
     on_interaction(interaction) is called before running the command.
+    `locale` is the user's Discord language.
     """
     session = FakeSession(*responses, pages=pages, head_error=head_error)
     users = users or FakeUserRepo(stored_key(permissions))
     cog = cog_for(session, users)
     interaction = MagicMock()
     interaction.user.id = 1
+    interaction.locale = locale
     interaction.response.defer = AsyncMock()
     interaction.response.send_message = AsyncMock()
     interaction.followup.send = AsyncMock()

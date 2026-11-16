@@ -170,12 +170,14 @@ def daily_categories(saved):
     return daily.normalize_categories(saved)
 
 
-def daily_fields(categories, cache, now, tomorrow=False):
-    """[(name, value)] of the daily embed, given the cached rotation."""
+def daily_fields(categories, cache, now, tomorrow=False, lang="en", names=None):
+    """[(name, value)] of the daily embed in `lang`, given the cached
+    rotation and the achievements' `names` in other languages ({language:
+    [[English, translation]]})."""
     harness = _daily()
-    doc = {"cache": {"dailies": cache, "dailies_tomorrow": cache}}
+    doc = {"cache": {"dailies": cache, "dailies_tomorrow": cache, "daily_names": names or {}}}
     with at(now):
-        embed = asyncio.run(harness.daily_embed(categories, doc=doc, tomorrow=tomorrow))
+        embed = asyncio.run(harness.daily_embed(categories, doc=doc, tomorrow=tomorrow, lang=lang))
     return [(f.name, f.value) for f in embed.fields]
 
 
@@ -289,9 +291,9 @@ def timer_state(group, now):
 
 # --- GW2 API ---------------------------------------------------------------
 
-async def api_get(session, endpoint, key=None, schema=None):
+async def api_get(session, endpoint, key=None, schema=None, lang=None):
     """GET through the bot's GW2 API client, using `session` for HTTP."""
-    return await client(session).get(endpoint, key=key, schema=schema)
+    return await client(session).get(endpoint, key=key, schema=schema, lang=lang)
 
 
 async def api_get_many(session, endpoints, key=None):
@@ -372,7 +374,10 @@ class UpdateNotesChecker:
     def __init__(self, pages):
         from gw2bot.cogs.notifiers import Notifiers
 
+        from gw2bot.i18n import Catalog
+
         self.notifier = Notifiers(MagicMock())
+        self.notifier.bot.catalog = Catalog()
         self.notifier.log = logging.getLogger("tests.update_notes")
         self.updates = MemoryCollection()
         self.notifier.bot.data.gw2.updates = self.updates
@@ -382,9 +387,8 @@ class UpdateNotesChecker:
     async def check(self):
         """[(title, markdown, minor)] for the notes the bot would send."""
         notes = await self.notifier.update_notification("12345") or []
-        return [
-            (embed.title, embed.fields[0].value, minor) for embed, text, minor in notes
-        ]
+        embeds = [(self.notifier.update_embed(note, "en"), note.minor) for note in notes]
+        return [(embed.title, embed.fields[0].value, minor) for embed, minor in embeds]
 
 
 # --- Settings commands ------------------------------------------------------
@@ -406,7 +410,11 @@ class SettingsCommands:
         from gw2bot.cogs.evtc import Evtc
         from gw2bot.cogs.server import Server
 
+        from gw2bot.i18n import Catalog
+
         bot = MagicMock()
+        bot.catalog = Catalog.load()
+        bot.data.users = MemorySettings()
         bot.data.guilds = self.guilds
         bot.data.channels = self.channels
         self.cog = Server(bot)
@@ -450,7 +458,7 @@ class EvtcUploads:
         from gw2bot.cogs.evtc import Evtc
 
         self.channels = MemorySettings()
-        self.cog = Evtc(MagicMock())
+        self.cog = Evtc(fake_bot())
         self.cog.bot.data.channels = self.channels
         self.cog.process_evtc = AsyncMock()
 
@@ -479,7 +487,7 @@ class EvtcApiKeys:
         from gw2bot.cogs.evtc import Evtc
 
         self.keys = MemoryCollection()
-        self.cog = Evtc(MagicMock())
+        self.cog = Evtc(fake_bot())
         self.cog.db = MagicMock()
         self.cog.db.evtc.api_keys = self.keys
 
@@ -663,10 +671,11 @@ async def account_command(command, responses, *, permissions=("account",), db=No
         return await run_command(cog_for, handler, responses, permissions=permissions, **options)
 
 
-async def account_item_search(text, items):
-    """The /search autocomplete choices for `text`, as (name, value)."""
+async def account_item_search(text, items, locale=None):
+    """The /search autocomplete choices for `text`, as (name, value), for a
+    user whose Discord is in `locale` (default English)."""
     cog = _account_cog(db=gw2_db(items=items))
-    return [(c.name, c.value) for c in await cog.item_autocomplete(MagicMock(), text)]
+    return [(c.name, c.value) for c in await cog.item_autocomplete(autocomplete_interaction(locale), text)]
 
 
 # --- Characters ---------------------------------------------------------------
@@ -841,12 +850,13 @@ async def chatcode(*, items=(), skins=(), **options):
     return sent
 
 
-async def chatcode_choices(option, text, *, items=(), skins=()):
+async def chatcode_choices(option, text, *, items=(), skins=(), locale=None):
     """The /chatcode autocomplete for `option` (item, skin or upgrade), as
-    (name, value)."""
+    (name, value), for a user whose Discord is in `locale` (default
+    English)."""
     cog = _misc_cog(items=items, skins=skins)
     autocomplete = getattr(cog, f"chatcode_{option}_autocomplete")
-    return [(c.name, c.value) for c in await autocomplete(MagicMock(), text)]
+    return [(c.name, c.value) for c in await autocomplete(autocomplete_interaction(locale), text)]
 
 
 # --- Guild sync ------------------------------------------------------------------
@@ -868,15 +878,19 @@ def _notifier_cog(session=None, users=None):
     return Notifiers(fake_bot(session, users))
 
 
-async def run_gem_tracker(responses, tracked):
-    """One run of the gem tracker. `tracked` is {user id: gemtrack copper};
-    users 9xx can't be DMed. Returns (DMs as (user id, text), settings
-    writes, anything the run raised)."""
+async def run_gem_tracker(responses, tracked, languages=None):
+    """One run of the gem tracker. `tracked` is {user id: gemtrack copper},
+    `languages` their /language settings; users 9xx can't be DMed. Returns
+    (DMs as (user id, text), settings writes, anything the run raised)."""
     from unittest.mock import AsyncMock
 
     import discord
 
-    users = MemorySettings({user_id: {"gemtrack": price} for user_id, price in tracked.items()})
+    languages = languages or {}
+    users = MemorySettings({
+        user_id: {"gemtrack": price, **({"language": languages[user_id]} if user_id in languages else {})}
+        for user_id, price in tracked.items()
+    })
     cog = _notifier_cog(FakeSession(*responses), users)
     sent = []
 
@@ -900,15 +914,22 @@ async def run_gem_tracker(responses, tracked):
     return sent, users.writes, error
 
 
-async def run_news_checker(feed, cached_titles, guilds, channels):
-    """One run of the news checker against an RSS `feed` (text). `guilds`
-    are server settings by id, `channels` RecordingChannels. Returns
-    (config writes, server settings writes, anything the run raised)."""
+EMPTY_FEED = "<rss><channel></channel></rss>"
+
+
+async def run_news_checker(feed, cached_titles, guilds, channels, *, feeds=None, cache=None):
+    """One run of the news checker against the English RSS `feed` (text)
+    and `feeds`, {language: text} (empty feeds otherwise), with the English
+    titles seen last time and the rest of the config `cache`. `guilds` are
+    server settings by id, `channels` RecordingChannels. Returns (config
+    writes, server settings writes, anything the run raised)."""
     from unittest.mock import AsyncMock
 
+    feeds = {"de": EMPTY_FEED, "fr": EMPTY_FEED, "es": EMPTY_FEED, "en": feed, **(feeds or {})}
     cog = _notifier_cog()
-    cog.bot.session = FakeWikiSession({"https://www.guildwars2.com/en/feed/": feed})
-    cog.bot.data.config.get = AsyncMock(return_value={"cache": {"news": cached_titles}})
+    cog.bot.session = FakeWikiSession({f"https://www.guildwars2.com/{lang}/feed/": text
+                                       for lang, text in feeds.items()})
+    cog.bot.data.config.get = AsyncMock(return_value={"cache": {"news": cached_titles, **(cache or {})}})
     cog.bot.data.config.update = AsyncMock()
     cog.bot.data.guilds = MemorySettings(guilds)
     by_id = {c.id: c for c in channels}
@@ -1196,14 +1217,20 @@ async def run_boss_notifier(servers, channels, now):
     return guilds.writes
 
 
-async def et_command(category, now):
+async def et_command(category, now, **options):
     """Run /et at `now`; returns the embed."""
     from gw2bot.cogs.events import Events
 
     with at(now):
         sent, _ = await run_command(lambda session, users: _events_cog(session, users), Events.et, [],
-                                    permissions=(), category=category)
+                                    permissions=(), category=category, **options)
     return sent
+
+
+async def event_autocomplete(text, locale=None):
+    """/reminder event's autocomplete for `text`: [(label, value)]."""
+    cog = _events_cog()
+    return [(c.name, c.value) for c in await cog.event_name_autocomplete(autocomplete_interaction(locale), text)]
 
 
 
@@ -1219,16 +1246,19 @@ def link(header, *values):
 
 
 async def post_chat_link(content, *, db=None, in_guild=True, opted_out=False, author_is_bot=False, pages=(),
-                         can_use_emojis=False):
+                         can_use_emojis=False, server_language=None):
     """Post a message with `content` where the chat link previewer sees it.
-    `db` is the game data cache (see gw2_db). Returns (previews sent as
-    (embed dict, replied to the message), link_previews counts added)."""
+    `db` is the game data cache (see gw2_db); `server_language` the
+    server's /server language. Returns (previews sent as (embed dict,
+    replied to the message), link_previews counts added)."""
     from unittest.mock import AsyncMock
 
     from gw2bot.cogs.chatlinks import ChatLinks
 
     session = FakeSession((500, {}), pages=pages)
     cog = ChatLinks(fake_bot(session))
+    if server_language:
+        cog.bot.data.guilds = MemorySettings({10: {"language": server_language}})
     cog.db = db or gw2_db()
     cog.previews_disabled = {10} if opted_out else set()
     cog.bot.user.display_avatar.url = "https://cdn/bot.png"
@@ -1394,12 +1424,12 @@ def _cache_cog(session=None):
 
 async def cache_endpoint(responses, endpoint, all_at_once=False):
     """Cache `endpoint` from the API `responses`. Returns ({_id: doc}
-    written, API requests)."""
+    written, API requests as (url, language asked for or None))."""
     session = FakeSession(*responses)
     cog = _cache_cog(session)
     await cog.cache_endpoint(endpoint, all_at_once)
     docs = {doc["_id"]: doc for doc in cog.db[endpoint.replace("/", "_")].docs}
-    return docs, [url for url, _, _ in session.requests]
+    return docs, [(url, params.get("lang")) for url, params, _ in session.requests]
 
 
 async def cache_raids(responses):
@@ -1908,3 +1938,99 @@ async def user_reads(job, server, users, *, responses=(), syncs=()):
             member.edit = edit
         await cog.force_guild_account_names(server)
     return cog.bot.data.users.reads
+
+
+# --- Languages -------------------------------------------------------------
+
+
+def autocomplete_interaction(locale=None):
+    """An interaction from user 1, whose Discord is in `locale` (default
+    English)."""
+    import discord
+
+    interaction = MagicMock()
+    interaction.user.id = 1
+    interaction.locale = locale or discord.Locale.american_english
+    return interaction
+
+
+def _language_cog(users=None, guilds=None):
+    from gw2bot.cogs.base import GW2Cog
+
+    bot = fake_bot(users=MemorySettings(users or {}))
+    bot.data.guilds = MemorySettings(guilds or {})
+    return GW2Cog(bot)
+
+
+async def reply_language(locale, settings=None):
+    """The language the bot answers an interaction in: the user's settings
+    (`settings`, e.g. {"language": "de"}) and Discord `locale`."""
+    from unittest.mock import MagicMock
+
+    cog = _language_cog(users={1: settings} if settings else None)
+    interaction = MagicMock()
+    interaction.user.id = 1
+    interaction.locale = locale
+    return await cog.lang(interaction)
+
+
+async def server_language(preferred_locale, settings=None):
+    """The language the bot posts in a server in: the server's settings and
+    its Discord language."""
+    from unittest.mock import MagicMock
+
+    cog = _language_cog(guilds={5: settings} if settings else None)
+    guild = MagicMock(id=5, preferred_locale=preferred_locale)
+    return await cog.guild_lang(guild)
+
+
+async def dm_language(settings=None):
+    """The language of a DM sent outside an interaction."""
+    cog = _language_cog(users={1: settings} if settings else None)
+    return await cog.user_lang(1)
+
+
+async def wiki_page(name, lang="en", english_name=None, *, pages=(), head_error=None):
+    """The wiki page linked for `name`, when the wiki has `pages` (URLs).
+    Returns (the URL or None, the pages checked)."""
+    from gw2bot.utils.wiki import page_url
+
+    session = FakeSession((200, {}), pages=pages, head_error=head_error)
+    return await page_url(session, name, lang, english_name), session.heads
+
+
+async def language_command(language, *, locale=None):
+    """Run /language. Returns (the reply, user settings writes)."""
+    import discord
+
+    from gw2bot.cogs.language import Language
+
+    users = FakeUserRepo({})
+    sent, _ = await run_command(lambda session, users: Language(fake_bot(session, users)), Language.language, [],
+                                permissions=(), users=users, locale=locale or discord.Locale.american_english,
+                                language=language)
+    return sent, users.writes
+
+
+async def server_language_command(language, *, locale=None, server_locale=None):
+    """Run /server language from an admin whose Discord is in `locale`, in a
+    server whose Discord language is `server_locale`. Returns (the reply,
+    server settings)."""
+    import discord
+
+    from gw2bot.cogs.server import Server
+
+    guilds = MemorySettings()
+
+    def cog_for(session, users):
+        cog = Server(fake_bot(session, users))
+        cog.bot.data.guilds = guilds
+        return cog
+
+    def on_interaction(interaction):
+        interaction.guild.id = 5
+        interaction.guild.preferred_locale = server_locale or discord.Locale.american_english
+
+    sent, _ = await run_command(cog_for, Server.server_language, [], permissions=(), on_interaction=on_interaction,
+                                locale=locale or discord.Locale.american_english, language=language)
+    return sent, guilds.docs.get(5, {})

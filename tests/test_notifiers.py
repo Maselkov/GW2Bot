@@ -14,6 +14,12 @@ async def test_gem_tracker_notifies_once_the_price_drops():
     assert writes == [(1, "set", {"gemtrack": None})]
 
 
+async def test_gem_tracker_writes_in_the_users_language():
+    sent, _, _ = await subject.run_gem_tracker([PRICE], {1: 1_100_000}, languages={1: "de"})
+    assert sent == [(1, "Hey, <@1>! Ihr wolltet benachrichtigt werden, wenn 400 Edelsteine weniger als "
+                        "110 Gold  kosten. Ratet mal: Jetzt kosten sie nur noch 100 Gold !")]
+
+
 async def test_gem_tracker_survives_api_errors(caplog):
     # discord.py stops a task loop for good on any exception but network
     # errors, so a bad API response must not escape
@@ -76,6 +82,66 @@ async def test_news_survives_a_feed_that_isnt_xml(caplog):
     assert "Couldn't check the news" in caplog.text
 
 
+def localized_feed(lang, *items):
+    """A feed in `lang`: items are (title, English slug)."""
+    return "<rss><channel>" + "".join(
+        f"<item><title>{title}</title><link>https://www.guildwars2.com/{lang}/news/{slug}/</link>"
+        f"<description>&lt;p&gt;Über {title}&lt;/p&gt;</description></item>"
+        for title, slug in items
+    ) + "</channel></rss>"
+
+
+async def test_news_comes_from_the_servers_language_feed():
+    english, german = subject.RecordingChannel(5), subject.RecordingChannel(6, guild_id=11)
+    servers = {10: {"news": {"on": True, "channel": 5}},
+               11: {"language": "de", "news": {"on": True, "channel": 6}}}
+    german_feed = localized_feed("de", ("Neue Veröffentlichung", "new-release"), ("Alt", "old"))
+    config, _, error = await subject.run_news_checker(
+        feed("New Release", "Old News"), ["Old News"], servers, [english, german],
+        feeds={"de": german_feed}, cache={"news_de": ["Alt"]},
+    )
+    assert error is None
+    assert [embed["title"] for _, embed, _ in english.sent] == ["New Release"]
+    assert [(embed["title"], embed["description"]) for _, embed, _ in german.sent] == [
+        ("Neue Veröffentlichung",
+         "[Hier klicken](https://www.guildwars2.com/de/news/new-release/)\nÜber Neue Veröffentlichung"),
+    ]
+    assert config == [{"cache.news": ["New Release", "Old News"], "cache.news_de": ["Neue Veröffentlichung", "Alt"]}]
+
+
+async def test_a_languages_first_feed_is_only_remembered():
+    # Servers switching to French later mustn't get the whole feed
+    channel = subject.RecordingChannel(5)
+    servers = {10: {"language": "fr", "news": {"on": True, "channel": 5}}}
+    config, _, _ = await subject.run_news_checker(
+        feed("Old"), ["Old"], servers, [channel], feeds={"fr": localized_feed("fr", ("Nouveau", "new"))}
+    )
+    assert channel.sent == []
+    assert config == [{"cache.news_fr": ["Nouveau"]}]
+
+
+async def test_news_filters_by_the_english_slug_in_every_language():
+    channel = subject.RecordingChannel(5)
+    servers = {10: {"language": "es", "news": {"on": True, "channel": 5}}}
+    spanish = localized_feed("es", ("Horario de retransmisiones de ArenaNet", "the-arenanet-streaming-schedule"),
+                             ("Exhibición de la comunidad", "community-showcase-art"), ("Parche", "patch"))
+    await subject.run_news_checker(feed("Old"), ["Old"], servers, [channel], feeds={"es": spanish},
+                                   cache={"news_es": ["Viejo"]})
+    assert [embed["title"] for _, embed, _ in channel.sent] == ["Parche"]
+
+
+async def test_one_broken_feed_doesnt_stop_the_others(caplog):
+    channel = subject.RecordingChannel(5)
+    config, _, error = await subject.run_news_checker(
+        feed("New", "Old"), ["Old"], NEWS_SERVERS, [channel], feeds={"de": "<html>Just a moment...</html>"},
+        cache={"news_de": ["Alt"]},
+    )
+    assert error is None
+    assert [embed["title"] for _, embed, _ in channel.sent] == ["New"]
+    assert config == [{"cache.news": ["New", "Old"]}]
+    assert "Couldn't check the news (de)" in caplog.text
+
+
 # --- Game updates --------------------------------------------------------------------------
 
 
@@ -108,12 +174,10 @@ async def test_news_turns_itself_off_without_permission():
 # --- Game updates: build check and posting ---------------------------------------------
 
 
-def update_embed(title="Game Update Notes: March 5, 2024"):
-    import discord
+def update_note(minor=False):
+    from gw2bot.cogs.notifiers import UpdateNote
 
-    embed = discord.Embed(title=title)
-    embed.add_field(name="Update Notes", value="Notes")
-    return embed
+    return UpdateNote("Game Update Notes: March 5, 2024", "https://forum/1", "Notes", "101", minor)
 
 
 UPDATE_SERVERS = {
@@ -140,7 +204,7 @@ async def test_a_new_build_rebuilds_the_cache():
 
 async def test_update_notes_go_to_enabled_servers():
     channels = update_channels()
-    notes = [(update_embed(), "Guild Wars 2 has just updated!", False)]
+    notes = [update_note()]
     await subject.check_game_updates({"cache": {"build": "101"}}, "101", notes=notes, servers=UPDATE_SERVERS,
                                      channels=channels)
     # The saved mention (legacy "everyone" gets its @), or the text alone
@@ -152,9 +216,21 @@ async def test_update_notes_go_to_enabled_servers():
     ]
 
 
+async def test_update_notes_in_the_servers_language():
+    channel = subject.RecordingChannel(5, 10)
+    servers = {10: {"language": "fr", "updates": {"on": True, "channel": 5}}}
+    await subject.check_game_updates({"cache": {"build": "101"}}, "101", notes=[update_note()], servers=servers,
+                                     channels=[channel])
+    [(content, embed, _)] = channel.sent
+    assert content == "Guild Wars 2 vient d'être mis à jour !"
+    assert embed["title"] == "Game Update Notes: March 5, 2024"  # The forum is English only
+    assert embed["fields"][0]["name"] == "Notes de mise à jour"
+    assert embed["footer"]["text"] == "Build : 101"
+
+
 async def test_hotfixes_dont_mention():
     channels = update_channels()
-    notes = [(update_embed(), "Guild Wars 2 has just updated!", True)]
+    notes = [update_note(minor=True)]
     await subject.check_game_updates({"cache": {"build": "101"}}, "101", notes=notes, servers=UPDATE_SERVERS,
                                      channels=channels)
     assert channels[0].sent[0][0] == "Guild Wars 2 has just updated!"

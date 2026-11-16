@@ -8,6 +8,7 @@ from discord import app_commands
 from discord.app_commands import Choice
 from discord.ext import tasks
 
+from ..i18n import DEFAULT_LANGUAGE, N_
 from .base import GW2Cog
 
 UTC_TZ = datetime.timezone.utc
@@ -43,9 +44,11 @@ ET_CATEGORIES = [{
 
 class EventTimerReminderUnsubscribeView(discord.ui.View):
 
-    def __init__(self, cog):
+    def __init__(self, cog, lang=DEFAULT_LANGUAGE):
         self.cog = cog
         super().__init__(timeout=None)
+        # Clicks find the view by custom_id, whatever the label's language
+        self.unsubscribe.label = cog.t(lang, N_("Unsubscribe"))
 
     @discord.ui.button(style=discord.ButtonStyle.red,
                        emoji="❌",
@@ -65,7 +68,8 @@ class EventTimerReminderUnsubscribeView(discord.ui.View):
                 await interaction.message.delete()
             except discord.HTTPException:
                 pass
-        await interaction.response.send_message('Unsubscribed!',
+        lang = await self.cog.lang(interaction)
+        await interaction.response.send_message(self.cog.t(lang, N_("Unsubscribed!")),
                                                 ephemeral=True)
 
 
@@ -95,10 +99,11 @@ class Events(GW2Cog):
     @app_commands.choices(category=[Choice(**c) for c in ET_CATEGORIES])
     async def et(self, interaction: discord.Interaction, category: str):
         """Event timer"""
+        lang = await self.lang(interaction)
         if category == "bosses":
-            embed = self.schedule_embed()
+            embed = self.schedule_embed(lang=lang)
         else:
-            embed = await self.timer_embed(interaction, category)
+            embed = await self.timer_embed(interaction, category, lang)
         await interaction.response.send_message(embed=embed)
 
     def generate_schedule(self):
@@ -163,48 +168,48 @@ class Events(GW2Cog):
             day += 1
         return upcoming_bosses
 
-    def schedule_embed(self, limit=8):
+    def schedule_embed(self, limit=8, lang=DEFAULT_LANGUAGE):
         schedule = self.get_upcoming_bosses(limit)
-        data = discord.Embed(title="Upcoming world bosses",
+        data = discord.Embed(title=self.t(lang, N_("Upcoming world bosses")),
                              color=self.embed_color)
         for boss in schedule:
-            value = "Time: {}\nWaypoint: {}".format(boss["time"],
-                                                    boss["waypoint"])
+            value = self.t(lang, N_("Time: {time}\nWaypoint: {waypoint}"), time=boss["time"],
+                           waypoint=boss["waypoint"])
             data.add_field(
-                name="{} in {}".format(boss["name"],
-                                       self.format_timedelta(boss["diff"])),
+                name=self.t(lang, N_("{boss} in {time}"), boss=self.t(lang, boss["name"]),
+                            time=self.format_timedelta(boss["diff"], lang)),
                 value=value,
                 inline=False,
             )
         data.set_footer(
-            text="The timestamps are dynamically adjusted to your timezone",
+            text=self.t(lang, N_("The timestamps are dynamically adjusted to your timezone")),
             icon_url=self.bot.user.display_avatar.url,
         )
         return data
 
-    def format_timedelta(self, td):
+    def format_timedelta(self, td, lang=DEFAULT_LANGUAGE):
         hours, remainder = divmod(td.seconds, 3600)
         minutes, seconds = divmod(remainder, 60)
         if hours:
-            return "{} hours and {} minutes".format(hours, minutes)
+            return self.t(lang, N_("{hours} hours and {minutes} minutes"), hours=hours, minutes=minutes)
         else:
-            return "{} minutes".format(minutes)
+            return self.t(lang, N_("{minutes} minutes"), minutes=minutes)
 
-    async def timer_embed(self, ctx, group):
+    async def timer_embed(self, ctx, group, lang=DEFAULT_LANGUAGE):
         time = datetime.datetime.now(datetime.timezone.utc)
         position = (
             60 * time.hour + time.minute
         ) % 120  # this gets the minutes elapsed in the current 2 hour window
         maps = self.gamedata["event_timers"][group]
         title = {
-            "hot": "HoT Event Timer",
-            "pof": "PoF Event Timer",
-            "day": "Day/Night cycle",
-            "eod": "End of Dragons",
-            "soto": "Secrets of the Obscure",
-            "ibs": "The Icebrood Saga"
+            "hot": N_("HoT Event Timer"),
+            "pof": N_("PoF Event Timer"),
+            "day": N_("Day/Night cycle"),
+            "eod": N_("End of Dragons"),
+            "soto": N_("Secrets of the Obscure"),
+            "ibs": N_("The Icebrood Saga")
         }.get(group)
-        embed = discord.Embed(title=title,
+        embed = discord.Embed(title=self.t(lang, title),
                               color=await self.get_embed_color(ctx))
         for location in maps:
             duration_so_far = 0
@@ -232,12 +237,13 @@ class Events(GW2Cog):
             event_time = time + datetime.timedelta(minutes=time_until)
             timestamp = f"<t:{int(event_time.timestamp())}:R>"
             if current_phase:
-                current = f"Current phase: **{current_phase}**"
+                current = self.t(lang, N_("Current phase: **{phase}**"), phase=self.t(lang, current_phase))
             else:
-                current = "No events currently active."
-            value = (current +
-                     "\nNext phase: **{}** {}".format(next_phase, timestamp))
-            embed.add_field(name=location["name"], value=value, inline=False)
+                current = self.t(lang, N_("No events currently active."))
+            value = (current + "\n" +
+                     self.t(lang, N_("Next phase: **{phase}** {time}"), phase=self.t(lang, next_phase),
+                            time=timestamp))
+            embed.add_field(name=self.t(lang, location["name"]), value=value, inline=False)
         embed.set_footer(text=self.bot.user.name,
                          icon_url=self.bot.user.display_avatar.url)
         return embed
@@ -313,14 +319,16 @@ class Events(GW2Cog):
             when = datetime.datetime.now(
                 datetime.timezone.utc) + datetime.timedelta(seconds=time)
             timestamp = f"<t:{int(when.timestamp())}:R>"
-            description = f"{reminder['name']} will begin {timestamp}"
-            embed = discord.Embed(title="Event reminder",
+            lang = await self.user_lang(user.id)
+            description = self.t(lang, N_("{event} will begin {time}"), event=self.t(lang, reminder["name"]),
+                                 time=timestamp)
+            embed = discord.Embed(title=self.t(lang, N_("Event reminder")),
                                   description=description,
                                   color=self.embed_color)
             # try:
             try:
                 msg = await user.send(
-                    embed=embed, view=EventTimerReminderUnsubscribeView(self))
+                    embed=embed, view=EventTimerReminderUnsubscribeView(self, lang))
             except discord.HTTPException:
                 # Closed DMs: count this spawn as reminded rather than
                 # trying again every 10 seconds until it starts
@@ -352,27 +360,32 @@ class Events(GW2Cog):
         await self.bot.wait_until_ready()
 
     async def event_name_autocomplete(self, interaction: discord.Interaction, current):
+        """Events whose name in the user's language or in English contains
+        `current`, shown in the user's language. The value is the English
+        name, which reminders are saved with."""
         if not current:
             return []
+        lang = await self.lang(interaction)
         current = current.lower()
         names = set()
+
+        def offer(english, value):
+            label = " - ".join(self.t(lang, part) for part in english)
+            if current in label.lower() or current in " - ".join(english).lower():
+                names.add(Choice(name=label[:100], value=value))
+
         timers = self.gamedata["event_timers"]
         for category in timers:
             if category == "bosses":
                 subtypes = "normal", "hardcore"
                 for subtype in subtypes:
                     for boss in timers[category][subtype]:
-                        name = boss["name"]
-                        if current in name.lower():
-                            names.add(Choice(name=name, value=name))
+                        offer([boss["name"]], boss["name"])
             else:
                 for subcategory in timers[category]:
-                    map_name = subcategory["name"]
                     for event in subcategory["phases"]:
                         if event["name"]:
-                            name = f"{map_name} - {event['name']}"
-                            if current in name.lower():
-                                names.add(Choice(name=name, value=event["name"]))
+                            offer([subcategory["name"], event["name"]], event["name"])
         return sorted(list(names)[:25], key=lambda c: c.name)
 
     @reminder_group.command(name="event")
@@ -389,18 +402,24 @@ class Events(GW2Cog):
         minutes_before_event: int = 5,
     ):
         """Make the bot automatically notify you before an event starts"""
+        lang = await self.lang(interaction)
         if minutes_before_event < 0:
             return await interaction.response.send_message(
-                "That's not how time works!", ephemeral=True
+                self.t(lang, N_("That's not how time works!")), ephemeral=True
             )
         if minutes_before_event > 60:
             return await interaction.response.send_message(
-                "Time can't be greater than one hour", ephemeral=True
+                self.t(lang, N_("Time can't be greater than one hour")), ephemeral=True
             )
         event_name = event_name.lower()
+
+        def matches(name):
+            # The English name (autocomplete's values), or the user's language's
+            return event_name in (name.lower(), self.t(lang, name).lower())
+
         reminder = {}
         for boss in self.boss_schedule:
-            if boss["name"].lower() == event_name:
+            if matches(boss["name"]):
                 reminder["type"] = "boss"
                 reminder["name"] = boss["name"]
         if not reminder:
@@ -412,21 +431,21 @@ class Events(GW2Cog):
                     for phase in location["phases"]:
                         if not phase["name"]:
                             continue
-                        if phase["name"].lower() == event_name:
+                        if matches(phase["name"]):
                             reminder["type"] = "phase"
                             reminder["name"] = phase["name"]
                             reminder["group"] = group
                             reminder["map_name"] = location["name"]
         if not reminder:
             return await interaction.response.send_message(
-                "No event found matching that name", ephemeral=True
+                self.t(lang, N_("No event found matching that name")), ephemeral=True
             )
         reminder["time"] = minutes_before_event * 60
         await self.bot.data.users.update(
             interaction.user.id, {"event_reminders": reminder}, op="push"
         )
         await interaction.response.send_message(
-            "Reminder set succesfully", ephemeral=True
+            self.t(lang, N_("Reminder set succesfully")), ephemeral=True
         )
 
     @tasks.loop(minutes=5)
@@ -437,12 +456,14 @@ class Events(GW2Cog):
         async for doc in cursor:
             guild_id = doc["_id"]
             try:
+                settings = doc
                 doc = doc["bossnotifs"]
                 edit = doc.get("edit", False)
                 channel = self.bot.get_channel(doc["channel"])
                 if not channel:
                     continue
-                embed = self.schedule_embed(2)
+                lang = self.settings_lang(settings, getattr(channel, "guild", None))
+                embed = self.schedule_embed(2, lang)
                 old_message_id = doc.get("message")
                 edited = False
                 try:
@@ -460,12 +481,8 @@ class Events(GW2Cog):
                     message = await channel.send(embed=embed)
                 except discord.Forbidden:
                     try:
-                        await channel.send(
-                            "Need permission to "
-                            "embed links in order "
-                            "to send boss "
-                            "notifs!"
-                        )
+                        await channel.send(self.t(lang, N_(
+                            "Need permission to embed links in order to send boss notifs!")))
                     except discord.Forbidden:
                         # Can't post there at all: stop trying, like news
                         await self.bot.data.guilds.update(guild_id, {"bossnotifs.on": False})

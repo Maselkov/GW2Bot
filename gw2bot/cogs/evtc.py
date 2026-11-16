@@ -15,6 +15,7 @@ from discord.ext import commands, tasks
 from gw2bot.utils.chat import embed_list_lines, en_space, magic_space, zero_width_space
 
 from ..gw2api.errors import APIError
+from ..i18n import DEFAULT_LANGUAGE, N_
 from .base import GW2Cog
 
 UTC_TZ = datetime.timezone.utc
@@ -24,7 +25,7 @@ UPLOAD_URL = BASE_URL + "uploadContent"
 JSON_URL = BASE_URL + "getJson"
 TOKEN_URL = BASE_URL + "getUserToken"
 ALLOWED_FORMATS = (".evtc", ".zevtc", ".zip")
-DESTINATION_ADDED = (
+DESTINATION_ADDED = N_(
     "This channel is now a destination for EVTC logs. Logs uploaded using "
     "third-party utilities with your GW2Bot EVTC API key will be posted "
     "here. You can have multiple destinations at the same time. DMs also "
@@ -35,31 +36,34 @@ DESTINATION_ADDED = (
 
 class EvtcGuildSelectionViewSelect(discord.ui.Select):
 
-    def __init__(self, cog, guilds):
+    def __init__(self, cog, guilds, lang=DEFAULT_LANGUAGE):
         self.cog = cog
+        self.lang = lang
         options = []
         for guild in guilds:
             name = f"{guild['name']} [{guild['tag']}]"
             options.append(discord.SelectOption(label=name, value=guild["id"]))
         super().__init__(
             options=options,
-            placeholder="Select guilds",
+            placeholder=cog.t(lang, N_("Select guilds")),
             min_values=1,
             max_values=len(options),
         )
 
     async def callback(self, interaction: discord.Interaction):
-        await interaction.response.edit_message(content=DESTINATION_ADDED, view=None)
+        await interaction.response.edit_message(content=self.cog.t(self.lang, DESTINATION_ADDED), view=None)
         self.view.selected_guilds = self.values
         self.view.stop()
 
 
 class EvtcGuildSelectionView(discord.ui.View):
 
-    def __init__(self, cog, guilds):
+    def __init__(self, cog, guilds, lang=DEFAULT_LANGUAGE):
         super().__init__(timeout=60)
         self.cog = cog
-        self.add_item(EvtcGuildSelectionViewSelect(cog, guilds))
+        self.lang = lang
+        self.add_item(EvtcGuildSelectionViewSelect(cog, guilds, lang))
+        self.confirm.label = cog.t(lang, N_("Next"))
         self.selected_guilds = []
         self.skip = False
 
@@ -67,28 +71,29 @@ class EvtcGuildSelectionView(discord.ui.View):
     async def confirm(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
-        await interaction.response.edit_message(content=DESTINATION_ADDED, view=None)
+        await interaction.response.edit_message(content=self.cog.t(self.lang, DESTINATION_ADDED), view=None)
         self.skip = True
         self.stop()
 
 
 class EvtcAutouploadDestinationsSelect(discord.ui.Select):
 
-    def __init__(self, cog, channels, destinations):
+    def __init__(self, cog, channels, destinations, lang=DEFAULT_LANGUAGE):
         self.cog = cog
+        self.lang = lang
         self.destinations = destinations
         options = []
         for i, channel in enumerate(channels):
             if isinstance(channel, discord.DMChannel):
                 name = "DM"
             elif not channel:
-                name = "Inaccessible Channel"
+                name = cog.t(lang, N_("Inaccessible Channel"))
             else:
                 name = f"{channel.guild.name} - {channel.name}"
             options.append(discord.SelectOption(label=name, value=str(i)))
         super().__init__(
             options=options,
-            placeholder="Select destinations to remove",
+            placeholder=cog.t(lang, N_("Select destinations to remove")),
             min_values=1,
             max_values=len(options),
         )
@@ -98,7 +103,7 @@ class EvtcAutouploadDestinationsSelect(discord.ui.Select):
         for choice in choices:
             await self.cog.db.evtc.destinations.delete_one({"_id": choice["_id"]})
         await interaction.response.edit_message(
-            content="Removed selected destinations.", view=None
+            content=self.cog.t(self.lang, N_("Removed selected destinations.")), view=None
         )
         self.view.stop()
 
@@ -107,7 +112,7 @@ class Evtc(GW2Cog):
 
     evtc_automation_group = app_commands.Group(
         name="evtc_automation",
-        description="Character relating to automating EVTC processing",
+        description="Commands for automating EVTC processing",
     )
 
     autopost_group = app_commands.Group(
@@ -178,7 +183,10 @@ class Evtc(GW2Cog):
         async with self.bot.session.get(JSON_URL, params={"id": encounter_id}) as r:
             return await r.json()
 
-    async def upload_embed(self, destination, data, permalink):
+    async def upload_embed(self, destination, data, permalink, lang=DEFAULT_LANGUAGE):
+        def t(text, **fields):
+            return self.t(lang, text, **fields)
+
         lines = []
         targets = data["phases"][0]["targets"]
         group_dps = 0
@@ -201,7 +209,7 @@ class Evtc(GW2Cog):
             else:
                 percentage = round(100 / group_dps * dps)
             bars = get_graph(percentage)
-            bars += f"` **{dps}** DPS | **{percentage}%** of group DPS"
+            bars += "` " + t(N_("**{dps}** DPS | **{percentage}%** of group DPS"), dps=dps, percentage=percentage)
             return bars
 
         players = []
@@ -217,10 +225,8 @@ class Evtc(GW2Cog):
             prof = self.get_emoji(destination, player["profession"], force_emoji=True)
             line = f"{prof} **{player['name']}** *({player['account']})*"
             if down_count:
-                line += (
-                    f" | {self.get_emoji(destination, 'downed', force_emoji=True)}Downed "
-                    f"count: **{down_count}**"
-                )
+                line += " | {}{}".format(self.get_emoji(destination, 'downed', force_emoji=True),
+                                         t(N_("Downed count: **{count}**"), count=down_count))
             lines.append(line)
         dpses = []
         charater_name_max_length = 19
@@ -235,16 +241,16 @@ class Evtc(GW2Cog):
             align = (charater_name_max_length - len(player["name"])) * " "
             line += "`" + player["name"] + align + get_dps(player)
             dpses.append(line)
-        dpses.append(f"> Group DPS: **{group_dps}**")
+        dpses.append("> " + t(N_("Group DPS: **{dps}**"), dps=group_dps))
         color = discord.Color.green() if data["success"] else discord.Color.red()
         minutes, seconds = data["duration"].split()[:2]
         minutes = int(minutes[:-1])
         seconds = int(seconds[:-1])
         duration_time = (minutes * 60) + seconds
-        duration = f"**{minutes}** minutes, **{seconds}** seconds"
+        duration = t(N_("**{minutes}** minutes, **{seconds}** seconds"), minutes=minutes, seconds=seconds)
         embed = discord.Embed(
-            title="DPS Report",
-            description="Encounter duration: " + duration,
+            title=t(N_("DPS Report")),
+            description=t(N_("Encounter duration: {duration}"), duration=duration),
             url=permalink,
             color=color,
         )
@@ -259,10 +265,10 @@ class Evtc(GW2Cog):
             health_left = round(health_left, 2)
             if len(targets) > 1:
                 boss_lines.append(f"**{target['name']}**")
-            boss_lines.append(f"Health: **{health_left}%**")
+            boss_lines.append(t(N_("Health: **{percent}%**"), percent=health_left))
             boss_lines.append(get_graph(health_left))
         if not wvw:
-            embed.add_field(name="> **BOSS**", value="\n".join(boss_lines))
+            embed.add_field(name="> **{}**".format(t(N_("Boss")).upper()), value="\n".join(boss_lines))
         buff_lines = []
         sought_buffs = ["Might", "Fury", "Quickness", "Alacrity", "Protection"]
         buffs = []
@@ -342,11 +348,11 @@ class Evtc(GW2Cog):
             line += "`"
             buff_lines.append(line.strip())
         if not wvw:
-            embed = embed_list_lines(embed, lines, "> **PLAYERS**")
+            embed = embed_list_lines(embed, lines, "> **{}**".format(t(N_("Players")).upper()))
         if wvw:
             dpses = dpses[:15]
         embed = embed_list_lines(embed, dpses, "> **DPS**")
-        embed.add_field(name="> **BUFFS**", value=icon_line)
+        embed.add_field(name="> **{}**".format(t(N_("Buffs")).upper()), value=icon_line)
 
         embed = embed_list_lines(embed, buff_lines, zero_width_space)
         boss = self.gamedata["bosses"].get(str(data["triggerID"]))
@@ -368,7 +374,7 @@ class Evtc(GW2Cog):
         if not duplicate:
             await self.db.encounters.insert_one(doc)
         embed.timestamp = date
-        embed.set_footer(text="Recorded at", icon_url=self.bot.user.display_avatar.url)
+        embed.set_footer(text=t(N_("Recorded at")), icon_url=self.bot.user.display_avatar.url)
         if boss:
             embed.set_author(name=data["fightName"], icon_url=boss["icon"])
         return embed
@@ -386,15 +392,16 @@ class Evtc(GW2Cog):
         anonymous: bool = False,
     ):
         """Process an EVTC combat log in an attachment"""
+        lang = await self.lang(interaction)
         if not file.filename.endswith(ALLOWED_FORMATS):
             return await interaction.response.send_message(
-                "The attachment seems not to be of a correct filetype.\n"
-                f"Allowed file extensions: `{', '.join(ALLOWED_FORMATS)}`",
+                self.t(lang, N_("The attachment seems not to be of a correct filetype.\n"
+                                "Allowed file extensions: `{extensions}`"), extensions=", ".join(ALLOWED_FORMATS)),
                 ephemeral=True,
             )
         await interaction.response.defer()
         await self.process_evtc(
-            [file], interaction.user, interaction.followup, anonymous=anonymous
+            [file], interaction.user, interaction.followup, anonymous=anonymous, lang=lang
         )
 
     @evtc_automation_group.command(name="channel")
@@ -402,7 +409,7 @@ class Evtc(GW2Cog):
     @app_commands.checks.has_permissions(manage_guild=True, manage_channels=True)
     @app_commands.checks.bot_has_permissions(embed_links=True, use_external_emojis=True)
     @app_commands.describe(
-        enabled="Disable or enable this feature on the specificed channel",
+        enabled="Disable or enable this feature on the specified channel",
         channel="The target channel",
         autodelete="Delete original message after processing the EVTC log",
     )
@@ -415,22 +422,21 @@ class Evtc(GW2Cog):
     ):
         """Sets a channel to be automatically used to process EVTC logs
         posted within"""
+        lang = await self.lang(interaction)
         await self.bot.data.channels.update(
             channel.id, {"evtc.enabled": enabled, "evtc.autodelete": autodelete}
         )
         if enabled:
-            msg = (
+            msg = self.t(lang, N_(
                 "Automatic EVTC processing enabled. Simply upload the logs "
-                f"you want processed in {channel.mention}. Accepted "
-                f"formats: `{', '.join(ALLOWED_FORMATS)}`\nTo disable, use "
+                "you want processed in {channel}. Accepted "
+                "formats: `{formats}`\nTo disable, use "
                 "this command with `enabled` set to False."
-            )
+            ), channel=channel.mention, formats=", ".join(ALLOWED_FORMATS))
             if not channel.permissions_for(interaction.guild.me).embed_links:
-                msg += (
-                    "I won't be able to process logs without Embed " "Links permission."
-                )
+                msg += self.t(lang, N_("I won't be able to process logs without Embed Links permission."))
         else:
-            msg = "Automatic EVTC processing disabled"
+            msg = self.t(lang, N_("Automatic EVTC processing disabled"))
         await interaction.response.send_message(msg)
 
     def generate_evtc_api_key(self) -> None:
@@ -451,25 +457,26 @@ class Evtc(GW2Cog):
     )
     async def evtc_api_key(self, interaction: discord.Interaction, operation: str):
         """Generate an API key for third-party apps that automatically upload EVTC logs"""
+        lang = await self.lang(interaction)
         await interaction.response.defer(ephemeral=True)
         existing_key = await self.get_user_evtc_api_key(interaction.user)
         if operation == "delete":
             if not existing_key:
                 return await interaction.followup.send(
-                    "You don't have an EVTC API key generated."
+                    self.t(lang, N_("You don't have an EVTC API key generated."))
                 )
             await self.db.evtc.api_keys.delete_many({"user": interaction.user.id})
             return await interaction.followup.send(
-                "Your EVTC API key has been deleted."
+                self.t(lang, N_("Your EVTC API key has been deleted."))
             )
         if operation == "view":
             if not existing_key:
-                return await interaction.followup.send(
+                return await interaction.followup.send(self.t(lang, N_(
                     "You don't have an EVTC API key generated. Use "
                     "`/evtc_automation api_key` to generate one."
-                )
+                )))
             return await interaction.followup.send(
-                f"Your EVTC API key is ```{existing_key}```"
+                self.t(lang, N_("Your EVTC API key is")) + f" ```{existing_key}```"
             )
         if operation == "generate":
             key = self.generate_evtc_api_key()
@@ -478,17 +485,18 @@ class Evtc(GW2Cog):
             await self.db.evtc.api_keys.insert_one(
                 {"user": interaction.user.id, "token": key}
             )
-            new = "new " if existing_key else ""
+            heading = N_("Your new EVTC API key is:") if existing_key else N_("Your EVTC API key is:")
             return await interaction.followup.send(
-                f"Your {new}EVTC API key is:\n```{key}```You may use "
-                "it with utilities that automatically upload logs to link "
-                "them with your account, and potentially post them to "
-                "certain channels. See `/evtc_automation` for more\n\nYou may "
-                "revoke the key at any time with `/evtc_automation api_key`, or "
-                "regenerate it the same way. Don't share "
-                "this key with anyone.\nYou can also use this "
-                "key without setting any upload destinations. Doing so will "
-                "still append the report links to `/bosses` results"
+                self.t(lang, heading) + f"\n```{key}```" + self.t(lang, N_(
+                    "You may use "
+                    "it with utilities that automatically upload logs to link "
+                    "them with your account, and potentially post them to "
+                    "certain channels. See `/evtc_automation` for more\n\nYou may "
+                    "revoke the key at any time with `/evtc_automation api_key`, or "
+                    "regenerate it the same way. Don't share "
+                    "this key with anyone.\nYou can also use this "
+                    "key without setting any upload destinations. Doing so will "
+                    "still append the report links to `/bosses` results"))
             )
 
     @autopost_group.command(name="add_destination")
@@ -496,15 +504,16 @@ class Evtc(GW2Cog):
     @app_commands.checks.bot_has_permissions(embed_links=True, use_external_emojis=True)
     async def evtc_autoupload_add(self, interaction: discord.Interaction):
         """Add this channel as a personal destination to autopost EVTC logs to"""
+        lang = await self.lang(interaction)
         await interaction.response.defer(ephemeral=True)
         channel = interaction.channel
         key = await self.get_user_evtc_api_key(interaction.user)
         if not key:
-            return await interaction.followup.send(
+            return await interaction.followup.send(self.t(lang, N_(
                 "You don't have an EVTC API key generated. Use "
                 "`/evtc_automation api_key` to generate one. Confused about "
                 "what this is? The aforementioned command includes a tutorial"
-            )
+            )))
         doc = (
             await self.db.evtc.destinations.find_one(
                 {"user_id": interaction.user.id, "channel_id": channel.id}
@@ -515,14 +524,14 @@ class Evtc(GW2Cog):
             channel_doc = await self.bot.data.channels.get(channel.id)
             if channel_doc.get("evtc", {}).get("disabled", False):
                 return await interaction.followup.send(
-                    "This channel is disabled for EVTC processing."
+                    self.t(lang, N_("This channel is disabled for EVTC processing."))
                 )
         if doc:
-            return await interaction.followup.send(
+            return await interaction.followup.send(self.t(lang, N_(
                 "This channel is already a destination. If you're "
                 "looking to remove it, see "
                 "`/evtc_automation autopost remove_destinations`"
-            )
+            )))
         results = await self.call_api("account", interaction.user, ["account"])
         guild_ids = results.get("guilds")
         if not guild_ids:
@@ -530,14 +539,14 @@ class Evtc(GW2Cog):
             await self.db.evtc.destinations.insert_one(
                 {"user_id": interaction.user.id, "channel_id": channel.id, "guild_ids": [], "guild_tags": []}
             )
-            return await interaction.followup.send(DESTINATION_ADDED)
+            return await interaction.followup.send(self.t(lang, DESTINATION_ADDED))
         endpoints = [f"guild/{gid}" for gid in guild_ids]
         guilds = await self.call_multiple(endpoints)
-        view = EvtcGuildSelectionView(self, guilds)
+        view = EvtcGuildSelectionView(self, guilds, lang)
         await interaction.followup.send(
-            "If you wish to use this channel to post only "
-            "the logs made while representing a specific guild, select "
-            "them from the list below. Otherwise, click `Next`.",
+            self.t(lang, N_("If you wish to use this channel to post only "
+                            "the logs made while representing a specific guild, select "
+                            "them from the list below. Otherwise, click `{next}`."), next=self.t(lang, N_("Next"))),
             view=view,
             ephemeral=True,
         )
@@ -559,6 +568,7 @@ class Evtc(GW2Cog):
     @autopost_group.command(name="remove_destinations")
     async def evtc_autoupload_remove(self, interaction: discord.Interaction):
         """Remove chosen EVTC autoupload destinations"""
+        lang = await self.lang(interaction)
         await interaction.response.defer(ephemeral=True)
         destinations = await self.db.evtc.destinations.find(
             {"user_id": interaction.user.id}
@@ -566,14 +576,14 @@ class Evtc(GW2Cog):
         channels = [self.bot.get_channel(dest["channel_id"]) for dest in destinations]
         if not channels:
             return await interaction.followup.send(
-                "You don't have any autopost destinations yet."
+                self.t(lang, N_("You don't have any autopost destinations yet."))
             )
         view = discord.ui.View()
-        view.add_item(EvtcAutouploadDestinationsSelect(self, channels, destinations))
+        view.add_item(EvtcAutouploadDestinationsSelect(self, channels, destinations, lang))
         await interaction.followup.send("** **", view=view)
 
     async def process_evtc(
-        self, files: list[discord.Attachment], user, destination, anonymous=False
+        self, files: list[discord.Attachment], user, destination, anonymous=False, lang=DEFAULT_LANGUAGE
     ):
         embeds = []
         for attachment in files:
@@ -582,12 +592,12 @@ class Evtc(GW2Cog):
                     resp = await self.upload_log(attachment, user, anonymous=anonymous)
                     data = await self.get_encounter_data(resp["id"])
                     embeds.append(
-                        await self.upload_embed(destination, data, resp["permalink"])
+                        await self.upload_embed(destination, data, resp["permalink"], lang)
                     )
                 except Exception as e:
                     self.log.exception("Exception processing EVTC log ", exc_info=e)
                     return await destination.send(
-                        content="Error processing your log! :x:"
+                        content=self.t(lang, N_("Error processing your log!")) + " :x:"
                     )
         for embed in embeds:
             await destination.send(embed=embed)
@@ -615,14 +625,13 @@ class Evtc(GW2Cog):
                     if player["name"] == recorded_by:
                         recorded_player_guild = player.get("guildID")
                         break
-                embed = await self.upload_embed(None, data, doc["permalink"])
-                embed.set_footer(
-                    text="Autoposted by "
-                    f"{user.name} ({user.id})."
-                    " The bot respects the user's permissions; remove their "
-                    "permission to send messages or embed "
-                    "links to stop these messsages."
-                )
+                # The uploader's report, in their language
+                lang = await self.user_lang(user.id)
+                embed = await self.upload_embed(None, data, doc["permalink"], lang)
+                embed.set_footer(text=self.t(lang, N_(
+                    "Autoposted by {user} ({id}). The bot respects the user's permissions; remove their "
+                    "permission to send messages or embed links to stop these messsages."
+                ), user=user.name, id=user.id))
                 for destination in destinations:
                     try:
                         channel: discord.TextChannel = destination["channel"]
@@ -704,7 +713,8 @@ class Evtc(GW2Cog):
             if not settings.get("enabled"):
                 return
             autodelete = settings.get("autodelete", False)
-        await self.process_evtc(message.attachments, message.author, message.channel)
+        lang = await self.guild_lang(message.guild) if message.guild else await self.user_lang(message.author.id)
+        await self.process_evtc(message.attachments, message.author, message.channel, lang=lang)
         if autodelete:
             try:
                 if message.channel.permissions_for(message.guild.me).manage_messages:

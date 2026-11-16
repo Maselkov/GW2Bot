@@ -8,25 +8,44 @@ from discord import app_commands
 from gw2bot.utils.chat import cleanup_xml_tags, embed_list_lines
 from gw2bot.utils.wiki import page_url, profession_icon_url
 
+from ..gamedata import ATTRIBUTES, COMBO_FIELDS, COMBO_FINISHERS, WEAPONS
+from ..i18n import DEFAULT_LANGUAGE, N_, Catalog, format_number, localized_doc
 from .base import GW2Cog
 
+# Untranslated text, for callers that don't give a language
+ENGLISH = Catalog()
 
-async def skill_embed(cog, skill, ctx):
-    """Embed for a cached skill or trait document."""
+# Profession resources, for skills' costs
+RESOURCES = {
+    "Initiative": N_("Initiative"),
+    "Adrenaline": N_("Adrenaline"),
+    "Energy": N_("Energy"),
+    "Astral Force": N_("Astral Force"),
+}
+
+
+async def skill_embed(cog, skill, ctx, lang=DEFAULT_LANGUAGE):
+    """Embed for a cached skill or trait document, in `lang`."""
+    def t(text, **fields):
+        return cog.t(lang, text, **fields)
+
+    english = skill
+    skill = localized_doc(skill, lang)
+
     def get_skill_type():
         slot = skill["slot"]
         if slot.startswith("Weapon"):
             weapon = skill["weapon_type"]
-            return " {} skill {}".format(weapon, slot[-1])
+            return " " + t(N_("{weapon} skill {slot}"), weapon=t(WEAPONS.get(weapon, weapon)), slot=slot[-1])
         if slot.startswith("Utility"):
-            return " Utility Skill"
+            return " " + t(N_("Utility Skill"))
         if slot.startswith("Profession"):
-            return " Profession Skill {}".format(slot[-1])
+            return " " + t(N_("Profession Skill {slot}"), slot=slot[-1])
         if slot.startswith("Pet"):
-            return " Pet skill"
+            return " " + t(N_("Pet skill"))
         if slot.startswith("Downed"):
-            return " Downed skill {}".format(slot[-1])
-        return " Utility Skill"
+            return " " + t(N_("Downed skill {slot}"), slot=slot[-1])
+        return " " + t(N_("Utility Skill"))
 
     def find_closest_emoji(field):
         best_match = ""
@@ -54,24 +73,23 @@ async def skill_embed(cog, skill, ctx):
             value = skill["cost"]
         if resource:
             return {
-                "text": resource + " cost",
+                "text": t(N_("{resource} cost"), resource=t(RESOURCES[resource])),
                 "value": value,
                 "type": "ResourceCost",
             }
         return None
 
+    # The API's text sometimes has attribute codes instead of names
     replacement_attrs = [
-        ("BoonDuration", "Concentration"),
-        ("ConditionDuration", "Expertise"),
-        ("ConditionDamage", "Condition Damage"),
-        ("CritDamage", "Ferocity"),
+        (code, t(ATTRIBUTES[code]))
+        for code in ("BoonDuration", "ConditionDuration", "ConditionDamage", "CritDamage")
     ]
     description = None
     if "description" in skill:
         description = cleanup_xml_tags(skill["description"])
         for tup in replacement_attrs:
             description = re.sub(*tup, description)
-    url = await page_url(cog.bot.session, skill["name"])
+    url = await page_url(cog.bot.session, skill["name"], lang, english["name"])
     data = discord.Embed(
         title=skill["name"],
         description=description,
@@ -91,32 +109,42 @@ async def skill_embed(cog, skill, ctx):
                 int(cog.gamedata["professions"][prof.lower()]["color"], 16)
             )
             data.set_footer(
-                text=prof + get_skill_type(),
+                # The professions' names are translated for /pvp's choices
+                text=t(prof) + get_skill_type(),
                 icon_url=profession_icon_url(prof),
             )
     if "facts" in skill:
+        english = dict(english, facts=list(english["facts"]))
         if resource:
             skill["facts"].append(resource)
-        facts = skill_fields(skill)
+            english["facts"].append(resource)
+        facts = skill_fields(skill, cog.t, lang)
+        # Emojis are registered by English name; facts are in the same order
+        # in every language
+        english_facts = skill_fields(english)
         lines = []
-        for fact in facts:
+        for fact, english_fact in zip(facts, english_facts):
             line = ""
             if fact.get("prefix"):
                 line += "{}{}".format(
-                    find_closest_emoji(fact["prefix"]), fact["prefix"]
+                    find_closest_emoji(english_fact.get("prefix") or ""), fact["prefix"]
                 )
-            line += "{}{}".format(find_closest_emoji(fact["field"]), fact["field"])
+            line += "{}{}".format(find_closest_emoji(english_fact["field"]), fact["field"])
             if fact.get("value"):
                 line += ": " + fact["value"]
             for tup in replacement_attrs:
                 line = re.sub(*tup, line)
             lines.append(line)
-        data = embed_list_lines(data, lines, "Tooltip")
+        data = embed_list_lines(data, lines, t(N_("Tooltip")))
     return data
 
 
-def skill_fields(skill):
-    """The tooltip lines for a skill's facts: [{field, value, prefix}]."""
+def skill_fields(skill, t=ENGLISH.t, lang=DEFAULT_LANGUAGE):
+    """The tooltip lines for a skill's facts: [{field, value, prefix}], in
+    `lang` (the facts' own text is in the language of `skill`)."""
+
+    def number(value):
+        return format_number(value, lang)
     def calculate_damage(fact):
         weapon = skill.get("weapon_type")
         default = 690.5
@@ -190,9 +218,9 @@ def skill_fields(skill):
         if fact_type == "BuffConversion":
             fields.append(
                 {
-                    "field": "Gain {} based on a Percentage of {}".format(
-                        fact["target"], fact["source"]
-                    ),
+                    "field": t(lang, N_("Gain {target} based on a Percentage of {source}"),
+                               target=t(lang, ATTRIBUTES.get(fact["target"], fact["target"])),
+                               source=t(lang, ATTRIBUTES.get(fact["source"], fact["source"]))),
                     "value": "{}%".format(fact["percent"]),
                 }
             )
@@ -209,7 +237,7 @@ def skill_fields(skill):
         if fact_type == "AttributeAdjust":
             if not text:
                 text = fact.get("target", "")
-            fields.append({"field": text, "value": "{:,}".format(fact["value"])})
+            fields.append({"field": text, "value": number(fact["value"])})
             continue
         if fact_type == "PrefixedBuff":
             count = fact.get("apply_count")
@@ -225,7 +253,7 @@ def skill_fields(skill):
                 fields.append(
                     {
                         "field": status,
-                        "value": "Condition Removed",
+                        "value": t(lang, N_("Condition Removed")),
                         "prefix": prefix,
                     }
                 )
@@ -240,7 +268,7 @@ def skill_fields(skill):
                 fields.append(
                     {
                         "field": "{status}".format(**fact),
-                        "value": "Condition Removed",
+                        "value": t(lang, N_("Condition Removed")),
                     }
                 )
                 continue
@@ -261,20 +289,21 @@ def skill_fields(skill):
             fields.append({"field": text, "value": "{}s".format(fact["duration"])})
             continue
         if fact_type == "Radius":
-            fields.append({"field": text, "value": "{:,}".format(fact["distance"])})
+            fields.append({"field": text, "value": number(fact["distance"])})
             continue
         if fact_type == "ComboField":
-            fields.append({"field": text, "value": fact["field_type"]})
+            field_type = fact["field_type"]
+            fields.append({"field": text, "value": t(lang, COMBO_FIELDS.get(field_type, field_type))})
             continue
         if fact_type == "ComboFinisher":
-            value = fact["finisher_type"]
+            value = t(lang, COMBO_FINISHERS.get(fact["finisher_type"], fact["finisher_type"]))
             percent = fact["percent"]
             if not percent == 100:
                 value += " ({}%)".format(percent)
             fields.append({"field": text, "value": value})
             continue
         if fact_type == "Distance":
-            fields.append({"field": text, "value": "{:,}".format(fact["distance"])})
+            fields.append({"field": text, "value": number(fact["distance"])})
             continue
         if fact_type in ("Heal", "HealingAdjust"):
             fields.append({"field": text, "value": str(fact["hit_count"])})
@@ -287,26 +316,27 @@ def skill_fields(skill):
             )
             continue
         if fact_type == "Unblockable":
-            fields.append({"field": "Unblockable"})
+            fields.append({"field": t(lang, N_("Unblockable"))})
             continue
         if fact_type == "StunBreak":
-            fields.append({"field": "Breaks stun"})
+            fields.append({"field": t(lang, N_("Breaks stun"))})
             continue
         if fact_type == "Percent":
             fields.append({"field": text, "value": "{}%".format(fact["percent"])})
             continue
         if fact_type == "Range":
-            fields.append({"field": text, "value": "{:,}".format(fact["value"])})
+            fields.append({"field": text, "value": number(fact["value"])})
             continue
     return fields
 
 
 class Skills(GW2Cog):
     async def skill_autocomplete(self, interaction: discord.Interaction, current: str):
-        return await self.name_choices(self.db.skills, current, professions={"$ne": None})
+        return await self.name_choices(self.db.skills, current, await self.lang(interaction),
+                                       professions={"$ne": None})
 
     async def trait_autocomplete(self, interaction: discord.Interaction, current: str):
-        return await self.name_choices(self.db.traits, current)
+        return await self.name_choices(self.db.traits, current, await self.lang(interaction))
 
     @app_commands.command(name="skill")
     @app_commands.describe(
@@ -326,13 +356,15 @@ class Skills(GW2Cog):
 
     async def send_tooltip(self, interaction, value, autocomplete, collection, kind):
         """Reply with the skill or trait `value` names."""
+        lang = await self.lang(interaction)
         await interaction.response.defer()
         doc_id = await self.resolve_id(interaction, value, autocomplete)
         doc = await collection.find_one({"_id": doc_id}) if doc_id is not None else None
         if not doc:
-            return await interaction.followup.send(
-                f"Could not find any {kind} with that name.")
-        data = await skill_embed(self, doc, interaction)
+            not_found = {"skills": N_("Could not find any skills with that name."),
+                         "traits": N_("Could not find any traits with that name.")}
+            return await interaction.followup.send(self.t(lang, not_found[kind]))
+        data = await skill_embed(self, doc, interaction, lang)
         await interaction.followup.send(embed=data)
 
 

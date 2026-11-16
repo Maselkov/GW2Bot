@@ -134,3 +134,37 @@ async def test_skill_without_the_wiki(error):
     assert embed["title"] == "Meteor Shower"
     assert "url" not in embed
     assert heads == [WIKI + "Meteor_Shower"]
+
+
+async def test_skill_in_the_users_language():
+    import discord
+
+    german = {
+        **METEOR_SHOWER,
+        "l10n": {"de": {
+            "name": "Meteorschauer",
+            "description": "Ruft Meteore herab. <c=@reminder>Verursacht ConditionDamage.</c>",
+            "facts": [
+                {"type": "Damage", "text": "Schaden", "hit_count": 24, "dmg_multiplier": 1.0},
+                {"type": "Recharge", "text": "Wiederaufladung", "value": 30},
+            ],
+        }},
+    }
+    de_wiki = "https://wiki-de.guildwars2.com/wiki/Meteorschauer"
+    embed, heads = await subject.skill_command("skill", skills=[german], pages=[de_wiki], skill="5501",
+                                               locale=discord.Locale.german)
+    assert embed["title"] == "Meteorschauer"
+    assert embed["url"] == de_wiki
+    # Attribute codes under their German names
+    assert embed["description"] == "Ruft Meteore herab. Verursacht Zustandsschaden."
+    assert embed["footer"]["text"] == "Elementarmagier Stab-Fertigkeit 5"
+    assert fields(embed) == [("Tooltip", "Wiederaufladung: 30s\nSchaden (24x): 9696 (24.0)")]
+
+
+async def test_skill_links_the_english_wiki_without_a_page_in_the_users_language():
+    import discord
+
+    embed, heads = await subject.skill_command("skill", skills=SKILLS, pages=[WIKI + "Meteor_Shower"], skill="5501",
+                                               locale=discord.Locale.french)
+    assert embed["url"] == WIKI + "Meteor_Shower"
+    assert heads == ["https://wiki-fr.guildwars2.com/wiki/Meteor_Shower", WIKI + "Meteor_Shower"]

@@ -6,8 +6,10 @@ import discord
 from discord import app_commands
 from discord.ext import tasks
 
+from ..i18n import LANGUAGE_NAMES, N_, resolve_language
 from .base import GW2Cog
 from .guild import guild_name_autocomplete
+from .language import AUTOMATIC, language_choices
 
 
 class Server(GW2Cog):
@@ -44,25 +46,26 @@ class Server(GW2Cog):
         self, interaction: discord.Interaction, enabled: bool
     ):
         """Automatically change all server member nicknames to in-game names"""
+        lang = await self.lang(interaction)
         guild = interaction.guild
         doc = await self.bot.data.guilds.get(guild.id)
         if doc and enabled and doc.get("force_account_names"):
             return await interaction.response.send_message(
-                "Forced account names are already enabled"
+                self.t(lang, N_("Forced account names are already enabled"))
             )
         if not enabled:
             await self.bot.data.guilds.update(guild.id, {"force_account_names": False})
             return await interaction.response.send_message(
-                "Forced account names disabled"
+                self.t(lang, N_("Forced account names disabled"))
             )
         await self.bot.data.guilds.update(guild.id, {"force_account_names": True})
         # Reply first: renaming a big server takes longer than an
         # interaction may wait
-        await interaction.response.send_message(
-            content="Automatic account names enabled. To disable, use "
+        await interaction.response.send_message(content=self.t(lang, N_(
+            "Automatic account names enabled. To disable, use "
             "`/server force_account_names enabled:False`\nPlease note that the "
             "bot cannot change nicknames for roles above the bot."
-        )
+        )))
         await self.force_guild_account_names(guild)
 
     @server_group.command(name="preview_chat_links")
@@ -70,16 +73,17 @@ class Server(GW2Cog):
     @app_commands.describe(enabled="Enable or disable automatic chat link preview")
     async def previewchatlinks(self, interaction: discord.Interaction, enabled: bool):
         """Enable or disable automatic GW2 chat link preview"""
+        lang = await self.lang(interaction)
         guild = interaction.guild
         doc = await self.bot.data.guilds.get(interaction.guild.id)
         disabled = doc.get("link_preview_disabled", False)
         if disabled and not enabled:
             return await interaction.response.send_message(
-                "Chat link preview is aleady disabled.", ephemeral=True
+                self.t(lang, N_("Chat link preview is aleady disabled.")), ephemeral=True
             )
         if not disabled and enabled:
             return await interaction.response.send_message(
-                "Chat link preview is aleady enabled.", ephemeral=True
+                self.t(lang, N_("Chat link preview is aleady enabled.")), ephemeral=True
             )
         # The previews are the ChatLinks cog's
         previews = self.bot.get_cog("ChatLinks")
@@ -88,21 +92,41 @@ class Server(GW2Cog):
             if previews:
                 previews.set_previews_enabled(guild.id, False)
             return await interaction.response.send_message(
-                "Chat link preview is now disabled.", ephemeral=True
+                self.t(lang, N_("Chat link preview is now disabled.")), ephemeral=True
             )
         if disabled and enabled:
             await self.bot.data.guilds.update(guild.id, {"link_preview_disabled": not enabled})
             if previews:
                 previews.set_previews_enabled(guild.id, True)
             return await interaction.response.send_message(
-                "Chat link preview is now enabled.", ephemeral=True
+                self.t(lang, N_("Chat link preview is now enabled.")), ephemeral=True
             )
+
+    @server_group.command(name="language")
+    @app_commands.checks.has_permissions(manage_guild=True)
+    @app_commands.describe(language="Automatic follows the server's Discord language")
+    @app_commands.choices(language=language_choices())
+    async def server_language(self, interaction: discord.Interaction, language: str):
+        """Choose the language of the bot's posts in this server"""
+        guild = interaction.guild
+        if language == AUTOMATIC:
+            await self.bot.data.guilds.update(guild.id, {"language": ""}, op="unset")
+            text = N_("The bot now posts in this server's Discord language, {language}. "
+                      "Its replies to members follow their own language.")
+            language = resolve_language(guild.preferred_locale)
+        else:
+            await self.bot.data.guilds.update(guild.id, {"language": language})
+            text = N_("The bot now posts in {language} in this server. "
+                      "Its replies to members follow their own language.")
+        lang = await self.lang(interaction)
+        await interaction.response.send_message(self.t(lang, text, language=LANGUAGE_NAMES[language]))
 
     @server_group.command(name="sync_now")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def sync_now(self, interaction: discord.Interaction):
         """Force a sync for any Guildsyncs you have"""
-        await interaction.response.send_message("Syncs scheduled!")
+        lang = await self.lang(interaction)
+        await interaction.response.send_message(self.t(lang, N_("Syncs scheduled!")))
         guild_sync = self.bot.get_cog("GuildSync")
         if guild_sync:
             await guild_sync.guildsync_now(interaction)
@@ -119,10 +143,11 @@ class Server(GW2Cog):
     ):
         """A feature to automatically add a role to members that have added an
         API key to the bot."""
+        lang = await self.lang(interaction)
         if enabled and not role:
             return await interaction.response.send_message(
-                "If enabling, you must specify a role "
-                "to give to members with an API key.",
+                self.t(lang, N_("If enabling, you must specify a role "
+                                "to give to members with an API key.")),
                 ephemeral=True,
             )
         guild = interaction.guild
@@ -132,33 +157,34 @@ class Server(GW2Cog):
         await self.bot.data.guilds.update(guild.id, settings)
         if enabled:
             if not role:
-                return await interaction.response.send_message("Please specify a role.")
-            await interaction.response.send_message(
+                return await interaction.response.send_message(self.t(lang, N_("Please specify a role.")))
+            await interaction.response.send_message(self.t(lang, N_(
                 "Key sync enabled. Members with valid API keys "
                 "will now be given the selected role"
-            )
+            )))
             # The role sync is the Keys cog's
             keys = self.bot.get_cog("Keys")
             if keys:
                 await keys.key_sync_guild(guild)
             return
-        await interaction.response.send_message("Key sync disabled.")
+        await interaction.response.send_message(self.t(lang, N_("Key sync disabled.")))
 
     @server_group.command(name="default_guild")
     @app_commands.describe(guild="Guild name")
     @app_commands.autocomplete(guild=guild_name_autocomplete)
     async def guild_default(self, interaction: discord.Interaction, guild: str):
         """Set your default guild for guild commands on this server."""
+        lang = await self.lang(interaction)
         await interaction.response.defer()
         results = await self.call_api(f"guild/{guild}")
         await self.bot.data.guilds.update(interaction.guild.id, {"guild_ingame": guild})
-        await interaction.followup.send(
-            f"Your default guild is now set to {results['name']} for this "
+        await interaction.followup.send(self.t(lang, N_(
+            "Your default guild is now set to {guild} for this "
             "server. All commands from the `guild` command group "
             "invoked without a specified guild will default to "
             "this guild. To reset, simply invoke this command "
             "without specifying a guild"
-        )
+        ), guild=results["name"]))
 
     @tasks.loop(minutes=5)
     async def forced_account_names(self):

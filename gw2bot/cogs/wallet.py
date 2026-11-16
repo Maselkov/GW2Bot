@@ -6,13 +6,14 @@ import discord
 from discord import app_commands
 from discord.app_commands import Choice
 
+from ..i18n import N_, format_number, localized
 from ..utils.chat import embed_list_lines
 from .base import GW2Cog
 
 
 class Wallet(GW2Cog):
 
-    async def get_wallet(self, interaction: discord.Interaction, ids):
+    async def get_wallet(self, interaction: discord.Interaction, ids, lang):
         flattened_ids = [y for x in ids for y in x]
         doc = await self.fetch_key(interaction.user, ["wallet"])
         results = await self.call_api("account/wallet", key=doc["key"])
@@ -24,8 +25,10 @@ class Wallet(GW2Cog):
             c_doc = await self.db.currencies.find_one({"_id": id})
             if not c_doc:
                 # Not cached yet, e.g. new since the cache was last rebuilt
-                c_doc = {"name": "Unknown currency"}
+                c_doc = {"name": self.t(lang, N_("Unknown currency"))}
+            # Emojis are registered by English name
             emoji = self.get_emoji(interaction, c_doc["name"])
+            name = localized(c_doc, lang)
             for i in range(0, len(lines)):
                 if id in ids[i]:
                     try:
@@ -34,17 +37,16 @@ class Wallet(GW2Cog):
                         value = cur["value"]
                     except StopIteration:
                         value = 0
-                    if c_doc["name"] == "Coin":
+                    if id == 1:  # Coin
                         lines[i].append("{} {} {}".format(
-                            emoji, self.gold_to_coins(interaction, value),
-                            c_doc["name"]))
+                            emoji, self.gold_to_coins(interaction, value, lang), name))
                     else:
                         lines[i].append("{} {} {}".format(
-                            emoji, value, c_doc["name"]))
+                            emoji, format_number(value, lang), name))
         return lines
 
     # Searches account for items and returns list of strings
-    async def get_item_currency(self, interaction: discord.Interaction, ids):
+    async def get_item_currency(self, interaction: discord.Interaction, ids, lang):
         scopes = ["inventories", "characters"]
         lines = []
         flattened_ids = [y for x in ids for y in x]
@@ -58,10 +60,12 @@ class Wallet(GW2Cog):
             for k, v in search_results.items():
                 if k in ids[i]:
                     item_doc = await self.fetch_item(k)
-                    name = item_doc["name"] if item_doc else "Unknown item"
+                    english = item_doc["name"] if item_doc else ""
+                    name = localized(item_doc, lang) if item_doc else self.t(lang, N_("Unknown item"))
                     name = re.sub(r'^\d+ ', '', name)
-                    emoji = self.get_emoji(interaction, name)
-                    lines[i].append("{} {} {}".format(emoji, sum(v.values()),
+                    # Emojis are registered by English name
+                    emoji = self.get_emoji(interaction, re.sub(r'^\d+ ', '', english))
+                    lines[i].append("{} {} {}".format(emoji, format_number(sum(v.values()), lang),
                                                       name))
         return lines
 
@@ -70,9 +74,10 @@ class Wallet(GW2Cog):
         current = current.lower()
         if not current:
             return []
+        lang = await self.lang(interaction)
         if current == "gold":
-            return [Choice(name="Gold", value="1")]
-        return await self.name_choices(self.db.currencies, current)
+            return [Choice(name=self.t(lang, N_("Gold")), value="1")]
+        return await self.name_choices(self.db.currencies, current, lang)
 
     @app_commands.command()
     @app_commands.describe(currency="The specific currency to search for. "
@@ -82,37 +87,38 @@ class Wallet(GW2Cog):
                      interaction: discord.Interaction,
                      currency: str = None):
         """Shows your wallet"""
+        lang = await self.lang(interaction)
         if currency:
             typed = currency
             currency = await self.resolve_id(interaction, typed, self.currency_autocomplete)
             if currency is None:
                 return await interaction.response.send_message(
-                    "No results found for {}".format(typed.title()),
+                    self.t(lang, N_("No results found for {search}"), search=typed.title()),
                     ephemeral=True)
             choice = await self.db.currencies.find_one({"_id": currency})
             if not choice:
                 return await interaction.response.send_message(
-                    "No results found for {}".format(currency), ephemeral=True)
+                    self.t(lang, N_("No results found for {search}"), search=currency), ephemeral=True)
         await interaction.response.defer()
         doc = await self.fetch_key(interaction.user, ["wallet"])
         if currency is not None:
             results = await self.call_api("account/wallet", key=doc["key"])
-            embed = discord.Embed(title=choice["name"].title(),
-                                  description=choice["description"],
+            embed = discord.Embed(title=localized(choice, lang).title(),
+                                  description=localized(choice, lang, "description"),
                                   colour=await
                                   self.get_embed_color(interaction))
             currency_id = choice["_id"]
             count = 0
             for item in results:
                 if item["id"] == currency_id == 1:
-                    count = self.gold_to_coins(interaction, item["value"])
+                    count = self.gold_to_coins(interaction, item["value"], lang)
                     break
                 elif item["id"] == currency_id:
-                    count = "{:,}".format(item["value"])
+                    count = format_number(item["value"], lang)
                     break
                 else:
                     count = 0
-            embed.add_field(name="Amount in wallet", value=count, inline=False)
+            embed.add_field(name=self.t(lang, N_("Amount in wallet")), value=count, inline=False)
             embed.set_thumbnail(url=choice["icon"])
             embed.set_author(name=doc["account_name"],
                              icon_url=interaction.user.display_avatar.url)
@@ -140,65 +146,69 @@ class Wallet(GW2Cog):
             ids_strikes_cur, ids_eod_cur, ids_wvw_cur, ids_pvp_cur, ids_soto_cur
         ]
         ids_items = [ids_l3, ids_l4, ids_ibs, ids_maps_items, ids_pvp]
-        currencies_wallet = await self.get_wallet(interaction, ids_wallet)
-        currencies_items = await self.get_item_currency(interaction, ids_items)
-        embed = discord.Embed(description="Wallet",
+        currencies_wallet = await self.get_wallet(interaction, ids_wallet, lang)
+        currencies_items = await self.get_item_currency(interaction, ids_items, lang)
+
+        def heading(text):
+            return "> **{}**".format(self.t(lang, text).upper())
+
+        embed = discord.Embed(description=self.t(lang, N_("Wallet")),
                               colour=await self.get_embed_color(interaction))
         embed = embed_list_lines(embed,
                                  currencies_wallet[0],
-                                 "> **CURRENCIES**",
+                                 heading(N_("Currencies")),
                                  inline=True)
         embed = embed_list_lines(embed,
                                  currencies_wallet[3],
-                                 "> **DUNGEON TOKENS**",
+                                 heading(N_("Dungeon tokens")),
                                  inline=True)
         embed = embed_list_lines(embed,
                                  currencies_wallet[1],
-                                 "> **KEYS**",
+                                 heading(N_("Keys")),
                                  inline=True)
         embed = embed_list_lines(embed,
                                  currencies_wallet[2][2:5] +
                                  currencies_wallet[2][5:],
-                                 "> **MAP CURRENCIES**",
+                                 heading(N_("Map currencies")),
                                  inline=True)
         embed = embed_list_lines(embed,
                                  currencies_items[0] +
                                  [currencies_wallet[2][0]],
-                                 "> **LIVING SEASON 3**",
+                                 heading(N_("Living Season 3")),
                                  inline=True)
         embed = embed_list_lines(embed,
                                  currencies_items[1] +
                                  [currencies_wallet[2][1]],
-                                 "> **LIVING SEASON 4**",
+                                 heading(N_("Living Season 4")),
                                  inline=True)
-        saga_title = "ICEBROOD SAGA"
+        saga_title = N_("Icebrood Saga")
         expansion_content = random.random() >= 0.85
         if expansion_content:
-            saga_title = "EXPANSION LEVEL CONTENT"
+            saga_title = N_("Expansion level content")
         embed = embed_list_lines(embed,
                                  currencies_items[2] + currencies_wallet[5],
-                                 f"> **{saga_title}**",
+                                 heading(saga_title),
                                  inline=True)
         embed = embed_list_lines(embed,
                                  currencies_wallet[7],
-                                 "> **END OF DRAGONS**",
+                                 heading(N_("End of Dragons")),
                                  inline=True)
         embed = embed_list_lines(embed,
                                  currencies_wallet[10],
-                                 "> **SECRETS OF THE OBSCURE**",
+                                 heading(N_("Secrets of the Obscure")),
                                  inline=True)
         embed = embed_list_lines(embed,
                                  currencies_wallet[6],
-                                 "> **STRIKE MISSIONS**",
+                                 heading(N_("Strike Missions")),
                                  inline=True)
         embed = embed_list_lines(embed,
                                  currencies_wallet[8] + currencies_items[4] +
                                  currencies_wallet[9],
-                                 "> **COMPETITION**",
+                                 heading(N_("Competition")),
                                  inline=True)
         embed = embed_list_lines(embed,
                                  currencies_wallet[4],
-                                 "> **RAIDS**",
+                                 heading(N_("Raids")),
                                  inline=True)
         embed.set_author(name=doc["account_name"],
                          icon_url=interaction.user.display_avatar.url)

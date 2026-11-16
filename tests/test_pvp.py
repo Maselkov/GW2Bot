@@ -71,7 +71,7 @@ async def test_professions_overview(gamedata):
 
 async def test_single_profession(gamedata):
     embed, _ = await subject.pvp("professions", STATS, profession="guardian")
-    assert embed["description"] == "Stats for guardian"
+    assert embed["description"] == "Stats for Guardian"
     assert fields(embed) == {"Total games played": "82", "Wins": "52", "Winratio": "63%"}
     assert embed["color"] == int(gamedata["professions"]["guardian"]["color"], 0)
     assert embed["thumbnail"]["url"] == gamedata["professions"]["guardian"]["icon"]
@@ -128,3 +128,11 @@ async def test_professions_without_any_games():
 async def test_profession_never_played():
     sent, _ = await subject.pvp("professions", STATS, profession="revenant")
     assert sent == "You haven't played Revenant in PvP yet."
+
+
+async def test_stats_in_the_users_language():
+    import discord
+
+    embed, _ = await subject.pvp("stats", STATS, locale=discord.Locale.spain_spanish)
+    assert fields(embed)["Rango"] == "68"
+    assert fields(embed)["Victorias clasificatorias"] == "42"

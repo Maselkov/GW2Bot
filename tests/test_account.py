@@ -181,6 +181,17 @@ async def test_kp_with_nothing_completed():
     assert field(embed, "Spirit Vale") == "```diff\n-✖Vale Guardian\n-✖Gorseval\n-✖Sabetha\n```"
 
 
+async def test_kp_in_the_users_language():
+    import discord
+
+    done = [{"id": 2654, "done": True}]
+    embed, _ = await subject.account_command("kp", [(200, done)], permissions=("account", "progression"),
+                                             locale=discord.Locale.german)
+    assert field(embed, "Geistertal") == "```diff\n+✔Tal-Wächter\n-✖Gorseval\n-✖Sabetha\n```"
+    # Fractal achievements by their names in the game
+    assert "-✖Sunqua-Gipfel: Mit Dämonen tanzen" in field(embed, "Fraktale")
+
+
 # --- /bosses ------------------------------------------------------------------------
 
 RAIDS = [{
@@ -224,6 +235,17 @@ async def test_bosses():
         ("**Salvation Pass :x:**", "> :white_check_mark:Slothasor\n> :x:Bandit Trio\n> :x:Matthias"),
     ]
     assert [url for url, _ in requests] == [API + "account/raids", API + "account"]
+
+
+async def test_bosses_in_the_users_language():
+    import discord
+
+    embed, _ = await subject.account_command(
+        "bosses", [(200, ["vale_guardian"]), (200, BOSSES_ACCOUNT)], permissions=("account", "progression"),
+        raids=RAIDS, now=WEDNESDAY, locale=discord.Locale.spain_spanish,
+    )
+    assert [name for name, _ in fields(embed)] == ["**Valle Espiritual :x:**", "**Paso de la Salvación :x:**"]
+    assert fields(embed)[1][1] == "> :x:Perezón\n> :x:Trío de bandidos\n> :x:Matías"
 
 
 async def test_bosses_link_logs_from_this_week():
@@ -343,6 +365,15 @@ async def test_search_autocomplete_merges_identical_items():
         ("Ruby Orb - Rare", "2"),
     ]
     assert await subject.account_item_search("", items) == []
+
+
+async def test_search_autocomplete_names_items_and_rarities_in_the_users_language():
+    import discord
+
+    items = [{**RUBY_DOC, "l10n": {"fr": {"name": "Orbe de rubis"}}}]
+    assert await subject.account_item_search("orbe", items, locale=discord.Locale.french) == [
+        ("Orbe de rubis - Chef-d'œuvre", "79280"),
+    ]
 
 
 # --- /cats, /nodes --------------------------------------------------------------------

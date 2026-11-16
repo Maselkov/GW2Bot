@@ -52,15 +52,16 @@ class Client:
         self.concurrency = concurrency
         self.sleep = sleep
 
-    async def get(self, endpoint, *, key=None, schema=None):
+    async def get(self, endpoint, *, key=None, schema=None, lang=None):
         """GET an endpoint (relative to /v2/, may include a query string).
 
         key: API key sent as access_token. schema: X-Schema-Version, as a
-        datetime or a string.
+        datetime or a string. lang: the language of the response's text
+        (en, de, fr or es); the API's default, English, if None.
         """
         for attempt in range(1, self.attempts + 1):
             try:
-                return await self._get_once(endpoint, key, schema)
+                return await self._get_once(endpoint, key, schema, lang)
             except APIError as error:
                 if not error.retryable or attempt == self.attempts:
                     raise
@@ -73,13 +74,13 @@ class Client:
                 )
                 await self.sleep(delay)
 
-    async def get_many(self, endpoints, *, key=None, schema=None):
+    async def get_many(self, endpoints, *, key=None, schema=None, lang=None):
         """GET several endpoints concurrently; results are in input order."""
         semaphore = asyncio.Semaphore(self.concurrency)
 
         async def get(endpoint):
             async with semaphore:
-                return await self.get(endpoint, key=key, schema=schema)
+                return await self.get(endpoint, key=key, schema=schema, lang=lang)
 
         return await asyncio.gather(*(get(e) for e in endpoints))
 
@@ -89,7 +90,7 @@ class Client:
         delay = self.backoff * 2 ** (attempt - 1)
         return delay + random.uniform(0, delay / 2)
 
-    async def _get_once(self, endpoint, key, schema):
+    async def _get_once(self, endpoint, key, schema, lang):
         headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
         if schema:
             if isinstance(schema, datetime.datetime):
@@ -98,6 +99,8 @@ class Client:
         # The key goes in the query string: the API has rejected requests
         # with an Authorization: Bearer header (see commit e52fb49)
         params = [("access_token", key)] if key else []
+        if lang:
+            params.append(("lang", lang))
         try:
             async with self.session.get(
                 BASE_URL + endpoint, headers=headers, params=params, timeout=self.timeout

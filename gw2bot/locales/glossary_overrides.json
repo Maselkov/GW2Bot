@@ -1,0 +1,78 @@
+{
+  "_comment": "Corrections to scripts/i18n_glossary.py's results, checked by hand on the language wikis. They replace what the script finds. Say where each was checked.",
+  "Wallet": {
+    "de": "Geldbörse",
+    "fr": "Portefeuille",
+    "es": "Cartera",
+    "note": "The English wiki's Wallet redirects to Currency, so its links name currency. Each of these is the wallet's own page on its wiki."
+  },
+  "Wardrobe": {
+    "de": "Garderobe",
+    "fr": "Garde-robe",
+    "es": "Guardarropa",
+    "note": "The English page links to the German Account-Tresor (account vault). The German wiki's wardrobe pages are Garderobe/..."
+  },
+  "Guild Vault": {
+    "fr": "Coffre de guilde",
+    "es": "Banco de clan",
+    "note": "Coffre de guilde: page on the French wiki. No German page found."
+  },
+  "Junk (rarity)": {
+    "de": "Schrott",
+    "fr": "Inutile",
+    "es": "Basura",
+    "note": "Item rarity: the rarity table on Gegenstand (de), Objet (fr), Objeto (es)."
+  },
+  "Basic (rarity)": {
+    "de": "Einfach",
+    "fr": "Simple",
+    "es": "Común",
+    "note": "Item rarity: the rarity table on Gegenstand (de), Objet (fr), Objeto (es)."
+  },
+  "Fine (rarity)": {
+    "de": "Edel",
+    "fr": "Raffiné",
+    "es": "Selecto",
+    "note": "Item rarity: the rarity table on Gegenstand (de), Objet (fr), Objeto (es)."
+  },
+  "Masterwork (rarity)": {
+    "de": "Meisterwerk",
+    "fr": "Chef-d'œuvre",
+    "es": "Obra de arte",
+    "note": "Item rarity: the rarity table on Gegenstand (de), Objet (fr), Objeto (es)."
+  },
+  "Rare (rarity)": {
+    "de": "Selten",
+    "fr": "Rare",
+    "es": "Raro",
+    "note": "Item rarity: the rarity table on Gegenstand (de), Objet (fr), Objeto (es)."
+  },
+  "Exotic (rarity)": {
+    "de": "Exotisch",
+    "fr": "Exotique",
+    "es": "Exótico",
+    "note": "Item rarity: the rarity table on Gegenstand (de), Objet (fr), Objeto (es)."
+  },
+  "Ascended (rarity)": {
+    "de": "Aufgestiegen",
+    "fr": "Élevé",
+    "es": "Ascendido",
+    "note": "Item rarity: the rarity table on Gegenstand (de), Objet (fr), Objeto (es)."
+  },
+  "Legendary (rarity)": {
+    "de": "Legendär",
+    "fr": "Légendaire",
+    "es": "Legendario",
+    "note": "Item rarity: the rarity table on Gegenstand (de), Objet (fr), Objeto (es)."
+  },
+  "Chat link": {
+    "fr": "Code en jeu",
+    "note": "wiki-fr: the page Code en jeu, whose interlanguage link is the English chat link."
+  },
+  "Build template": {
+    "de": "Build-Vorlage",
+    "fr": "Modèle d'archétype",
+    "es": "Plantilla de ajustes",
+    "note": "From the Build Template Expansion item (id 92209): wiki-de Build-Vorlagen-Erweiterung, linked to fr Extension de modèle d'archétype and es Expansión de plantillas de ajustes."
+  }
+}
