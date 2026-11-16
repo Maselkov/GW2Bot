@@ -5,7 +5,10 @@ import discord
 from discord import app_commands
 
 from ..gw2api.errors import APIBadRequest, APINotFound
+from ..i18n import N_, localized
 from .base import GW2Cog
+
+BLACK_LION = N_("Black Lion Trading Company")
 
 
 def undercuts(offers, price, state):
@@ -42,7 +45,7 @@ class Commerce(GW2Cog):
     async def tp_selling(self, interaction: discord.Interaction):
         """Show current selling transactions"""
         await interaction.response.defer()
-        embed = await self.get_tp_embed(interaction, "sells")
+        embed = await self.get_tp_embed(interaction, "sells", await self.lang(interaction))
         if not embed:
             return
         await interaction.followup.send(embed=embed)
@@ -51,22 +54,23 @@ class Commerce(GW2Cog):
     async def tp_buying(self, interaction: discord.Interaction):
         """Show current buying transactions"""
         await interaction.response.defer()
-        embed = await self.get_tp_embed(interaction, "buys")
+        embed = await self.get_tp_embed(interaction, "buys", await self.lang(interaction))
         if not embed:
             return
         await interaction.followup.send(embed=embed)
 
-    async def get_tp_embed(self, interaction, state):
+    async def get_tp_embed(self, interaction, state, lang="en"):
         endpoint = "commerce/transactions/current/" + state
         doc = await self.fetch_key(interaction.user, ["tradingpost"])
         results = await self.call_api(endpoint, key=doc["key"])
-        data = discord.Embed(description='Current ' + state,
+        descriptions = {"sells": N_("Current sells"), "buys": N_("Current buys")}
+        data = discord.Embed(description=self.t(lang, descriptions[state]),
                              colour=await self.get_embed_color(interaction))
-        data.set_author(name=f'Transaction overview of {doc["account_name"]}')
+        data.set_author(name=self.t(lang, N_("Transaction overview of {account}"), account=doc["account_name"]))
         data.set_thumbnail(url=("https://wiki.guildwars2.com/"
                                 "images/thumb/d/df/Black-Lion-Logo.png/"
                                 "300px-Black-Lion-Logo.png"))
-        data.set_footer(text="Black Lion Trading Company")
+        data.set_footer(text=self.t(lang, BLACK_LION))
         results = results[:20]  # Only display 20 most recent transactions
         item_id = ""
         # Collect listed items
@@ -78,8 +82,8 @@ class Commerce(GW2Cog):
         try:
             listings = await self.call_api(endpoint_listing)
         except APIBadRequest:
-            await interaction.followup.send("You don't have any ongoing "
-                                            "transactions")
+            await interaction.followup.send(self.t(lang, N_("You don't have any ongoing "
+                                                            "transactions")))
             return None
         # By id: items without listings are left out of the response
         listings = {listing["id"]: listing for listing in listings}
@@ -87,26 +91,25 @@ class Commerce(GW2Cog):
             price = result["price"]
             itemdoc = await self.fetch_item(result["item_id"])
             quantity = result["quantity"]
-            item_name = itemdoc["name"] if itemdoc else "Unknown item"
+            item_name = localized(itemdoc, lang) if itemdoc else self.t(lang, N_("Unknown item"))
             offers = listings.get(result["item_id"], {}).get(state)
             if quantity == 1:
                 total = ""
             else:
-                total = " - Total: " + self.gold_to_coins(
-                    interaction, quantity * price)
-            value = "{} x {}{}".format(quantity, self.gold_to_coins(interaction, price), total)
+                total = " - " + self.t(lang, N_("Total: {coins}"), coins=self.gold_to_coins(interaction, quantity * price, lang))
+            value = "{} x {}{}".format(quantity, self.gold_to_coins(interaction, price, lang), total)
             if offers:
                 count = undercuts(offers, price, state)
-                undercut_text = "· Undercuts: {}".format(count) if count else ""
-                value += "\nMax. offer: {} {}".format(
-                    self.gold_to_coins(interaction, offers[0]["unit_price"]), undercut_text)
+                undercut_text = "· " + self.t(lang, N_("Undercuts: {count}"), count=count) if count else ""
+                value += "\n" + self.t(lang, N_("Max. offer: {coins}"), coins=self.gold_to_coins(interaction, offers[0]["unit_price"], lang)) + " " + undercut_text
             data.add_field(name=item_name, value=value, inline=False)
         return data
 
     async def tp_autocomplete(self, interaction: discord.Interaction,
                               current: str):
         choices = await self.name_choices(
-            self.db.items, current, flags={"$nin": ["AccountBound", "SoulbindOnAcquire"]})
+            self.db.items, current, await self.lang(interaction),
+            flags={"$nin": ["AccountBound", "SoulbindOnAcquire"]})
         return sorted(choices, key=lambda c: c.name)
 
     @tp_group.command(name="price")
@@ -115,42 +118,47 @@ class Commerce(GW2Cog):
         item="Specify the name of an item to check the price of")
     async def tp_price(self, interaction: discord.Interaction, item: str):
         """Check price of an item"""
+        lang = await self.lang(interaction)
         await interaction.response.defer()
         item_id = await self.resolve_id(interaction, item, self.tp_autocomplete)
         if item_id is None:
             return await interaction.followup.send(
-                "Could not find any items with that name.")
+                self.t(lang, N_("Could not find any items with that name.")))
         try:
             results = await self.call_api(f"commerce/prices/{item_id}")
         except APINotFound:
-            return await interaction.followup.send("This item isn't on the TP."
-                                                   )
+            return await interaction.followup.send(self.t(lang, N_("This item isn't on the TP.")))
         choice = await self.fetch_item(item_id)
         buyprice = results["buys"]["unit_price"]
         sellprice = results["sells"]["unit_price"]
         if buyprice != 0:
-            buyprice = self.gold_to_coins(interaction, buyprice)
+            buyprice = self.gold_to_coins(interaction, buyprice, lang)
         else:
-            buyprice = "No buy orders"
+            buyprice = self.t(lang, N_("No buy orders"))
         if sellprice != 0:
-            sellprice = self.gold_to_coins(interaction, sellprice)
+            sellprice = self.gold_to_coins(interaction, sellprice, lang)
         else:
-            sellprice = "No sell orders"
+            sellprice = self.t(lang, N_("No sell orders"))
         if choice:
             rarity = choice["rarity"]
-            itemtype = self.gamedata["items"]["types"][choice["type"]]
-            description = "A level {} {} {}".format(choice["level"], rarity.lower(),
-                                                    itemtype.lower())
-            embed = discord.Embed(title=choice["name"],
+            itemtype = self.t(lang, self.gamedata["items"]["types"][choice["type"]])
+            rarity_name = self.t(lang, rarity)
+            # Within a sentence, as common words: German capitalizes nouns
+            if lang != "de":
+                itemtype, rarity_name = itemtype.lower(), rarity_name.lower()
+            description = self.t(lang, N_("A level {level} {rarity} {type}"),
+                                 level=choice["level"], rarity=rarity_name, type=itemtype)
+            description = description[:1].upper() + description[1:]
+            embed = discord.Embed(title=localized(choice, lang),
                                   description=description,
                                   colour=self.rarity_to_color(rarity))
             if "icon" in choice:
                 embed.set_thumbnail(url=choice["icon"])
         else:
             # Not cached yet, e.g. new since the cache was last rebuilt
-            embed = discord.Embed(title="Unknown item", colour=self.embed_color)
-        embed.add_field(name="Buy price", value=buyprice, inline=False)
-        embed.add_field(name="Sell price", value=sellprice, inline=False)
+            embed = discord.Embed(title=self.t(lang, N_("Unknown item")), colour=self.embed_color)
+        embed.add_field(name=self.t(lang, N_("Buy price")), value=buyprice, inline=False)
+        embed.add_field(name=self.t(lang, N_("Sell price")), value=sellprice, inline=False)
         if choice:
             embed.set_footer(text=choice["chat_link"])
         await interaction.followup.send(embed=embed)
@@ -159,36 +167,37 @@ class Commerce(GW2Cog):
     async def tp_delivery(self, interaction: discord.Interaction):
         """Show your items awaiting in delivery box"""
         endpoint = "commerce/delivery/"
+        lang = await self.lang(interaction)
         await interaction.response.defer()
         doc = await self.fetch_key(interaction.user, ["tradingpost"])
         results = await self.call_api(endpoint, key=doc["key"])
-        data = discord.Embed(description='Current deliveries',
+        data = discord.Embed(description=self.t(lang, N_("Current deliveries")),
                              colour=await self.get_embed_color(interaction))
-        data.set_author(name=f'Delivery overview of {doc["account_name"]}')
+        data.set_author(name=self.t(lang, N_("Delivery overview of {account}"), account=doc["account_name"]))
         data.set_thumbnail(url="https://wiki.guildwars2.com/"
                            "images/thumb/d/df/Black-Lion-Logo.png"
                            "/300px-Black-Lion-Logo.png")
-        data.set_footer(text="Black Lion Trading Company")
+        data.set_footer(text=self.t(lang, BLACK_LION))
         coins = results["coins"]
         items = results["items"]
         items = items[:20]  # Get only first 20 entries
         if coins == 0:
-            gold = "Currently no coins for pickup."
+            gold = self.t(lang, N_("Currently no coins for pickup."))
         else:
-            gold = self.gold_to_coins(interaction, coins)
-        data.add_field(name="Coins", value=gold, inline=False)
+            gold = self.gold_to_coins(interaction, coins, lang)
+        data.add_field(name=self.t(lang, N_("Coins")), value=gold, inline=False)
         if items:
             for item in items:
                 itemdoc = await self.fetch_item(item["id"])
-                data.add_field(name=itemdoc["name"] if itemdoc else "Unknown item",
+                data.add_field(name=localized(itemdoc, lang) if itemdoc else self.t(lang, N_("Unknown item")),
                                value="x {0}".format(item["count"]),
                                inline=False)
         else:
             if coins == 0:
                 return await interaction.followup.send(
-                    "Your delivery box is empty!")
-            data.add_field(name="No current deliveries.",
-                           value="Have fun!",
+                    self.t(lang, N_("Your delivery box is empty!")))
+            data.add_field(name=self.t(lang, N_("No current deliveries.")),
+                           value=self.t(lang, N_("Have fun!")),
                            inline=False)
         await interaction.followup.send(embed=data)
 
@@ -199,21 +208,22 @@ class Commerce(GW2Cog):
                         interaction: discord.Interaction,
                         quantity: int = 400):
         """Lists current gold/gem exchange prices."""
+        lang = await self.lang(interaction)
         if quantity <= 1:
             return await interaction.response.send_message(
-                "Quantity must be higher than 1", ephemeral=True)
+                self.t(lang, N_("Quantity must be higher than 1")), ephemeral=True)
         await interaction.response.defer()
         gems_cost = await gem_price(self.api, quantity)
         gems_buy = await coin_price(self.api, quantity)
-        data = discord.Embed(title="Currency exchange",
+        data = discord.Embed(title=self.t(lang, N_("Currency exchange")),
                              colour=await self.get_embed_color(interaction))
-        data.add_field(name="{} gems would cost you".format(quantity),
-                       value=self.gold_to_coins(interaction, gems_cost),
+        data.add_field(name=self.t(lang, N_("{gems} gems would cost you"), gems=quantity),
+                       value=self.gold_to_coins(interaction, gems_cost, lang),
                        inline=False)
         data.set_thumbnail(url="https://render.guildwars2.com/file/220061640EC"
                            "A41C0577758030357221B4ECCE62C/502065.png")
-        data.add_field(name="{} gems could buy you".format(quantity),
-                       value=self.gold_to_coins(interaction, gems_buy),
+        data.add_field(name=self.t(lang, N_("{gems} gems could buy you"), gems=quantity),
+                       value=self.gold_to_coins(interaction, gems_buy, lang),
                        inline=False)
         await interaction.followup.send(embed=data)
 
@@ -223,13 +233,13 @@ class Commerce(GW2Cog):
     async def gem_track(self, interaction: discord.Interaction, gold: int):
         """Receive a notification when cost of 400 gems drops below given cost
         """
+        lang = await self.lang(interaction)
         if not 0 <= gold <= 500:
             return await interaction.response.send_message(
-                "Invalid value. Gold may be between 0 and 500", ephemeral=True)
+                self.t(lang, N_("Invalid value. Gold may be between 0 and 500")), ephemeral=True)
         price = gold * 10000
         await interaction.response.send_message(
-            "You will be notified when price of 400 gems "
-            f"drops below {gold} gold",
+            self.t(lang, N_("You will be notified when price of 400 gems drops below {gold} gold"), gold=gold),
             ephemeral=True)
         await self.bot.data.users.update(interaction.user.id, {"gemtrack": price})
 

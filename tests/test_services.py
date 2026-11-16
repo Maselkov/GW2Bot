@@ -51,6 +51,23 @@ async def test_missing_permissions_are_listed():
     assert "`pvp, wallet`" in str(caught.value)
 
 
+@pytest.mark.parametrize("language, expected", [
+    (None, "Your account name seems to have changed! I went ahead and updated it, from `A.1` to `B.2`."),
+    ("fr", "Le nom de votre compte semble avoir changé ! Je l'ai mis à jour, de `A.1` à `B.2`."),
+])
+async def test_account_renames_are_saved_and_told_in_the_users_language(language, expected):
+    from gw2bot.i18n import Catalog
+
+    doc = {**stored(), **({"language": language} if language else {})}
+    users = subject.FakeUserRepo(doc)
+    renamed = user()
+    renamed.send = AsyncMock()
+    await ApiKeys(users, Catalog.load()).check_account_rename(renamed, "K", {"name": "B.2"})
+    renamed.send.assert_awaited_once_with(expected)
+    assert users.writes[0][1]["key"]["account_name"] == "B.2"
+    assert users.writes[1] == ("push", {"name_changes": ["A.1", "B.2"]})
+
+
 # --- Error messages -----------------------------------------------------------
 
 

@@ -3,6 +3,7 @@ import discord
 from discord import app_commands
 from discord.app_commands import Choice
 
+from ..i18n import N_
 from .base import GW2Cog
 
 PROFESSIONS = [
@@ -79,19 +80,20 @@ class Pvp(GW2Cog):
     @pvp_group.command(name="stats")
     async def pvp_stats(self, interaction: discord.Interaction):
         """Information about your general pvp stats"""
+        lang = await self.lang(interaction)
         await interaction.response.defer()
         doc = await self.fetch_key(interaction.user, ["pvp"])
         results = await self.call_api("pvp/stats", key=doc["key"])
         summary = overall(results)
         ranks = await self.call_api("pvp/ranks/{0}".format(summary["rank_id"]))
         embed = discord.Embed(colour=await self.get_embed_color(interaction))
-        embed.add_field(name="Rank", value=summary["rank"], inline=False)
-        embed.add_field(name="Total games played", value=summary["games"])
-        embed.add_field(name="Total wins", value=summary["wins"])
-        embed.add_field(name="Total winratio", value="{}%".format(summary["ratio"]))
-        embed.add_field(name="Ranked games played", value=summary["ranked_games"])
-        embed.add_field(name="Ranked wins", value=summary["ranked_wins"])
-        embed.add_field(name="Ranked winratio", value="{}%".format(summary["ranked_ratio"]))
+        embed.add_field(name=self.t(lang, N_("Rank")), value=summary["rank"], inline=False)
+        embed.add_field(name=self.t(lang, N_("Total games played")), value=summary["games"])
+        embed.add_field(name=self.t(lang, N_("Total wins")), value=summary["wins"])
+        embed.add_field(name=self.t(lang, N_("Total winratio")), value="{}%".format(summary["ratio"]))
+        embed.add_field(name=self.t(lang, N_("Ranked games played")), value=summary["ranked_games"])
+        embed.add_field(name=self.t(lang, N_("Ranked wins")), value=summary["ranked_wins"])
+        embed.add_field(name=self.t(lang, N_("Ranked winratio")), value="{}%".format(summary["ranked_ratio"]))
         embed.set_author(name=doc["account_name"])
         embed.set_thumbnail(url=ranks["icon"])
         await interaction.followup.send(embed=embed)
@@ -106,44 +108,52 @@ class Pvp(GW2Cog):
                               interaction: discord.Interaction,
                               profession: str = None):
         """Information about your pvp profession stats."""
+        lang = await self.lang(interaction)
+
+        def name(profession):
+            # The professions' names are translated for the command's choices
+            return self.t(lang, profession.capitalize())
+
         await interaction.response.defer()
         doc = await self.fetch_key(interaction.user, ["pvp"])
         results = await self.call_api("pvp/stats", key=doc["key"])
         if not profession:
             records = profession_records(results, self.gamedata["professions"].keys())
             if not records:
-                return await interaction.followup.send("You haven't played any PvP games yet.")
+                return await interaction.followup.send(
+                    self.t(lang, N_("You haven't played any PvP games yet.")))
             top = extremes(records)
             most_played, most_played_games = top["most_played"]
-            data = discord.Embed(description="Professions",
+            data = discord.Embed(description=self.t(lang, N_("Professions")),
                                  color=await self.get_embed_color(interaction))
             data.set_thumbnail(url=self.gamedata["professions"][most_played]["icon"])
-            data.add_field(name="Most played profession",
-                           value="{0}, with {1}".format(most_played.capitalize(), most_played_games))
-            data.add_field(name="Highest winrate profession",
-                           value="{0}, with {1}%".format(top["highest_ratio"][0].capitalize(),
-                                                         top["highest_ratio"][1]))
-            data.add_field(name="Least played profession",
-                           value="{0}, with {1}".format(top["least_played"][0].capitalize(),
-                                                       top["least_played"][1]))
-            data.add_field(name="Lowest winrate profession",
-                           value="{0}, with {1}%".format(top["lowest_ratio"][0].capitalize(),
-                                                         top["lowest_ratio"][1]))
+            data.add_field(name=self.t(lang, N_("Most played profession")),
+                           value=self.t(lang, N_("{profession}, with {games}"),
+                                        profession=name(most_played), games=most_played_games))
+            data.add_field(name=self.t(lang, N_("Highest winrate profession")),
+                           value=self.t(lang, N_("{profession}, with {percent}%"),
+                                        profession=name(top["highest_ratio"][0]), percent=top["highest_ratio"][1]))
+            data.add_field(name=self.t(lang, N_("Least played profession")),
+                           value=self.t(lang, N_("{profession}, with {games}"),
+                                        profession=name(top["least_played"][0]), games=top["least_played"][1]))
+            data.add_field(name=self.t(lang, N_("Lowest winrate profession")),
+                           value=self.t(lang, N_("{profession}, with {percent}%"),
+                                        profession=name(top["lowest_ratio"][0]), percent=top["lowest_ratio"][1]))
             data.set_author(name=doc["account_name"])
             return await interaction.followup.send(embed=data)
         if profession not in results["professions"]:
             return await interaction.followup.send(
-                f"You haven't played {profession.capitalize()} in PvP yet."
+                self.t(lang, N_("You haven't played {profession} in PvP yet."), profession=name(profession))
             )
         wins, total, winratio = win_ratio(results["professions"][profession])
         color = int(self.gamedata["professions"][profession]["color"], 0)
-        data = discord.Embed(description=f"Stats for {profession}",
+        data = discord.Embed(description=self.t(lang, N_("Stats for {profession}"), profession=name(profession)),
                              colour=color)
         data.set_thumbnail(
             url=self.gamedata["professions"][profession]["icon"])
-        data.add_field(name="Total games played", value="{0}".format(total))
-        data.add_field(name="Wins", value="{0}".format(wins))
-        data.add_field(name="Winratio", value="{0}%".format(winratio))
+        data.add_field(name=self.t(lang, N_("Total games played")), value="{0}".format(total))
+        data.add_field(name=self.t(lang, N_("Wins")), value="{0}".format(wins))
+        data.add_field(name=self.t(lang, N_("Winratio")), value="{0}%".format(winratio))
         data.set_author(name=doc["account_name"])
         await interaction.followup.send(embed=data)
 

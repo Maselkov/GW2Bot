@@ -3,6 +3,7 @@ price checks."""
 import logging
 import unicodedata
 import xml.etree.ElementTree as et
+from typing import NamedTuple
 
 import aiohttp
 import discord
@@ -15,15 +16,17 @@ from gw2bot.utils import update_notes
 from gw2bot.utils.markdown import html_to_markdown
 
 from ..gw2api.errors import APIError
+from ..i18n import LANGUAGES, N_, resolve_language
 from .base import GW2Cog
 from .commerce import gem_price
 from .daily import DAILY_CATEGORIES
 
 
 class DailyCategoriesDropdown(discord.ui.Select):
-    def __init__(self, interaction, cog, behavior, pin_message, channel):
+    def __init__(self, interaction, cog, behavior, pin_message, channel, lang="en"):
         options = []
         self.cog = cog
+        self.lang = lang
         self.behavior = behavior
         self.pin_message = pin_message
         self.channel = channel
@@ -34,11 +37,11 @@ class DailyCategoriesDropdown(discord.ui.Select):
             )
             options.append(
                 discord.SelectOption(
-                    label=category["name"], value=category["value"], emoji=emoji or None
+                    label=cog.t(lang, category["name"]), value=category["value"], emoji=emoji or None
                 )
             )
         super().__init__(
-            placeholder="Select which categories you want the bot to post",
+            placeholder=cog.t(lang, N_("Select which categories you want the bot to post")),
             min_values=1,
             max_values=len(options),
             options=options,
@@ -51,7 +54,7 @@ class DailyCategoriesDropdown(discord.ui.Select):
         # The example notification is the Daily cog's
         daily = self.cog.bot.get_cog("Daily")
         try:
-            embed = await daily.daily_embed(categories, interaction=interaction) if daily else None
+            embed = await daily.daily_embed(categories, interaction=interaction, lang=self.lang) if daily else None
         except ValueError:
             embed = None
         autodelete = False
@@ -69,13 +72,56 @@ class DailyCategoriesDropdown(discord.ui.Select):
             "daily.categories": categories,
         }
         await self.cog.bot.data.guilds.update(interaction.guild.id, settings)
-        content = f"I will now send dailies to {self.channel.mention}."
+        content = self.cog.t(self.lang, N_("I will now send dailies to {channel}."), channel=self.channel.mention)
         if embed:
-            content += " Here's an example notification:"
+            content += " " + self.cog.t(self.lang, N_("Here's an example notification:"))
         await interaction.edit_original_response(
             content=content, embed=embed, view=None
         )
         self.view.stop()
+
+
+NEWS_FEED_URL = "https://www.guildwars2.com/{lang}/feed/"
+# Posts left out unless a server turns the filter off. Matched in the title
+# and in the link, whose slug is English in every language's feed
+NEWS_FILTERED = ("the arenanet streaming schedule", "community showcase")
+
+
+def news_cache_key(lang):
+    """The config field with the titles last seen in `lang`'s news feed
+    (English kept its original name)."""
+    return "news" if lang == "en" else f"news_{lang}"
+
+
+def parse_news_feed(text):
+    """The news items in an RSS feed, newest first: [{title, link,
+    description (the first paragraph)}]."""
+    items = []
+    for item in et.fromstring(text)[0].findall("item"):
+        try:
+            items.append({
+                "title": item.find("title").text,
+                "link": item.find("link").text,
+                "description": item.find("description").text.split("</p>", 1)[0],
+            })
+        except AttributeError:
+            continue
+    return items
+
+
+def news_filtered(item):
+    """Whether a news item is one servers get only with the filter off."""
+    where = (item["title"] + " " + item["link"].replace("-", " ")).lower()
+    return any(phrase in where for phrase in NEWS_FILTERED)
+
+
+class UpdateNote(NamedTuple):
+    """One post of a game update notes thread."""
+    title: str
+    url: str
+    notes: str  # Markdown
+    build: str
+    minor: bool  # A later post (hotfix): sent without the server's mention
 
 
 class Notifiers(GW2Cog):
@@ -136,42 +182,43 @@ class Notifiers(GW2Cog):
         behavior: str = None,
     ):
         """Send daily achievements to a channel every day"""
+        lang = await self.lang(interaction)
         doc = await self.bot.data.guilds.get(interaction.guild.id)
         already_enabled = doc.get("daily", {}).get("on", False)
         if enabled and not channel:
             await interaction.response.send_message(
-                "You must specify a channel to post to. using the 'Channel' parameter",
+                self.t(lang, N_("You must specify a channel to post to. using the 'Channel' parameter")),
                 ephemeral=True,
             )
             return
         if not enabled and not already_enabled:
             return await interaction.response.send_message(
-                "Daily notifier is aleady disabled. If "
-                "you were trying to enable it, make sure to fill out "
-                "the `channel` argument.",
+                self.t(lang, N_("Daily notifier is aleady disabled. If "
+                                "you were trying to enable it, make sure to fill out "
+                                "the `channel` argument.")),
                 ephemeral=True,
             )
         if not enabled:
             await self.bot.data.guilds.update(interaction.guild.id, {"daily.on": False})
-            return await interaction.response.send_message("Daily notifier disabled.")
+            return await interaction.response.send_message(self.t(lang, N_("Daily notifier disabled.")))
         if not channel.permissions_for(interaction.guild.me).send_messages:
             return await interaction.response.send_message(
-                "I do not have permissions to send " f"messages to {channel.mention}",
+                self.t(lang, N_("I do not have permissions to send messages to {channel}"), channel=channel.mention),
                 ephemeral=True,
             )
         if not channel.permissions_for(interaction.guild.me).embed_links:
             return await interaction.response.send_message(
-                "I do not have permissions to embed links in " f"{channel.mention}",
+                self.t(lang, N_("I do not have permissions to embed links in {channel}"), channel=channel.mention),
                 ephemeral=True,
             )
         view = discord.ui.View(timeout=60)
         view.add_item(
-            DailyCategoriesDropdown(interaction, self, behavior, pin_message, channel)
+            DailyCategoriesDropdown(interaction, self, behavior, pin_message, channel, lang)
         )
         await interaction.response.send_message("** **", view=view, ephemeral=True)
         if await view.wait():
             return await interaction.edit_original_response(
-                content="No response in time.", view=None
+                content=self.t(lang, N_("No response in time.")), view=None
             )
 
     @notifier_group.command(name="news")
@@ -190,39 +237,40 @@ class Notifiers(GW2Cog):
         mention: discord.Role = None,
     ):
         """Automatically sends news from guildwars2.com to a specified channel"""
+        lang = await self.lang(interaction)
         if enabled and not channel:
             return await interaction.response.send_message(
-                "You must specify a channel.", ephemeral=True
+                self.t(lang, N_("You must specify a channel.")), ephemeral=True
             )
         doc = await self.bot.data.guilds.get(interaction.guild.id)
         already_enabled = doc.get("news", {}).get("on", False)
         if not enabled and not already_enabled:
             return await interaction.response.send_message(
-                "News notifier is aleady disabled. If "
-                "you were trying to enable it, make sure to fill out "
-                "the `channel` argument.",
+                self.t(lang, N_("News notifier is aleady disabled. If "
+                                "you were trying to enable it, make sure to fill out "
+                                "the `channel` argument.")),
                 ephemeral=True,
             )
         if not enabled:
             await self.bot.data.guilds.update(interaction.guild.id, {"news.on": False})
             return await interaction.response.send_message(
-                "News notifier disabled.", ephemeral=True
+                self.t(lang, N_("News notifier disabled.")), ephemeral=True
             )
         if not channel.permissions_for(interaction.guild.me).send_messages:
             return await interaction.response.send_message(
-                "I do not have permissions to send " f"messages to {channel.mention}",
+                self.t(lang, N_("I do not have permissions to send messages to {channel}"), channel=channel.mention),
                 ephemeral=True,
             )
         if not channel.permissions_for(interaction.guild.me).embed_links:
             return await interaction.response.send_message(
-                "I do not have permissions to embed links in " f"{channel.mention}",
+                self.t(lang, N_("I do not have permissions to embed links in {channel}"), channel=channel.mention),
                 ephemeral=True,
             )
         role_id = mention.id if mention else None
         settings = {"news.on": True, "news.channel": channel.id, "news.role": role_id}
         await self.bot.data.guilds.update(interaction.guild.id, settings)
         await interaction.response.send_message(
-            f"I will now send news to {channel.mention}."
+            self.t(lang, N_("I will now send news to {channel}."), channel=channel.mention)
         )
 
     @notifier_group.command(name="update")
@@ -242,27 +290,28 @@ class Notifiers(GW2Cog):
         mention: discord.Role = None,
     ):
         """Send a notification whenever the game is updated"""
+        lang = await self.lang(interaction)
         if enabled and not channel:
             return await interaction.response.send_message(
-                "You must specify a channel with the 'channel' optional argument.",
+                self.t(lang, N_("You must specify a channel with the 'channel' optional argument.")),
                 ephemeral=True,
             )
         if not interaction.guild:
             return await interaction.response.send_message(
-                "This command can only be used in servers at the time.", ephemeral=True
+                self.t(lang, N_("This command can only be used in servers at the time.")), ephemeral=True
             )
         doc = await self.bot.data.guilds.get(interaction.guild.id)
         already_enabled = doc.get("updates", {}).get("on", False)
         if not already_enabled and not enabled:
             return await interaction.response.send_message(
-                "Update notifier is aleady disabled. If "
-                "you were trying to enable it, make sure to fill out "
-                "the `channel` argument.",
+                self.t(lang, N_("Update notifier is aleady disabled. If "
+                                "you were trying to enable it, make sure to fill out "
+                                "the `channel` argument.")),
                 ephemeral=True,
             )
         if not enabled:
             await self.bot.data.guilds.update(interaction.guild.id, {"updates.on": False})
-            return await interaction.response.send_message("Update notifier disabled.")
+            return await interaction.response.send_message(self.t(lang, N_("Update notifier disabled.")))
         mention_string = ""
         if mention:
             mention_string = mention.mention
@@ -273,7 +322,7 @@ class Notifiers(GW2Cog):
         }
         await self.bot.data.guilds.update(interaction.guild.id, settings)
         await interaction.response.send_message(
-            f"I will now send update notifications to {channel.mention}."
+            self.t(lang, N_("I will now send update notifications to {channel}."), channel=channel.mention)
         )
 
     @notifier_group.command(name="bosses")
@@ -308,22 +357,23 @@ class Notifiers(GW2Cog):
         behavior: str = "delete",
     ):
         """Send the next two bosses every 15 minutes to a channel"""
+        lang = await self.lang(interaction)
         await interaction.response.defer(ephemeral=True)
         edit = behavior == "edit"
         if enabled and not channel:
-            return await interaction.followup.send("You must specify a channel.")
+            return await interaction.followup.send(self.t(lang, N_("You must specify a channel.")))
         key = "bossnotifs"
         doc = await self.bot.data.guilds.get(interaction.guild.id)
         already_enabled = doc.get(key, {}).get("on", False)
         if not enabled and not already_enabled:
-            return await interaction.followup.send(
+            return await interaction.followup.send(self.t(lang, N_(
                 "Boss notifier is aleady disabled. If "
                 "you were trying to enable it, make sure to fill out "
                 "the `channel` argument."
-            )
+            )))
         if not enabled:
             await self.bot.data.guilds.update(interaction.guild.id, {f"{key}.on": False})
-            return await interaction.followup.send("Boss notifier disabled.")
+            return await interaction.followup.send(self.t(lang, N_("Boss notifier disabled.")))
         settings = {
             f"{key}.on": True,
             f"{key}.channel": channel.id,
@@ -331,26 +381,17 @@ class Notifiers(GW2Cog):
         }
         await self.bot.data.guilds.update(interaction.guild.id, settings)
         await interaction.followup.send(
-            f"I will now send boss notifications to {channel.mention}."
+            self.t(lang, N_("I will now send boss notifications to {channel}."), channel=channel.mention)
         )
 
     async def update_notification(self, new_build):
-        """[(embed, text, minor)] for update-notes posts not announced yet.
+        """[UpdateNote] for update-notes posts not announced yet.
 
         Posts come from the forum topic page. When that can't be read (the
         forum answers some clients with a Cloudflare challenge), the RSS
         feed's copy of the first post is used instead.
         """
         updates = self.bot.data.gw2.updates
-
-        def build_embed(title, url, data):
-            if len(data) >= 1000:
-                data = data[:1000] + " ..."
-            e = discord.Embed(title=title, color=discord.Color.dark_red())
-            e.url = url
-            e.add_field(name="Update Notes", value=data)
-            e.set_footer(text="Build: {}".format(new_build))
-            return e
 
         async def fetch(url):
             """(status, body) for a GET."""
@@ -395,45 +436,62 @@ class Notifiers(GW2Cog):
         if not to_send:
             return None
         await updates.update_one({"title": title}, {"$set": {"title": title, "count": len(posts)}})
-        text_version = "Guild Wars 2 has just updated!"
-        return [
-            (build_embed(title, link, html_to_markdown(post)), text_version, minor)
-            for post, minor in to_send
-        ]
+        return [UpdateNote(title, link, html_to_markdown(post), new_build, minor) for post, minor in to_send]
+
+    def update_embed(self, note, lang):
+        """The embed for an update-notes post. The notes are the forum's,
+        which is English only."""
+        notes = note.notes
+        if len(notes) >= 1000:
+            notes = notes[:1000] + " ..."
+        e = discord.Embed(title=note.title, color=discord.Color.dark_red())
+        e.url = note.url
+        e.add_field(name=self.t(lang, N_("Update Notes")), value=notes)
+        e.set_footer(text=self.t(lang, N_("Build: {build}"), build=note.build))
+        return e
+
+    async def fetch_news(self, lang):
+        """The items in `lang`'s news feed, or None when it can't be read."""
+        try:
+            async with self.bot.session.get(NEWS_FEED_URL.format(lang=lang)) as r:
+                return parse_news_feed(await r.text())
+        except Exception:
+            # E.g. an error page instead of the feed
+            self.log.exception("Couldn't check the news (%s)", lang)
+            return None
 
     async def check_news(self):
+        """{language: [new items]} from each language's news feed. A feed
+        seen for the first time is only remembered."""
         doc = await self.bot.data.config.get()
         if not doc:
-            return []
-        last_news = doc["cache"]["news"]
-        url = "https://www.guildwars2.com/en/feed/"
-        async with self.bot.session.get(url) as r:
-            feed = et.fromstring(await r.text())[0]
-        to_post = []
-        if last_news:
-            for item in feed.findall("item"):
-                try:
-                    if item.find("title").text not in last_news:
-                        to_post.append(
-                            {
-                                "link": item.find("link").text,
-                                "title": item.find("title").text,
-                                "description": item.find("description").text.split(
-                                    "</p>", 1
-                                )[0],
-                            }
-                        )
-                except Exception:
-                    pass
-        last_news = [x.find("title").text for x in feed.findall("item")]
-        await self.bot.data.config.update({"cache.news": last_news})
+            return {}
+        cache = doc.get("cache", {})
+        to_post = {}
+        seen = {}
+        for lang in LANGUAGES:
+            items = await self.fetch_news(lang)
+            if items is None:
+                continue
+            last_news = cache.get(news_cache_key(lang)) or []
+            if last_news:
+                new = [item for item in items if item["title"] not in last_news]
+                if new:
+                    to_post[lang] = new
+            titles = [item["title"] for item in items]
+            if titles != last_news:
+                seen[f"cache.{news_cache_key(lang)}"] = titles
+        if seen:
+            await self.bot.data.config.update(seen)
         return to_post
 
-    def news_embed(self, item):
+    def news_embed(self, item, lang="en"):
         soup = BeautifulSoup(item["description"], "html.parser")
-        description = "[Click here]({0})\n{1}".format(item["link"], soup.get_text())
+        description = "[{click}]({link})\n{text}".format(
+            click=self.t(lang, N_("Click here")), link=item["link"], text=soup.get_text()
+        )
         data = discord.Embed(
-            title=unicodedata.normalize("NFKD", item["title"]),
+            title=unicodedata.normalize("NFKC", item["title"]),
             description=description,
             color=0xC12D2B,
         )
@@ -455,14 +513,10 @@ class Notifiers(GW2Cog):
         else:
             return False
 
-    async def send_news(self, embeds):
+    async def send_news(self, to_post):
+        """Posts `to_post`, {language: [items]}, to the servers with the news
+        notifier on, each in its language."""
         cursor = self.guild_subdocs("news", {"news.on": True, "news.channel": {"$ne": None}})
-        to_filter = ["the arenanet streaming schedule", "community showcase"]
-        filtered = [
-            embed.title
-            for embed in embeds
-            if any(f in embed.title.lower() for f in to_filter)
-        ]
         async for doc in cursor:
             try:
                 if not doc["_obj"]:
@@ -470,6 +524,7 @@ class Notifiers(GW2Cog):
                 channel = self.bot.get_channel(doc["channel"])
                 if not channel:
                     continue
+                lang = self.settings_lang({"language": doc["_language"]}, channel.guild)
                 filter_on = doc.get("filter", True)
                 role_id = doc.get("role")
                 content = None
@@ -477,11 +532,10 @@ class Notifiers(GW2Cog):
                     role = channel.guild.get_role(role_id)
                     if role:
                         content = role.mention
-                for embed in embeds:
-                    if filter_on:
-                        if embed.title in filtered:
-                            continue
-                    await channel.send(content, embed=embed)
+                for item in to_post.get(lang, []):
+                    if filter_on and news_filtered(item):
+                        continue
+                    await channel.send(content, embed=self.news_embed(item, lang))
             except discord.Forbidden:
                 await self.bot.data.guilds.update(doc["_id"], {"news.on": False})
             except Exception as e:
@@ -495,7 +549,7 @@ class Notifiers(GW2Cog):
             result = await self.update_notification(build)
             if not result:
                 return
-            for embed, text, minor in result:
+            for note in result:
                 embed_available = True
                 cursor = self.guild_subdocs("updates", {"updates.on": True, "updates.channel": {"$ne": None}})
                 sent = 0
@@ -506,7 +560,9 @@ class Notifiers(GW2Cog):
                         channel = self.bot.get_channel(doc["channel"])
                         if not channel:
                             continue
-                        if not minor:
+                        lang = self.settings_lang({"language": doc["_language"]}, channel.guild)
+                        text = self.t(lang, N_("Guild Wars 2 has just updated!"))
+                        if not note.minor:
                             mention = doc.get("mention", "")
                             if (
                                 mention == "everyone" or mention == "here"
@@ -520,8 +576,8 @@ class Notifiers(GW2Cog):
                             channel.permissions_for(channel.guild.me).embed_links
                             and embed_available
                         ):
-                            message = f"{mention} Guild Wars 2 has just updated!".strip()
-                            await channel.send(message, embed=embed)
+                            message = f"{mention} {text}".strip()
+                            await channel.send(message, embed=self.update_embed(note, lang))
                         else:
                             await channel.send(text)
                         sent += 1
@@ -536,15 +592,11 @@ class Notifiers(GW2Cog):
         try:
             to_post = await self.check_news()
         except Exception:
-            # E.g. an error page instead of the feed. An escaping exception
-            # would stop the loop for good
+            # An escaping exception would stop the loop for good
             self.log.exception("Couldn't check the news")
             return
         if to_post:
-            embeds = []
-            for item in to_post:
-                embeds.append(self.news_embed(item))
-            await self.send_news(embeds)
+            await self.send_news(to_post)
 
     @news_checker.before_loop
     async def before_news_checker(self):
@@ -574,18 +626,19 @@ class Notifiers(GW2Cog):
             # An escaping exception would stop the loop for good
             self.log.warning("Couldn't check the gem price: %s", e)
             return
-        cost_coins = self.gold_to_coins(None, cost)
         async for doc in self.bot.data.users.find({"gemtrack": {"$ne": None}}):
             if cost >= doc["gemtrack"]:
                 continue
             try:
                 user = self.bot.get_user(doc["_id"]) or await self.bot.fetch_user(doc["_id"])
-                user_price = self.gold_to_coins(None, doc["gemtrack"])
-                msg = (
-                    "Hey, {.mention}! You asked to be notified "
-                    "when 400 gems were cheaper than {}. Guess "
-                    "what? They're now only "
-                    "{}!".format(user, user_price, cost_coins)
+                lang = resolve_language(doc.get("language"))
+                msg = self.t(
+                    lang,
+                    N_("Hey, {user}! You asked to be notified when 400 gems were cheaper than {price}. "
+                       "Guess what? They're now only {cost}!"),
+                    user=user.mention,
+                    price=self.gold_to_coins(None, doc["gemtrack"], lang),
+                    cost=self.gold_to_coins(None, cost, lang),
                 )
                 await user.send(msg)
             except (discord.Forbidden, discord.NotFound):

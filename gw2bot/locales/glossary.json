@@ -1,0 +1,450 @@
+{
+  "+1 Agony Infusion": {
+    "de": "+1 Qual-Infusion",
+    "fr": "Infusion de résistance à l'agonie +1",
+    "es": "Infusión de +1 de Resistencia a la Agonía",
+    "source": "api:items/49424"
+  },
+  "Account": {
+    "de": "Account",
+    "es": "Cuenta",
+    "fr": "Compte",
+    "source": "wiki"
+  },
+  "Achievement": {
+    "de": "Erfolg",
+    "es": "Logro",
+    "fr": "Succès",
+    "source": "wiki"
+  },
+  "Ascended (rarity)": {
+    "de": "Aufgestiegen",
+    "fr": "Élevé",
+    "es": "Ascendido",
+    "source": "reviewed"
+  },
+  "Banana": {
+    "de": "Banane",
+    "fr": "Banane",
+    "es": "Plátano",
+    "source": "api:items/12251"
+  },
+  "Basic (rarity)": {
+    "de": "Einfach",
+    "fr": "Simple",
+    "es": "Común",
+    "source": "reviewed"
+  },
+  "Build template": {
+    "de": "Build-Vorlage",
+    "fr": "Modèle d'archétype",
+    "es": "Plantilla de ajustes",
+    "source": "reviewed"
+  },
+  "Cat": {
+    "de": "Katze",
+    "es": "Gato",
+    "fr": "Chat",
+    "source": "wiki"
+  },
+  "Character": {
+    "de": "Charakter",
+    "es": "Personaje",
+    "fr": "Personnage",
+    "source": "wiki"
+  },
+  "Chat link": {
+    "de": "Chatcode",
+    "es": "Código de chat",
+    "source": "reviewed",
+    "fr": "Code en jeu"
+  },
+  "Coin": {
+    "de": "Münze",
+    "fr": "Pièce",
+    "es": "Moneda",
+    "source": "api:currencies/1"
+  },
+  "Crafting": {
+    "de": "Handwerk",
+    "es": "Artesanía",
+    "fr": "Artisanat",
+    "source": "wiki"
+  },
+  "Day and night": {
+    "de": "Tageszeit",
+    "es": "Día y noche",
+    "source": "wiki"
+  },
+  "Dynamic event": {
+    "de": "Event",
+    "es": "Evento dinámico",
+    "fr": "Évènement dynamique",
+    "source": "wiki"
+  },
+  "Elementalist": {
+    "de": "Elementarmagier",
+    "fr": "Élémentaliste",
+    "es": "Elementalista",
+    "source": "api:professions/Elementalist"
+  },
+  "Engineer": {
+    "de": "Ingenieur",
+    "fr": "Ingénieur",
+    "es": "Ingeniero",
+    "source": "api:professions/Engineer"
+  },
+  "Exotic (rarity)": {
+    "de": "Exotisch",
+    "fr": "Exotique",
+    "es": "Exótico",
+    "source": "reviewed"
+  },
+  "Fine (rarity)": {
+    "de": "Edel",
+    "fr": "Raffiné",
+    "es": "Selecto",
+    "source": "reviewed"
+  },
+  "Fractals of the Mists": {
+    "de": "Fraktale der Nebel",
+    "es": "Fractales de la Niebla",
+    "fr": "Fractales des Brumes",
+    "source": "wiki"
+  },
+  "Fresh Air": {
+    "de": "Frische Luft",
+    "fr": "Air frais",
+    "es": "Aire fresco",
+    "source": "api:traits/1503"
+  },
+  "Gem": {
+    "de": "Edelstein",
+    "fr": "Gemme",
+    "es": "Gema",
+    "source": "api:currencies/4"
+  },
+  "Gem Store": {
+    "de": "Edelsteinshop",
+    "es": "Tienda de gemas",
+    "fr": "Boutique aux gemmes",
+    "source": "wiki"
+  },
+  "Guardian": {
+    "de": "Wächter",
+    "fr": "Gardien",
+    "es": "Guardián",
+    "source": "api:professions/Guardian"
+  },
+  "Guild": {
+    "de": "Gilde",
+    "es": "Clan",
+    "fr": "Guilde",
+    "source": "wiki"
+  },
+  "Guild hall": {
+    "de": "Gilden-Halle",
+    "es": "Sala de clan",
+    "fr": "Hall de guilde",
+    "source": "wiki"
+  },
+  "Guild Vault": {
+    "es": "Banco de clan",
+    "source": "reviewed",
+    "fr": "Coffre de guilde"
+  },
+  "Guild Wars 2: End of Dragons": {
+    "de": "Guild Wars 2: End of Dragons",
+    "es": "Guild Wars 2: End of Dragons",
+    "fr": "Guild Wars 2: End of Dragons",
+    "source": "wiki"
+  },
+  "Guild Wars 2: Heart of Thorns": {
+    "de": "Guild Wars 2: Heart of Thorns",
+    "es": "Guild Wars 2: Heart of Thorns",
+    "fr": "Guild Wars 2: Heart of Thorns",
+    "source": "wiki"
+  },
+  "Guild Wars 2: Path of Fire": {
+    "de": "Guild Wars 2: Path of Fire",
+    "es": "Guild Wars 2: Path of Fire",
+    "fr": "Guild Wars 2: Path of Fire",
+    "source": "wiki"
+  },
+  "Guild Wars 2: Secrets of the Obscure": {
+    "de": "Guild Wars 2: Secrets of the Obscure",
+    "es": "Guild Wars 2: Secrets of the Obscure",
+    "fr": "Guild Wars 2: Secrets of the Obscure",
+    "source": "wiki"
+  },
+  "Hero point": {
+    "de": "Heldenpunkt",
+    "es": "Punto de héroe",
+    "fr": "Défi de compétence",
+    "source": "wiki"
+  },
+  "Home instance": {
+    "de": "Heimatort",
+    "es": "Hogar",
+    "fr": "Instance personnelle",
+    "source": "wiki"
+  },
+  "Infusion": {
+    "de": "Infusion",
+    "es": "Infusión",
+    "fr": "Infusion",
+    "source": "wiki"
+  },
+  "Ingredient": {
+    "de": "Zutat",
+    "es": "Ingrediente",
+    "fr": "Ingrédient",
+    "source": "wiki"
+  },
+  "Junk (rarity)": {
+    "de": "Schrott",
+    "fr": "Inutile",
+    "es": "Basura",
+    "source": "reviewed"
+  },
+  "Karma": {
+    "de": "Karma",
+    "fr": "Karma",
+    "es": "Karma",
+    "source": "api:currencies/2"
+  },
+  "Legendary (rarity)": {
+    "de": "Legendär",
+    "fr": "Légendaire",
+    "es": "Legendario",
+    "source": "reviewed"
+  },
+  "Legendary Armory": {
+    "de": "Legendäre Rüstkammer",
+    "es": "Armería legendaria",
+    "fr": "Armurerie légendaire",
+    "source": "wiki"
+  },
+  "Legendary Insight": {
+    "de": "Legendäre Einsicht",
+    "fr": "Connaissance légendaire",
+    "es": "Conocimiento legendario",
+    "source": "api:items/77302"
+  },
+  "Lion's Arch": {
+    "de": "Löwenstein",
+    "fr": "L'Arche du Lion",
+    "es": "Arco del León",
+    "source": "api:maps/50"
+  },
+  "Living World Season 3": {
+    "de": "Staffel 3 der Lebendigen Welt",
+    "es": "Tercera Temporada de Mundo Viviente",
+    "fr": "Saison 3 du Monde vivant",
+    "source": "wiki"
+  },
+  "Living World Season 4": {
+    "de": "Staffel 4 der Lebendigen Welt",
+    "es": "Cuarta Temporada de Mundo Viviente",
+    "fr": "Saison 4 du Monde vivant",
+    "source": "wiki"
+  },
+  "Masterwork (rarity)": {
+    "de": "Meisterwerk",
+    "fr": "Chef-d'œuvre",
+    "es": "Obra de arte",
+    "source": "reviewed"
+  },
+  "Mesmer": {
+    "de": "Mesmer",
+    "fr": "Envoûteur",
+    "es": "Hipnotizador",
+    "source": "api:professions/Mesmer"
+  },
+  "Meta event": {
+    "de": "Meta-Event",
+    "es": "Meta evento",
+    "fr": "Méta-événement",
+    "source": "wiki"
+  },
+  "Meteor Shower": {
+    "de": "Meteorschauer",
+    "fr": "Pluie de météores",
+    "es": "Lluvia de meteoros",
+    "source": "api:skills/5501"
+  },
+  "Necromancer": {
+    "de": "Nekromant",
+    "fr": "Nécromant",
+    "es": "Nigromante",
+    "source": "api:professions/Necromancer"
+  },
+  "Outfit": {
+    "de": "Kleidungsset",
+    "es": "Atuendo",
+    "fr": "Tenue",
+    "source": "wiki"
+  },
+  "Pact Supply Network Agent": {
+    "de": "Pakt-Vorratsnetz-Agent",
+    "es": "Agente de red de suministros del Pacto",
+    "fr": "Agent du réseau de ravitaillement du Pacte",
+    "source": "wiki"
+  },
+  "Playing Chicken": {
+    "de": "Hühnerkram",
+    "fr": "Jouer avec des poulets",
+    "es": "Juego de pollos",
+    "source": "api:achievements/3221"
+  },
+  "Point of interest": {
+    "de": "Sehenswürdigkeit",
+    "es": "Punto de interés",
+    "fr": "Site remarquable",
+    "source": "wiki"
+  },
+  "Raid": {
+    "de": "Schlachtzug",
+    "es": "Incursión",
+    "fr": "Raid",
+    "source": "wiki"
+  },
+  "Ranger": {
+    "de": "Waldläufer",
+    "fr": "Rôdeur",
+    "es": "Guardabosques",
+    "source": "api:professions/Ranger"
+  },
+  "Rare (rarity)": {
+    "de": "Selten",
+    "fr": "Rare",
+    "es": "Raro",
+    "source": "reviewed"
+  },
+  "Recipe": {
+    "de": "Rezept",
+    "es": "Receta",
+    "fr": "Recette",
+    "source": "wiki"
+  },
+  "Revenant": {
+    "de": "Wiedergänger",
+    "fr": "Revenant",
+    "es": "Retornado",
+    "source": "api:professions/Revenant"
+  },
+  "Rune": {
+    "de": "Rune",
+    "es": "Runa",
+    "fr": "Rune",
+    "source": "wiki"
+  },
+  "Shadow Behemoth": {
+    "de": "Schatten-Behemoth",
+    "es": "Behemot de las sombras",
+    "fr": "Béhémoth des ombres",
+    "source": "wiki"
+  },
+  "Skin": {
+    "de": "Skin",
+    "es": "Diseño",
+    "fr": "Apparence",
+    "source": "wiki"
+  },
+  "Strike Mission": {
+    "de": "Angriffsmission",
+    "es": "Misión de ataque",
+    "fr": "Mission d'attaque",
+    "source": "wiki"
+  },
+  "Structured PvP": {
+    "de": "Strukturiertes PvP",
+    "es": "PvP estructurado",
+    "fr": "JcJ structuré",
+    "source": "wiki"
+  },
+  "Super Adventure Box": {
+    "de": "Super Adventure Box",
+    "es": "Super Adventure Box",
+    "fr": "Super Adventure Box",
+    "source": "wiki"
+  },
+  "Superior Rune of the Scholar": {
+    "de": "Überlegene Rune des Gelehrten",
+    "fr": "Rune d'érudit supérieure",
+    "es": "Runa superior del erudito",
+    "source": "api:items/24836"
+  },
+  "The Icebrood Saga": {
+    "de": "Die Eisbrut-Saga",
+    "es": "Sangre y Hielo",
+    "fr": "L'Épopée du givre",
+    "source": "wiki"
+  },
+  "Thief": {
+    "de": "Dieb",
+    "fr": "Voleur",
+    "es": "Ladrón",
+    "source": "api:professions/Thief"
+  },
+  "Trading Post": {
+    "de": "Handelsposten",
+    "es": "Bazar",
+    "fr": "Comptoir",
+    "source": "wiki"
+  },
+  "Upgrade component": {
+    "de": "Aufwertung",
+    "es": "Componente de mejora",
+    "fr": "Composant d'amélioration",
+    "source": "wiki"
+  },
+  "Vista": {
+    "de": "Panorama",
+    "es": "Vista",
+    "fr": "Panorama",
+    "source": "wiki"
+  },
+  "Wallet": {
+    "de": "Geldbörse",
+    "es": "Cartera",
+    "fr": "Portefeuille",
+    "source": "reviewed"
+  },
+  "Wardrobe": {
+    "de": "Garderobe",
+    "es": "Guardarropa",
+    "fr": "Garde-robe",
+    "source": "reviewed"
+  },
+  "Warrior": {
+    "de": "Krieger",
+    "fr": "Guerrier",
+    "es": "Guerrero",
+    "source": "api:professions/Warrior"
+  },
+  "Waypoint": {
+    "de": "Wegmarke",
+    "es": "Punto de ruta",
+    "fr": "Point de passage",
+    "source": "wiki"
+  },
+  "Wizard's Vault": {
+    "de": "Gewölbe des Zauberers",
+    "es": "Cámara del Brujo",
+    "fr": "Chambre forte du sorcier",
+    "source": "wiki"
+  },
+  "World boss": {
+    "de": "Welt-Boss",
+    "es": "Jefes mundiales",
+    "fr": "Boss mondiaux",
+    "source": "wiki"
+  },
+  "World versus World": {
+    "de": "Welt gegen Welt",
+    "es": "Mundo contra Mundo",
+    "fr": "Monde contre Monde",
+    "source": "wiki"
+  }
+}

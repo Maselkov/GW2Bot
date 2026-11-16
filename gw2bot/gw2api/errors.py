@@ -51,7 +51,16 @@ class APIInvalidKey(APIError):
 
 
 class APIKeyError(APIError):
-    """The user has no key, or it lacks permissions. Raised by the bot, not the API."""
+    """The user has no key, or it lacks permissions. Raised by the bot, not the API.
+
+    `text` is the English message, with {placeholders} for `fields`, so it
+    can be shown translated (see gw2bot.errors).
+    """
+
+    def __init__(self, text, **fields):
+        super().__init__(text.format(**fields))
+        self.text = text
+        self.fields = fields
 
 
 class APIRateLimited(APIError):

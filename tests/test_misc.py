@@ -1,4 +1,5 @@
 """/wiki and /chatcode."""
+import discord
 import pytest
 
 import subject
@@ -68,6 +69,28 @@ async def test_wiki_languages(language, url):
     assert [u for u, _ in requests] == [url]
 
 
+DE_SEARCH = "https://wiki-de.guildwars2.com/index.php?search=Arch&title=Spezial%3ASuche&"
+
+
+async def test_wiki_searches_the_wiki_in_the_users_discord_language():
+    session = subject.FakeWikiSession({DE_SEARCH: results_page("Arch")})
+    _, requests = await subject.wiki(session, search_text="Arch", locale=discord.Locale.german)
+    assert [u for u, _ in requests] == [DE_SEARCH]
+
+
+async def test_wiki_language_setting_beats_the_discord_language():
+    session = subject.FakeWikiSession({DE_SEARCH: results_page("Arch")})
+    _, requests = await subject.wiki(session, search_text="Arch", locale=discord.Locale.french,
+                                     users=subject.FakeUserRepo({"language": "de"}))
+    assert [u for u, _ in requests] == [DE_SEARCH]
+
+
+async def test_wiki_in_a_language_the_bot_doesnt_speak_searches_in_english():
+    session = subject.FakeWikiSession({EN_SEARCH + "Arch": results_page("Arch")})
+    _, requests = await subject.wiki(session, search_text="Arch", locale=discord.Locale.japanese)
+    assert [u for u, _ in requests] == [EN_SEARCH + "Arch"]
+
+
 async def test_wiki_no_results():
     session = subject.FakeWikiSession({EN_SEARCH + "zzz": results_page()})
     sent, _ = await subject.wiki(session, search_text="zzz")
@@ -118,6 +141,67 @@ async def test_chatcode_autocompletes():
     assert await subject.chatcode_choices("upgrade", "ecto", items=items) == [("Superior Rune of Ectoplasm", "24575")]
     assert await subject.chatcode_choices("skin", "ecto", skins=skins) == [("Ectoplasmic Greatsword Skin", "3709")]
     assert await subject.chatcode_choices("item", "", items=items) == []
+
+
+ECTO_DE = {"_id": 19721, "name": "Glob of Ectoplasm", "type": "CraftingMaterial",
+           "l10n": {"de": {"name": "Ektoplasmakugel"}}}
+# German name starting like the English one does
+GLOBE_DE = {"_id": 5, "name": "Globe", "type": "Trophy", "l10n": {"de": {"name": "Globus"}}}
+
+
+async def test_autocomplete_finds_and_shows_items_by_their_name_in_the_users_language():
+    choices = await subject.chatcode_choices("item", "ekto", items=[ECTO_DE], locale=discord.Locale.german)
+    assert choices == [("Ektoplasmakugel", "19721")]
+
+
+async def test_autocomplete_finds_items_by_their_english_name_too():
+    choices = await subject.chatcode_choices("item", "glob of", items=[ECTO_DE], locale=discord.Locale.german)
+    assert choices == [("Ektoplasmakugel", "19721")]
+
+
+async def test_autocomplete_lists_matches_in_the_users_language_first():
+    choices = await subject.chatcode_choices("item", "glob", items=[ECTO_DE, GLOBE_DE], locale=discord.Locale.german)
+    assert choices == [("Globus", "5"), ("Ektoplasmakugel", "19721")]
+
+
+async def test_autocomplete_in_english_ignores_translations():
+    choices = await subject.chatcode_choices("item", "ekto", items=[ECTO_DE])
+    assert choices == []
+
+
+async def test_autocomplete_falls_back_to_english_names_without_a_translation():
+    skin = {"_id": 3709, "name": "Ectoplasmic Greatsword Skin"}
+    choices = await subject.chatcode_choices("skin", "ecto", skins=[skin], locale=discord.Locale.french)
+    assert choices == [("Ectoplasmic Greatsword Skin", "3709")]
+
+
+# --- Wiki links ---------------------------------------------------------------------------
+
+DE_BANANA = "https://wiki-de.guildwars2.com/wiki/Banane"
+EN_BANANA = "https://wiki.guildwars2.com/wiki/Banana"
+
+
+async def test_wiki_links_go_to_the_page_in_the_users_language():
+    url, _ = await subject.wiki_page("Banane", "de", "Banana", pages=[DE_BANANA, EN_BANANA])
+    assert url == DE_BANANA
+
+
+async def test_wiki_links_go_to_the_english_page_when_the_language_wiki_has_none():
+    url, checked = await subject.wiki_page("Banane", "de", "Banana", pages=[EN_BANANA])
+    assert url == EN_BANANA
+    assert checked == [DE_BANANA, EN_BANANA]
+
+
+async def test_no_wiki_link_without_a_page():
+    url, _ = await subject.wiki_page("Banane", "de", "Banana")
+    assert url is None
+
+
+async def test_no_wiki_link_when_the_wiki_cant_be_reached():
+    url, checked = await subject.wiki_page("Banane", "de", "Banana", head_error=TimeoutError())
+    assert url is None
+    # Not tried again on the English wiki: it's the same servers
+    assert checked == [DE_BANANA]
 
 
 # --- Fixes --------------------------------------------------------------------------------

@@ -42,12 +42,15 @@ def cleanup_xml_tags(text):
     return re.sub("<[^<]+>", "", text)
 
 
-def format_age(age, *, short=False):
-    """Time played, from seconds: "2 hours 5 minutes", or "2h 5m"."""
+def format_age(age, *, short=False, translate=None):
+    """Time played, from seconds: "2 hours 5 minutes", or "2h 5m".
+    `translate(text, **fields)` gives it in a language (default English)."""
+    from ..i18n import N_
+
+    translate = translate or (lambda text, **fields: text.format(**fields))
     hours, seconds = divmod(age, 3600)
     minutes = round(seconds / 60)
-    h_str = "h" if short else " hours"
-    m_str = "m" if short else " minutes"
     if hours:
-        return "{}{} {}{}".format(hours, h_str, minutes, m_str)
-    return "{}{}".format(minutes, m_str)
+        text = N_("{hours}h {minutes}m") if short else N_("{hours} hours {minutes} minutes")
+        return translate(text, hours=hours, minutes=minutes)
+    return translate(N_("{minutes}m") if short else N_("{minutes} minutes"), minutes=minutes)

@@ -54,7 +54,7 @@ async def test_add_beyond_the_limit():
 
 @pytest.mark.parametrize("status, message", [
     (400, "The key is invalid."),
-    (503, "The API is currently down. Try again later. "),
+    (503, "The API is currently down. Try again later."),
 ])
 async def test_add_errors(status, message):
     body = {"text": "Invalid access token"} if status == 400 else {"text": "API not active"}

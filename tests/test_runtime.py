@@ -1,6 +1,7 @@
 """The bot runtime: settings and the slash command error handler."""
 from unittest.mock import AsyncMock, MagicMock
 
+import discord
 import pytest
 from discord import app_commands
 
@@ -91,13 +92,19 @@ def test_mongo_uri_override():
 
 @pytest.fixture
 async def bot():
+    from fakes.db import MemorySettings
+
     bot = GW2Bot(Settings(token="tok"))
+    # No database: nobody has settings
+    bot.data.users = MemorySettings()
     yield bot
     await bot.data.close()
 
 
-def make_interaction(done=False, cog=None):
+def make_interaction(done=False, cog=None, locale=discord.Locale.american_english):
     interaction = MagicMock()
+    interaction.user.id = 1
+    interaction.locale = locale
     interaction.response.is_done.return_value = done
     interaction.response.send_message = AsyncMock()
     interaction.followup.send = AsyncMock()
@@ -145,6 +152,40 @@ async def test_missing_permissions_are_listed(bot):
     await bot.on_app_command_error(interaction, error)
 
     assert "`Manage Server, Manage Roles`" in sent_message(interaction)
+
+
+async def test_errors_are_explained_in_the_users_language(bot):
+    from gw2bot.gw2api.errors import APIKeyError
+    from gw2bot.keys import ApiKeys
+
+    interaction = make_interaction(locale=discord.Locale.german)
+    with pytest.raises(APIKeyError) as raised:
+        await ApiKeys(bot.data.users).get(interaction.user)
+    error = app_commands.CommandInvokeError(interaction.command, raised.value)
+
+    await bot.on_app_command_error(interaction, error)
+
+    assert sent_message(interaction).startswith("Mit Eurem Konto ist kein API-Schlüssel verknüpft.")
+
+
+async def test_missing_permissions_are_named_as_discord_names_them_in_the_users_language(bot):
+    interaction = make_interaction(locale=discord.Locale.french)
+    error = app_commands.MissingPermissions(["manage_guild", "manage_roles"])
+
+    await bot.on_app_command_error(interaction, error)
+
+    assert "`Gérer le serveur, Gérer les rôles`" in sent_message(interaction)
+
+
+async def test_errors_are_in_english_when_the_language_cant_be_read(bot):
+    from unittest.mock import AsyncMock
+
+    bot.data.users.get = AsyncMock(side_effect=RuntimeError("database down"))
+    interaction = make_interaction(locale=discord.Locale.german)
+
+    await bot.on_app_command_error(interaction, app_commands.NoPrivateMessage())
+
+    assert sent_message(interaction) == "This command cannot be used in DMs"
 
 
 async def test_failed_checks_send_nothing(bot):
@@ -273,7 +314,7 @@ async def test_command_hash_ignores_registration_order():
         add_command(first, name)
     for name in ("b", "a"):
         add_command(second, name)
-    assert command_tree_hash(first.tree) == command_tree_hash(second.tree)
+    assert await command_tree_hash(first.tree) == await command_tree_hash(second.tree)
     for bot in (first, second):
         await bot.data.close()
 

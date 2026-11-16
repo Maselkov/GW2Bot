@@ -5,6 +5,7 @@ import discord
 from discord import app_commands
 
 from ..gw2api.errors import APINotFound
+from ..i18n import N_, localized, localized_doc
 from ..utils.chat import cleanup_xml_tags
 from .base import GW2Cog
 
@@ -77,7 +78,7 @@ class Achievements(GW2Cog):
 
     async def achievement_autocomplete(self, interaction: discord.Interaction,
                                        current: str):
-        return await self.name_choices(self.db.achievements, current)
+        return await self.name_choices(self.db.achievements, current, await self.lang(interaction))
 
     @app_commands.command(name="achievement")
     @app_commands.describe(
@@ -87,18 +88,19 @@ class Achievements(GW2Cog):
                               achievement_name: str):
         """Display achievement information and your completion status"""
         user = interaction.user
+        lang = await self.lang(interaction)
         await interaction.response.defer()
         choice = await self.find_achievement(interaction, achievement_name)
         if not choice:
             return await interaction.followup.send(
-                f"No achievement found matching `{achievement_name}`.")
+                self.t(lang, N_("No achievement found matching `{search}`."), search=achievement_name))
         try:
             doc = await self.fetch_key(user, ["progression"])
             endpoint = "account/achievements?id={}".format(choice["_id"])
             results = await self.call_api(endpoint, key=doc["key"])
         except APINotFound:
             results = {}
-        embed = await self.ach_embed(interaction, results, choice)
+        embed = await self.ach_embed(interaction, results, choice, lang)
         embed.set_author(name=doc["account_name"],
                          icon_url=user.display_avatar.url)
         await interaction.followup.send(embed=embed)
@@ -111,7 +113,12 @@ class Achievements(GW2Cog):
             return None
         return await self.db.achievements.find_one({"_id": ach_id})
 
-    async def ach_embed(self, ctx, res, ach):
+    async def ach_embed(self, ctx, res, ach, lang="en"):
+        def t(text, **fields):
+            return self.t(lang, text, **fields)
+
+        # Its text in the language; the rest is the same in every language
+        ach = localized_doc(ach, lang)
         description = cleanup_xml_tags(ach["description"])
         data = discord.Embed(title=ach["name"],
                              description=description,
@@ -120,7 +127,7 @@ class Achievements(GW2Cog):
             data.set_thumbnail(url=ach["icon"])
         requirement = ach.get("requirement")
         if requirement:
-            data.add_field(name="Requirement",
+            data.add_field(name=t(N_("Requirement")),
                            value=ach["requirement"],
                            inline=False)
         tiers = ach["tiers"]
@@ -130,10 +137,10 @@ class Achievements(GW2Cog):
         earned = earned_ap(ach, res)
         tier_prog = tier_progress(tiers, res)
         completed = max_prog == tier_prog
-        progress = "Completed" if completed else "{}/{}".format(
+        progress = t(N_("Completed")) if completed else "{}/{}".format(
             tier_prog, max_prog)
         if "Repeatable" in ach["flags"]:
-            progress += "\nRepeats: {}".format(repeated)
+            progress += "\n" + t(N_("Repeats: {count}"), count=repeated)
         footer = self.bot.user.name
         if "bits" in ach:
             lines = []
@@ -143,43 +150,44 @@ class Achievements(GW2Cog):
                     text = bit["text"]
                 elif bit["type"] == "Item":
                     doc = await self.fetch_item(bit["id"])
-                    text = doc["name"] if doc else "Unknown item"
+                    text = localized(doc, lang) if doc else t(N_("Unknown item"))
                 elif bit["type"] == "Minipet":
                     doc = await self.db.minis.find_one({"_id": bit["id"]})
-                    text = doc["name"] if doc else "Unknown miniature"
+                    text = localized(doc, lang) if doc else t(N_("Unknown miniature"))
                 elif bit["type"] == "Skin":
                     doc = await self.db.skins.find_one({"_id": bit["id"]})
-                    text = doc["name"] if doc else "Unknown skin"
+                    text = localized(doc, lang) if doc else t(N_("Unknown skin"))
                 prefix = "+✔" if completed or i in completed_bits else "-✖"
                 lines.append(prefix + text)
             number_of_fields = math.ceil(len(lines) / 10)
             if number_of_fields < 15:
-                footer += " | Green (+) means completed. Red (-) means not"
+                footer += " | " + t(N_("Green (+) means completed. Red (-) means not"))
                 for i in range(number_of_fields):
                     value = "\n".join(lines[i * 10:i * 10 + 10])
-                    data.add_field(name="Objectives ({}/{})".format(
-                        i + 1, number_of_fields),
+                    data.add_field(name=t(N_("Objectives ({page}/{pages})"),
+                                          page=i + 1, pages=number_of_fields),
                                    value="```diff\n{}\n```".format(value))
         if "rewards" in ach:
             lines = []
             for rew in ach["rewards"]:
                 if rew["type"] == "Coins":
-                    reward = self.gold_to_coins(ctx, rew["count"])
+                    reward = self.gold_to_coins(ctx, rew["count"], lang)
                 elif rew["type"] == "Item":
                     doc = await self.fetch_item(rew["id"])
                     cnt = str(rew["count"]) + " " if rew["count"] > 1 else ""
-                    reward = cnt + (doc["name"] if doc else "Unknown item")
+                    reward = cnt + (localized(doc, lang) if doc else t(N_("Unknown item")))
                 elif rew["type"] == "Mastery":
-                    reward = rew["region"] + " Mastery Point"
+                    # The region as the API names it (Tyria, Maguuma, Desert...)
+                    reward = t(N_("{region} Mastery Point"), region=rew["region"])
                 elif rew["type"] == "Title":
-                    reward = await self.get_title(rew["id"])
-                    reward = "Title: " + reward
+                    reward = await self.get_title(rew["id"], lang)
+                    reward = t(N_("Title: {title}"), title=reward)
                 lines.append(reward)
-            data.add_field(name="Rewards",
+            data.add_field(name=t(N_("Rewards")),
                            value="\n".join(lines),
                            inline=False)
-        data.add_field(name="Tier completion", value=progress, inline=False)
-        data.add_field(name="AP earned",
+        data.add_field(name=t(N_("Tier completion")), value=progress, inline=False)
+        data.add_field(name=t(N_("AP earned")),
                        value="{}/{}".format(earned, possible),
                        inline=False)
         footer += f" | ID: {ach['_id']}"

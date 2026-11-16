@@ -63,6 +63,26 @@ async def test_reminder_for_an_unknown_event():
     assert writes == []
 
 
+async def test_reminder_by_the_name_in_the_users_language():
+    import discord
+
+    sent, writes = await subject.set_event_reminder(event_name="Schatten-Behemoth", locale=discord.Locale.german)
+    assert sent == "Erinnerung eingerichtet"
+    # Saved in English, like the timers
+    assert writes == [(1, "push", {"event_reminders": {"type": "boss", "name": "Shadow Behemoth", "time": 300}})]
+
+
+async def test_autocomplete_shows_events_in_the_users_language():
+    import discord
+
+    german = discord.Locale.german
+    expected = [("Verschlungene Tiefen - Chak-Potentat", "Chak Gerent"),
+                ("Verschlungene Tiefen - Potentat-Vorbereitung", "Gerent Preparation")]
+    assert await subject.event_autocomplete("potentat", german) == expected
+    # English names still find them
+    assert await subject.event_autocomplete("gerent", german) == expected
+
+
 # --- Firing reminders ---------------------------------------------------------------
 
 BASE = datetime.datetime(2024, 3, 6, 12, tzinfo=UTC)
@@ -129,6 +149,16 @@ async def test_et_map_timers():
     assert embed["title"] == "Secrets of the Obscure"
     assert [f["name"] for f in embed["fields"]] == ["Skywatch Archipelago", "Wizard's Tower", "Amnytas",
                                                     "Inner Nayos"][:len(embed["fields"])]
+
+
+async def test_et_in_the_users_language():
+    import discord
+
+    embed = await subject.et_command("hot", BASE, locale=discord.Locale.french)
+    assert [f["name"] for f in embed["fields"]][:3] == ["Orée d'émeraude", "Bassin aurique", "Profondeurs verdoyantes"]
+    embed = await subject.et_command("bosses", BASE, locale=discord.Locale.french)
+    first = subject.upcoming_bosses(BASE, limit=1)[0][0]
+    assert not embed["fields"][0]["name"].startswith(first)
 
 
 # --- Boss notifier -------------------------------------------------------------------------

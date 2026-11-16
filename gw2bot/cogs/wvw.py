@@ -3,6 +3,7 @@ import discord
 from discord import app_commands
 from discord.app_commands import Choice
 
+from ..i18n import N_
 from .base import GW2Cog
 
 # First /v2/account schema with the `wvw` object (team_id, rank)
@@ -78,6 +79,7 @@ class Wvw(GW2Cog):
                        team: str = None):
         """Info about a WvW team's matchup. Defaults to your account's team"""
         user = interaction.user
+        lang = await self.lang(interaction)
         await interaction.response.defer()
         if not team:
             results = await self.call_api("account",
@@ -85,18 +87,18 @@ class Wvw(GW2Cog):
                                           schema_string=WVW_ACCOUNT_SCHEMA)
             team_id = results.get("wvw", {}).get("team_id")
             if not team_id:
-                return await interaction.followup.send(
+                return await interaction.followup.send(self.t(lang, N_(
                     "Your account isn't on a WvW team right now. Use the "
-                    "`team` option to look up a team.")
+                    "`team` option to look up a team.")))
         else:
             team_id = find_team(self.gamedata, team)
             if not team_id:
-                return await interaction.followup.send("Invalid team name")
+                return await interaction.followup.send(self.t(lang, N_("Invalid team name")))
         match = await self.call_api(f"wvw/matches?world={team_id}")
         summary = match_summary(match, team_id)
         if not summary:
             return await interaction.followup.send(
-                "That team isn't in a match right now.")
+                self.t(lang, N_("That team isn't in a match right now.")))
         color = summary["color"]
         if color == "red":
             colour = discord.Colour.red()
@@ -105,17 +107,18 @@ class Wvw(GW2Cog):
         else:
             colour = discord.Colour.blue()
         kd = round(summary["kills"] / max(summary["deaths"], 1), 2)
-        data = discord.Embed(description="Performance", colour=colour)
-        data.add_field(name="Score", value=summary["score"])
-        data.add_field(name="Points per tick", value=summary["points_per_tick"])
-        data.add_field(name="Victory Points", value=summary["victory_points"])
-        data.add_field(name="K/D ratio", value=str(kd), inline=False)
+        data = discord.Embed(description=self.t(lang, N_("Performance")), colour=colour)
+        data.add_field(name=self.t(lang, N_("Score")), value=summary["score"])
+        data.add_field(name=self.t(lang, N_("Points per tick")), value=summary["points_per_tick"])
+        data.add_field(name=self.t(lang, N_("Victory Points")), value=summary["victory_points"])
+        data.add_field(name=self.t(lang, N_("K/D ratio")), value=str(kd), inline=False)
         matchup = []
-        for side in "red", "blue", "green":
+        sides = {"red": N_("Red"), "blue": N_("Blue"), "green": N_("Green")}
+        for side, side_name in sides.items():
             names = ", ".join(
                 team_name(self.gamedata, t) for t in summary["teams"].get(side, []))
-            matchup.append(f"{side.title()}: {names or '-'}")
-        data.add_field(name="Matchup", value="\n".join(matchup), inline=False)
+            matchup.append(f"{self.t(lang, side_name)}: {names or '-'}")
+        data.add_field(name=self.t(lang, N_("Matchup")), value="\n".join(matchup), inline=False)
         data.set_author(name=team_name(self.gamedata, team_id))
         await interaction.followup.send(embed=data)
 
