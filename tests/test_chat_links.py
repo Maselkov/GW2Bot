@@ -98,6 +98,49 @@ async def test_in_dms():
     assert embed["footer"] == {"icon_url": "https://cdn/bot.png"}
 
 
+# --- In the server's language ----------------------------------------------------------------
+
+
+def german(doc, **fields):
+    return {**doc, "l10n": {"de": fields}}
+
+
+def german_cache():
+    return subject.gw2_db(
+        items=[german(TWILIGHT, name="Zwielicht"), german(ECTO, name="Klumpen Ektoplasma"),
+               german(FORCE, name="Überlegenes Sigill der Macht", details={"suffix": "der Macht"})],
+        skins=[german(DUSK, name="Dämmerung")], pois=[german(WAYPOINT, name="Wegmarke Löwenstein")],
+        recipes=[RECIPE], skills=[SKILL], traits=[TRAIT], outfits=[OUTFIT],
+    )
+
+
+async def german_preview(content, **options):
+    [(embed, _)], _ = await subject.post_chat_link(content, db=german_cache(), server_language="de", **options)
+    return embed
+
+
+async def test_item_in_the_servers_language():
+    link = subject.chat_code(46762, 1, 3709, [24615])
+    embed = await german_preview(link, pages=["https://wiki-de.guildwars2.com/wiki/Zwielicht"])
+    assert embed["title"] == "Zwielicht der Macht"
+    assert embed["url"] == "https://wiki-de.guildwars2.com/wiki/Zwielicht"
+    assert fields(embed) == [("Skin", "Dämmerung"), ("Aufwertung", "Überlegenes Sigill der Macht")]
+    assert embed["description"] == "Chatcode-Vorschau"
+
+
+async def test_item_without_a_page_on_the_language_wiki_links_the_english_one():
+    embed = await german_preview(subject.chat_code(46762, 1), pages=[WIKI + "Twilight"])
+    assert embed["url"] == WIKI + "Twilight"
+
+
+async def test_map_link_and_recipe_in_the_servers_language():
+    embed = await german_preview(subject.link(4, 1234))
+    assert (embed["title"], fields(embed)) == ("Kartenlink", [("Wegmarke", "Wegmarke Löwenstein")])
+    embed = await german_preview(subject.link(9, 7))
+    assert embed["title"] == "Rezept: 1 Zwielicht"
+    assert fields(embed) == [("Handwerksdisziplinen", "Waffenschmied"), ("Zutaten", "250 Klumpen Ektoplasma")]
+
+
 # --- No preview ---------------------------------------------------------------------------
 
 

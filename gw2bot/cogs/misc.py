@@ -1,13 +1,14 @@
 """Miscellaneous commands: /wiki and /chatcode."""
 import codecs
 import struct
-import urllib.parse
 
 import discord
 from bs4 import BeautifulSoup
 from discord import app_commands
 from discord.app_commands import Choice
 
+from ..i18n import LANGUAGE_NAMES, N_
+from ..utils.wiki import WIKIS, search_url
 from .base import GW2Cog
 
 
@@ -41,36 +42,24 @@ class Misc(GW2Cog):
 
     @app_commands.command()
     @app_commands.describe(
-        language="The language of the wiki to search on. Optional. "
-        "Defaults to English.",
+        language="The language of the wiki to search. Defaults to your language.",
         search_text="The text to search the wiki for. Example: Lion's Arch")
     @app_commands.choices(language=[
-        Choice(name=p.title(), value=p) for p in ["en", "fr", "es", "de"]
+        Choice(name=name, value=code) for code, name in LANGUAGE_NAMES.items()
     ])
     async def wiki(
             self,
             interaction: discord.Interaction,
             search_text: str,  # TODO autocomplete
-            language: str = "en"):
-        """Search the Guild wars 2 wiki"""
+            language: str = None):
+        """Search the Guild Wars 2 wiki"""
+        lang = await self.lang(interaction)
         if len(search_text) > 300:
-            return await interaction.response.send_message("Search too long",
+            return await interaction.response.send_message(self.t(lang, N_("Search too long")),
                                                            ephemeral=True)
+        language = language or lang
         await interaction.response.defer()
-        wiki = {
-            "en": "https://wiki.guildwars2.com",
-            "de": "https://wiki-de.guildwars2.com",
-            "fr": "https://wiki-fr.guildwars2.com",
-            "es": "https://wiki-es.guildwars2.com"
-        }
-        search_url = {
-            "en": "{}/index.php?title=Special%3ASearch&search={}",
-            "de": "{}/index.php?search={}&title=Spezial%3ASuche&",
-            "fr": "{}/index.php?search={}&title=Spécial%3ARecherche",
-            "es": "{}/index.php?title=Especial%3ABuscar&search={}"
-        }
-        url = search_url[language].format(wiki[language],
-                                          urllib.parse.quote(search_text))
+        url = search_url(search_text, language)
         headers = {"User-Agent": "TybaltBot/v2"}
         # Overzealous filtering on the wiki's side lead to the bot's IP being blocked.
         # Seems to be a common issue, based on https://wiki.guildwars2.com/wiki/Guild_Wars_2_Wiki:Reporting_wiki_bugs#Forbidden_403
@@ -84,7 +73,8 @@ class Misc(GW2Cog):
             if r.history:  # Redirected
                 embed = await self.search_results_embed(interaction,
                                                         "Wiki",
-                                                        exact_match=r)
+                                                        exact_match=r,
+                                                        lang=lang)
                 return await interaction.followup.send(embed=embed)
             else:
                 results = await r.text()
@@ -93,11 +83,12 @@ class Misc(GW2Cog):
                     "div", {"class": "mw-search-result-heading"})[:5]
                 if not posts:
                     return await interaction.followup.send(
-                        "No results for your search")
+                        self.t(lang, N_("No results for your search")))
         embed = await self.search_results_embed(interaction,
                                                 "Wiki",
                                                 posts,
-                                                base_url=wiki[language])
+                                                base_url=WIKIS[language],
+                                                lang=lang)
         await interaction.followup.send(embed=embed)
 
     async def search_results_embed(self,
@@ -106,39 +97,41 @@ class Misc(GW2Cog):
                                    posts=None,
                                    *,
                                    base_url="",
-                                   exact_match=None):
+                                   exact_match=None,
+                                   lang="en"):
         if exact_match:
             soup = BeautifulSoup(await exact_match.text(), 'html.parser')
             embed = discord.Embed(title=soup.title.get_text(),
                                   color=await self.get_embed_color(ctx),
                                   url=str(exact_match.url))
             return embed
-        embed = discord.Embed(title="{} search results".format(site),
-                              description="Closest matches",
+        embed = discord.Embed(title=self.t(lang, N_("{site} search results"), site=site),
+                              description=self.t(lang, N_("Closest matches")),
                               color=await self.get_embed_color(ctx))
         for post in posts:
             post = post.a
             url = base_url + post['href']
             url = url.replace(")", "\\)")
             embed.add_field(name=post["title"],
-                            value="[Click here]({})".format(url),
+                            value="[{}]({})".format(self.t(lang, N_("Click here")), url),
                             inline=False)
         return embed
 
     async def chatcode_item_autocomplete(self,
                                          interaction: discord.Interaction,
                                          current: str):
-        return await self.name_choices(self.db.items, current)
+        return await self.name_choices(self.db.items, current, await self.lang(interaction))
 
     async def chatcode_skin_autocomplete(self,
                                          interaction: discord.Interaction,
                                          current: str):
-        return await self.name_choices(self.db.skins, current)
+        return await self.name_choices(self.db.skins, current, await self.lang(interaction))
 
     async def chatcode_upgrade_autocomplete(self,
                                             interaction: discord.Interaction,
                                             current: str):
-        return await self.name_choices(self.db.items, current, type="UpgradeComponent")
+        return await self.name_choices(self.db.items, current, await self.lang(interaction),
+                                       type="UpgradeComponent")
 
     @app_commands.command()
     @app_commands.describe(
@@ -148,7 +141,7 @@ class Misc(GW2Cog):
         upgrade_1="Name of the upgrade in the first slot. "
         "Example: +1 Agony Infusion",
         upgrade_2="Name of the upgrade in the second slot. "
-        "Example: Superior rune of Generosity")
+        "Example: Superior Rune of the Scholar")
     @app_commands.autocomplete(item=chatcode_item_autocomplete,
                                skin=chatcode_skin_autocomplete,
                                upgrade_1=chatcode_upgrade_autocomplete,
@@ -163,17 +156,23 @@ class Misc(GW2Cog):
         upgrade_2: str = None,
     ):
         """Generate a chat code"""
+        lang = await self.lang(interaction)
         if not 1 <= quantity <= 255:
             return await interaction.response.send_message(
-                "Invalid quantity. Quantity can be a number between 1 and 255",
+                self.t(lang, N_("Invalid quantity. Quantity can be a number between 1 and 255")),
                 ephemeral=True)
+        not_found = {
+            "items": N_("Could not find any items named {name}"),
+            "skins": N_("Could not find any skins named {name}"),
+            "upgrades": N_("Could not find any upgrades named {name}"),
+        }
 
         async def resolve(value, autocomplete, kind):
             if not value:
                 return None
             resolved = await self.resolve_id(interaction, value, autocomplete)
             if resolved is None:
-                raise LookupError(f"Could not find any {kind} named {value}")
+                raise LookupError(self.t(lang, not_found[kind], name=value))
             return resolved
 
         try:
@@ -196,7 +195,7 @@ class Misc(GW2Cog):
         if upgrade_2:
             upgrades.append(upgrade_2)
         chat_code = generate_chat_code(item, quantity, skin, upgrades)
-        output = "Here's your chatcode. No refunds. ```\n{}```".format(
+        output = self.t(lang, N_("Here's your chatcode. No refunds.")) + " ```\n{}```".format(
             chat_code)
         await interaction.response.send_message(output, ephemeral=True)
 

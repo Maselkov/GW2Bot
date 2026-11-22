@@ -37,7 +37,7 @@ def key(token, name=""):
 async def test_switch_key_names_the_new_key():
     stored = {"key": key("A"), "keys": [key("A"), key("B", "Alt")]}
     sent, writes = await subject.switch_key(stored, "B")
-    assert sent == "Swapped to selected key. Name : `Alt`"
+    assert sent == "Swapped to selected key. Name: `Alt`"
     assert writes == [(1, "set", {"key": key("B", "Alt")})]
 
 
@@ -51,7 +51,7 @@ async def test_switch_without_an_active_key():
     # E.g. after removing the active key
     stored = {"key": {}, "keys": [key("A"), key("B", "Alt")]}
     sent, writes = await subject.switch_key(stored, "B")
-    assert sent == "Swapped to selected key. Name : `Alt`"
+    assert sent == "Swapped to selected key. Name: `Alt`"
     assert writes == [(1, "set", {"key": key("B", "Alt")})]
 
 

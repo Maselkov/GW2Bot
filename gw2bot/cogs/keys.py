@@ -10,6 +10,7 @@ from discord.app_commands import Choice
 from discord.ext import commands, tasks
 
 from ..gw2api.errors import APIError, APIInactiveError
+from ..i18n import N_
 from .base import GW2Cog
 
 
@@ -33,6 +34,7 @@ class Keys(GW2Cog):
     )
     async def key_add(self, interaction: discord.Interaction, token: str):
         """Adds a key and associates it with your discord account"""
+        lang = await self.lang(interaction)
         await interaction.response.defer(ephemeral=True)
         doc = await self.bot.data.users.get(interaction.user.id)
         try:
@@ -40,10 +42,10 @@ class Keys(GW2Cog):
             token_info, acc = await self.call_multiple(endpoints, key=token)
         except APIInactiveError:
             return await interaction.followup.send(
-                "The API is currently down. " "Try again later. "
+                self.t(lang, N_("The API is currently down. Try again later."))
             )
         except APIError:
-            return await interaction.followup.send("The key is invalid.")
+            return await interaction.followup.send(self.t(lang, N_("The key is invalid.")))
         key_doc = {
             "key": token,
             "account_name": acc["name"],
@@ -59,24 +61,24 @@ class Keys(GW2Cog):
             keys.append(key)
         if key_doc["key"] in [k["key"] for k in keys]:
             return await interaction.followup.send(
-                "You have already added this key before."
+                self.t(lang, N_("You have already added this key before."))
             )
         if len(keys) >= 15:
-            return await interaction.followup.send(
+            return await interaction.followup.send(self.t(lang, N_(
                 "You've reached the maximum limit of "
                 "15 API keys, please remove one before adding "
                 "another"
-            )
+            )))
         keys.append(key_doc)
         await self.bot.data.users.update(interaction.user.id, {"key": key_doc, "keys": keys})
         if len(keys) > 1:
-            output = (
+            output = self.t(lang, N_(
                 "Your key was verified and "
                 "added to your list of keys, you can swap between "
                 "them at any time using /key switch."
-            )
+            ))
         else:
-            output = "Your key was verified and " "associated with your account."
+            output = self.t(lang, N_("Your key was verified and associated with your account."))
         all_permissions = (
             "account",
             "builds",
@@ -91,13 +93,13 @@ class Keys(GW2Cog):
         )
         missing = [x for x in all_permissions if x not in key_doc["permissions"]]
         if missing:
-            output += (
-                "\nPlease note that your API key doesn't have the "
+            output += "\n" + self.t(lang, N_(
+                "Please note that your API key doesn't have the "
                 "following permissions checked: "
-                f"```{', '.join(missing)}```\nSome commands "
+                "```{permissions}```\nSome commands "
                 "will not work. Consider adding a new key with "
                 "those permissions checked."
-            )
+            ), permissions=", ".join(missing))
 
         await interaction.followup.send(output)
         try:
@@ -143,6 +145,7 @@ class Keys(GW2Cog):
     @app_commands.autocomplete(token=key_autocomplete)
     async def key_remove(self, interaction: discord.Interaction, token: str):
         """Remove selected keys from the bot"""
+        lang = await self.lang(interaction)
         await interaction.response.defer(ephemeral=True)
         doc = await self.bot.data.users.get(interaction.user.id)
         keys = doc.get("keys", [])
@@ -151,9 +154,9 @@ class Keys(GW2Cog):
         removed_active = active.get("key") == token
         if not removed_active and to_keep == keys:
             return await interaction.followup.send(
-                "No keys were removed. Invalid token"
+                self.t(lang, N_("No keys were removed. Invalid token"))
             )
-        message = "Key removed."
+        message = self.t(lang, N_("Key removed."))
         if removed_active:
             # Keep a key active while there are any left
             active = to_keep[0] if to_keep else {}
@@ -161,23 +164,24 @@ class Keys(GW2Cog):
                 name = active["account_name"]
                 if active.get("name"):
                     name += " - " + active["name"]
-                message += f" Your active key is now {name}."
+                message += " " + self.t(lang, N_("Your active key is now {name}."), name=name)
         await self.bot.data.users.update(interaction.user.id, {"key": active, "keys": to_keep})
         await interaction.followup.send(message)
 
     @key_group.command(name="info")
     async def key_info(self, interaction: discord.Interaction):
         """Information about your api keys"""
+        lang = await self.lang(interaction)
         doc = await self.bot.data.users.get(interaction.user.id)
         await interaction.response.defer(ephemeral=True)
         keys = doc.get("keys", [])
         key = doc.get("key", {})
         if not keys and not key:
             return await interaction.followup.send(
-                "You have no keys added, you can add one with /key add."
+                self.t(lang, N_("You have no keys added, you can add one with /key add."))
             )
         embed = await self.display_keys(
-            interaction, doc, display_active=True, show_tokens=True, reveal_tokens=True
+            interaction, doc, display_active=True, show_tokens=True, reveal_tokens=True, lang=lang
         )
         await interaction.followup.send(embed=embed)
 
@@ -185,29 +189,30 @@ class Keys(GW2Cog):
     @app_commands.autocomplete(token=key_autocomplete)
     async def key_switch(self, interaction: discord.Interaction, token: str):
         """Swaps between multiple stored API keys."""
+        lang = await self.lang(interaction)
         doc = await self.bot.data.users.get(interaction.user.id)
         keys = doc.get("keys", [])
         key = doc.get("key", {})
         if not keys:
             return await interaction.response.send_message(
-                "You need to add additional API keys first using /key " "add first.",
+                self.t(lang, N_("You need to add additional API keys first using /key add first.")),
                 ephemeral=True,
             )
         if key.get("key") == token:
             return await interaction.response.send_message(
-                "That key is currently active.", ephemeral=True
+                self.t(lang, N_("That key is currently active.")), ephemeral=True
             )
         for k in keys:
             if k["key"] == token:
                 break
         else:
             return await interaction.response.send_message(
-                "That key is not in your account.", ephemeral=True
+                self.t(lang, N_("That key is not in your account.")), ephemeral=True
             )
         await self.bot.data.users.update(interaction.user.id, {"key": k})
-        msg = "Swapped to selected key."
+        msg = self.t(lang, N_("Swapped to selected key."))
         if k["name"]:
-            msg += " Name : `{}`".format(k["name"])
+            msg += " " + self.t(lang, N_("Name: `{name}`"), name=k["name"])
         await interaction.response.send_message(msg, ephemeral=True)
 
     async def display_keys(
@@ -219,11 +224,13 @@ class Keys(GW2Cog):
         display_permissions=True,
         show_tokens=False,
         reveal_tokens=False,
+        lang="en",
     ):
         def get_value(key):
             lines = []
             if display_permissions:
-                lines.append("Permissions: " + ", ".join(key["permissions"]))
+                lines.append(self.t(lang, N_("Permissions: {permissions}"),
+                                    permissions=", ".join(key["permissions"])))
             if show_tokens:
                 token = key["key"]
                 if not reveal_tokens:
@@ -235,7 +242,7 @@ class Keys(GW2Cog):
 
         keys = doc.get("keys", [])
         embed = discord.Embed(
-            title="Your keys", color=await self.get_embed_color(interaction)
+            title=self.t(lang, N_("Your keys")), color=await self.get_embed_color(interaction)
         )
         embed.set_author(
             name=interaction.user.name, icon_url=interaction.user.display_avatar.url
@@ -243,7 +250,7 @@ class Keys(GW2Cog):
         if display_active:
             active_key = doc.get("key", {})
             if active_key:
-                name = "**Active key**: {}".format(active_key["account_name"])
+                name = "**{}**: {}".format(self.t(lang, N_("Active key")), active_key["account_name"])
                 token_name = active_key["name"]
                 if token_name:
                     name += " - " + token_name

@@ -91,6 +91,8 @@ gw2bot/
   keys.py, emojis.py, errors.py, builds.py, gamedata.py
                            services the cogs share: users' API keys, emojis,
                            API error messages, build templates, game data
+  i18n.py                  languages, translation catalogs, the slash command translator
+  locales/                 translations (de, fr, es) and the game term glossary
   utils/                   small helpers (chat formatting, searches, wiki links, ...)
   data/                    game data the bot ships with (bosses, timers, ...)
 docs/background-tasks.md   what each loop and listener does, its known issues and tests
@@ -108,6 +110,22 @@ Each feature is a cog in `gw2bot/cogs/`, a subclass of `GW2Cog` with an `async d
 Cogs that run loops start them in `cog_load` and cancel them in `cog_unload`, so `>reload` restarts them.
 
 A slash command group has to live in one cog. So where a command belongs to another cog's group, for example `/server preview_chat_links`, it calls the owning cog through `bot.get_cog(...)`.
+
+## Translations
+
+The bot speaks the GW2 API's languages: English, German, French and Spanish. Slash command descriptions and choices are translated for users whose Discord is in one of them; command and option names stay English, since Discord would show a translated name instead of the English one.
+
+Replies use the user's `/language` setting, else their Discord's language. Posts to a server (news, update notes, dailies, boss timers, chat link previews) use its `/server language` setting, else the server's Discord language; news comes from guildwars2.com's feed in that language. DMs outside a command (event reminders, the gem price tracker) use the user's `/language` setting, else English.
+
+`gw2bot/locales/{de,fr,es}.json` map English text to its translation. To translate new text:
+
+```bash
+.venv-test/bin/python scripts/i18n_extract.py    # add new text to the catalogs (--prune removes old text)
+# translate the empty entries, following gw2bot/locales/STYLE.md
+.venv-test/bin/python scripts/i18n_check.py      # translations that may not use the game's term
+```
+
+Game terms must match what players see in their game client. `gw2bot/locales/glossary.json` holds their official names, taken from the API and the language wikis; `scripts/i18n_glossary.py` rebuilds it from `glossary_sources.json`, and `glossary_overrides.json` holds corrections checked by hand. `tests/test_i18n.py` fails if text is untranslated, a translation loses a `{placeholder}`, or a command description is over Discord's 100 characters.
 
 ## Dependencies
 

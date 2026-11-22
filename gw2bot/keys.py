@@ -4,14 +4,17 @@ import copy
 import logging
 
 from .gw2api.errors import APIKeyError
+from .i18n import N_, Catalog, resolve_language
 
 log = logging.getLogger(__name__)
 
 
 class ApiKeys:
-    def __init__(self, users):
+    def __init__(self, users, catalog=None):
         # The users SettingsRepo
         self.users = users
+        # For messages to users (English without one)
+        self.catalog = catalog or Catalog()
         self.background_tasks = set()
 
     async def get(self, user, scopes=None):
@@ -19,10 +22,10 @@ class ApiKeys:
         ...}), checking it has `scopes`. Raises APIKeyError otherwise."""
         doc = await self.users.get(user.id)
         if not doc or "key" not in doc or not doc["key"]:
-            raise APIKeyError(
+            raise APIKeyError(N_(
                 "No API key associated with your account. "
                 "Add your key using `/key add` command. If you don't know "
-                "how, the command includes a tutorial.")
+                "how, the command includes a tutorial."))
         if scopes:
             missing = []
             for scope in scopes:
@@ -31,10 +34,10 @@ class ApiKeys:
             if missing:
                 missing = ", ".join(missing)
                 raise APIKeyError(
-                    "{.mention}, your API key is missing the following "
-                    "permissions to use this command: `{}`\nConsider adding "
-                    "a new key with those permissions "
-                    "checked".format(user, missing))
+                    N_("{user}, your API key is missing the following "
+                       "permissions to use this command: `{permissions}`\nConsider adding "
+                       "a new key with those permissions checked"),
+                    user=user.mention, permissions=missing)
         return doc["key"]
 
     def check_account_rename_later(self, user, used_key, account):
@@ -56,11 +59,11 @@ class ApiKeys:
             if alt_key["account_name"] == old_name:
                 alt_key["account_name"] = new_name
         await self.users.update(user.id, {"key": key, "keys": keys})
-        await user.send(
-            "Your account name seems to have "
-            "changed! I went ahead and updated it, "
-            "from `{}` to `{}`.".format(old_name, new_name)
-        )
+        await user.send(self.catalog.t(
+            resolve_language(doc.get("language")),
+            N_("Your account name seems to have changed! I went ahead and updated it, from `{old}` to `{new}`."),
+            old=old_name, new=new_name,
+        ))
         await self.users.update(
             user.id,
             {"name_changes": [old_name, new_name]},

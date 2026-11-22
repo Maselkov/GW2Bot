@@ -340,6 +340,35 @@ def test_daily_embed_fractals():
     assert fields["> Recommended Fractals"] == "15 Thaumanova Reactor"
 
 
+GERMAN_DAILY_NAMES = {"de": [
+    ["Raid Bounty: Harvest Temple", "Schlachtzug-Kopfgeld: Erntetempel"],
+    ["Daily Lake Doric Bosses", "Täglicher Doric-See: Bosse"],
+    ["Daily Tier 4 Chaos", "Täglicher Abschluss: Chaos, Rang 4"],
+]}
+
+
+def test_daily_embed_in_german():
+    fields = subject.daily_fields(["lw", "raids"], _today_rotation(), D(2024, 3, 1), lang="de",
+                                  names=GERMAN_DAILY_NAMES)
+    assert fields == [
+        ("SCHLACHTZUG-KOPFGELDER", "Erntetempel"),
+        ("STAFFEL 3 DER LEBENDIGEN WELT", "Täglicher Doric-See: Bosse"),
+        # Not cached in German (yet): English
+        ("STAFFEL 4 DER LEBENDIGEN WELT", "Jahai Bluffs Rift Event"),
+    ]
+
+
+def test_daily_fractals_in_french():
+    fields = dict(subject.daily_fields(["fractals"], _today_rotation(), D(2024, 3, 1), lang="fr"))
+    assert list(fields) == ["> Fractales quotidiennes", "> Instabilités CM",
+                            "> Fractales recommandées"]
+    # Fractal and instability names from the game data
+    assert fields["> Fractales quotidiennes"].startswith("Chaos\n")
+    assert "Champ de bataille urbain" in fields["> Fractales quotidiennes"]
+    assert fields["> Fractales recommandées"] == "15 Réacteur de Thaumanova"
+    assert fields["> Instabilités CM"].startswith("Cauchemars\n")
+
+
 def test_daily_embed_psna(gamedata):
     # Monday 06:00 UTC: Sunday's agents until the 08:00 reset
     now = datetime.datetime(2024, 3, 4, 6, tzinfo=UTC)

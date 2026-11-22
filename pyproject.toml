@@ -34,6 +34,7 @@ include = ["gw2bot*"]
 
 [tool.setuptools.package-data]
 "gw2bot.data" = ["*.json"]
+"gw2bot.locales" = ["*.json"]
 
 [tool.ruff.lint]
 # Mistakes rather than style: pyflakes (unused imports and variables,

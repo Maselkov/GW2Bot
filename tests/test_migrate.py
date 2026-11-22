@@ -256,7 +256,7 @@ async def test_bot_migrates_on_first_start_only(mongo):
 # must not change it: users would see no difference, and production wouldn't
 # re-sync. When commands change on purpose, update it (production then syncs
 # on its next start).
-COMMAND_TREE_HASH = "b9fbe229a28fa8fac9e3a6acb948498da7ad1b4bdde30d02ddef5caf4a6a3cdd"
+COMMAND_TREE_HASH = "04ebcf14beb7181ef4aef3782fd90c55b0dce97fa76f654ef86d1292dc771cff"
 
 
 async def test_command_tree_is_unchanged(mongo):
@@ -268,6 +268,45 @@ async def test_command_tree_is_unchanged(mongo):
     async with GW2Bot(settings) as bot:
         await bot.setup_hook()
         try:
-            assert command_tree_hash(bot.tree) == COMMAND_TREE_HASH
+            assert await command_tree_hash(bot.tree) == COMMAND_TREE_HASH
         finally:
             await bot.close()
+
+
+def _commands_and_options(payload):
+    """Every command, subcommand and option in a command payload."""
+    yield payload
+    for option in payload.get("options", []):
+        yield from _commands_and_options(option)
+
+
+async def test_synced_commands_are_localized(mongo):
+    from gw2bot.bot import GW2Bot
+    from gw2bot.config import Settings
+
+    client, source, target = mongo
+    settings = Settings(token="unused", mongo_uri=URI, mongo_db=target, migrate_from_db=source, auto_sync=False)
+    async with GW2Bot(settings) as bot:
+        await bot.setup_hook()
+        try:
+            tree = bot.tree
+            payload = {c.name: await c.get_translated_payload(tree, tree.translator) for c in tree.get_commands()}
+        finally:
+            await bot.close()
+    wallet = payload["wallet"]
+    assert wallet["description"] == "Shows your wallet"
+    assert wallet["description_localizations"] == {
+        "de": "Zeigt Eure Geldbörse",
+        "fr": "Affiche votre portefeuille",
+        "es-ES": "Muestra tu cartera",
+        "es-419": "Muestra tu cartera",
+    }
+    # Command and option names stay English: a localized name would replace
+    # it. Choices are labels, so they are translated
+    for command in payload.values():
+        for item in _commands_and_options(command):
+            assert not item.get("name_localizations"), item["name"]
+    choices = [choice for command in payload.values() for item in _commands_and_options(command)
+               for choice in item.get("choices", [])]
+    played = next(choice for choice in choices if choice["name"] == "Time played")
+    assert played["name_localizations"]["de"] == "Spielzeit"

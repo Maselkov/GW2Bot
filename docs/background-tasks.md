@@ -193,7 +193,8 @@ opt-out set, loaded in `cog_load`. `/server preview_chat_links` (in `Server`) up
   - **Build check:** reads the build number from `http://assetcdn.101.arenanetworks.com/latest/101`. If it
     differs from `config.cache.build`, it saves it and **rebuilds the game data cache inside the loop**. The
     rebuild sets the bot's status to "Rebuilding API cache" and re-fetches items, achievements, skins, skills and
-    more; failures DM the owner. No updates are posted until it's done. *Fixed:* the last batch of points of
+    more, in English and again in German, French and Spanish for their text (stored under `l10n`); failures DM
+    the owner. No updates are posted until it's done. *Fixed:* the last batch of points of
     interest was never saved, and a failure with the owner uncached aborted the rebuild with the status stuck.
     Tested in `test_cache.py`.
   - **Update notes:** reads the forum's release-notes feed and topic, tracking posts per thread in
@@ -207,7 +208,9 @@ opt-out set, loaded in `cog_load`. `/server preview_chat_links` (in `Server`) up
   - *Fixed:* a missing config document or an unexpected build page stopped the loop. It's logged now.
 - **Known issues.**
   - Legacy `everyone` / `here` mentions are patched at send time ("TODO").
-  - The rebuild runs inside the loop, so a slow rebuild delays update notes.
+  - The rebuild runs inside the loop, so a slow rebuild delays update notes. Fetching every language makes about
+    four times the requests of an English-only rebuild (recipes and legends, which have no text, are fetched
+    once).
   - The rebuild's `bot.available` flag isn't read anywhere.
 - **Tests.**
   - Existing: notes parsing and which posts to send (`test_update_notes.py`, 18 tests); a bad build page or

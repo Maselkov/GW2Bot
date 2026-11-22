@@ -86,15 +86,36 @@ NAMES = [
 ]
 
 
+def translated(prefix):
+    return [{"id": n["id"], "name": f"{prefix} {n['name']}"} for n in NAMES]
+
+
+ROTATION = {
+    "cache.dailies": {"fractals": ["Daily Tier 4 Aquatic Ruins"], "raids": ["Raid Bounty: Vale Guardian"],
+                      "lws3": [], "lws4": []},
+    "cache.dailies_tomorrow": {"fractals": ["Daily Tier 4 Volcanic"], "raids": ["Raid Bounty: Vale Guardian"],
+                               "lws3": [], "lws4": []},
+}
+
+
 async def test_dailies_refresh_caches_today_and_tomorrow():
-    writes, error = await subject.run_dailies_refresh([(200, CATEGORIES), (200, NAMES)])
+    writes, error = await subject.run_dailies_refresh(
+        [(200, CATEGORIES), (200, NAMES), (200, translated("DE")), (200, translated("FR")), (200, translated("ES"))]
+    )
     assert error is None
+    # The names in each language, for display, by their English names
     assert writes == [{
-        "cache.dailies": {"fractals": ["Daily Tier 4 Aquatic Ruins"], "raids": ["Raid Bounty: Vale Guardian"],
-                          "lws3": [], "lws4": []},
-        "cache.dailies_tomorrow": {"fractals": ["Daily Tier 4 Volcanic"], "raids": ["Raid Bounty: Vale Guardian"],
-                                   "lws3": [], "lws4": []},
+        **ROTATION,
+        **{f"cache.daily_names.{lang}": [[n["name"], f"{lang.upper()} {n['name']}"] for n in NAMES]
+           for lang in ("de", "fr", "es")},
     }]
+
+
+async def test_dailies_refresh_caches_english_when_other_languages_fail(caplog):
+    writes, error = await subject.run_dailies_refresh([(200, CATEGORIES), (200, NAMES), (404, {"text": "no"})])
+    assert error is None
+    assert writes == [ROTATION]
+    assert "Couldn't cache dailies in de" in caplog.text
 
 
 async def test_dailies_refresh_keeps_the_cache_on_errors(caplog):
