@@ -256,7 +256,7 @@ async def test_bot_migrates_on_first_start_only(mongo):
 # must not change it: users would see no difference, and production wouldn't
 # re-sync. When commands change on purpose, update it (production then syncs
 # on its next start).
-COMMAND_TREE_HASH = "adfb28af2a0dae187bb7d8f0272ad5be8a7935ff6beeb8832f681f6cd7b80b7e"
+COMMAND_TREE_HASH = "04ebcf14beb7181ef4aef3782fd90c55b0dce97fa76f654ef86d1292dc771cff"
 
 
 async def test_command_tree_is_unchanged(mongo):
