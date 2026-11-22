@@ -74,5 +74,49 @@
     "fr": "Modèle d'archétype",
     "es": "Plantilla de ajustes",
     "note": "From the Build Template Expansion item (id 92209): wiki-de Build-Vorlagen-Erweiterung, linked to fr Extension de modèle d'archétype and es Expansión de plantillas de ajustes."
+  },
+  "Oil Floes": {
+    "de": "Öl auf dem Eis",
+    "fr": "Flaques d'huile",
+    "es": "Témpanos de petróleo",
+    "note": "Thunderhead Peaks meta. wiki-de Öl auf dem Eis, wiki-fr Les flaques d'huiles, wiki-es Los témpanos de petróleo (checked during the PR #214 translation review)."
+  },
+  "Ooze Pits": {
+    "fr": "Fosse à limons",
+    "es": "Fosa de Légamos",
+    "note": "Grothmar Valley. wiki-fr La Fosse à limons; es from achievement 4934 (Participante en la Fosa de Légamos de Grothmar del día). German has no wiki-de name."
+  },
+  "Aspenwood": {
+    "de": "Espenwald",
+    "fr": "Fort Trembleforêt",
+    "note": "Fort Aspenwood, Echovald Wilds meta. de: wiki-de event timer; fr: achievement Echovald Wilds Insight: Fort Aspenwood (« … : Fort Trembleforêt »)."
+  },
+  "Salvage kit": {
+    "fr": "Nécessaire de recyclage",
+    "note": "Every salvage kit item is « Nécessaire de recyclage … » in the French API (e.g. items 23038, 19986)."
+  },
+  "Stash": {
+    "de": "Tresor",
+    "note": "Guild stash: Gilden-Tresor in the German client. Lager is a WvW camp."
+  },
+  "Treasury": {
+    "fr": "Trésor",
+    "note": "Guild treasury: wiki-fr Trésor (guilde), NPC « Trésorier de guilde »."
+  },
+  "Mastery": {
+    "es": "Dominio",
+    "note": "es client: Punto de dominio, Reflexión de dominios."
+  },
+  "Downed": {
+    "es": "Abatido",
+    "note": "wiki-es Abatido, Lista de habilidades de abatido."
+  },
+  "Utility skill": {
+    "es": "Habilidad de apoyo",
+    "note": "es skill slots: Arma/Curación/Apoyo/Élite/Abatido."
+  },
+  "Speargun": {
+    "es": "Cañón de arpón",
+    "note": "wiki-es: Arpón is the old name of the underwater spear (now Lanza) and a crafting component."
   }
 }

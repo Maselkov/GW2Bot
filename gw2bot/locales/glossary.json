@@ -23,6 +23,11 @@
     "es": "Ascendido",
     "source": "reviewed"
   },
+  "Aspenwood": {
+    "de": "Espenwald",
+    "fr": "Fort Trembleforêt",
+    "source": "reviewed"
+  },
   "Banana": {
     "de": "Banane",
     "fr": "Banane",
@@ -75,6 +80,10 @@
     "de": "Tageszeit",
     "es": "Día y noche",
     "source": "wiki"
+  },
+  "Downed": {
+    "es": "Abatido",
+    "source": "reviewed"
   },
   "Dynamic event": {
     "de": "Event",
@@ -255,6 +264,10 @@
     "es": "Obra de arte",
     "source": "reviewed"
   },
+  "Mastery": {
+    "es": "Dominio",
+    "source": "reviewed"
+  },
   "Mesmer": {
     "de": "Mesmer",
     "fr": "Envoûteur",
@@ -278,6 +291,17 @@
     "fr": "Nécromant",
     "es": "Nigromante",
     "source": "api:professions/Necromancer"
+  },
+  "Oil Floes": {
+    "de": "Öl auf dem Eis",
+    "fr": "Flaques d'huile",
+    "es": "Témpanos de petróleo",
+    "source": "reviewed"
+  },
+  "Ooze Pits": {
+    "fr": "Fosse à limons",
+    "es": "Fosa de Légamos",
+    "source": "reviewed"
   },
   "Outfit": {
     "de": "Kleidungsset",
@@ -339,6 +363,10 @@
     "fr": "Rune",
     "source": "wiki"
   },
+  "Salvage kit": {
+    "fr": "Nécessaire de recyclage",
+    "source": "reviewed"
+  },
   "Shadow Behemoth": {
     "de": "Schatten-Behemoth",
     "es": "Behemot de las sombras",
@@ -350,6 +378,14 @@
     "es": "Diseño",
     "fr": "Apparence",
     "source": "wiki"
+  },
+  "Speargun": {
+    "es": "Cañón de arpón",
+    "source": "reviewed"
+  },
+  "Stash": {
+    "de": "Tresor",
+    "source": "reviewed"
   },
   "Strike Mission": {
     "de": "Angriffsmission",
@@ -393,11 +429,19 @@
     "fr": "Comptoir",
     "source": "wiki"
   },
+  "Treasury": {
+    "fr": "Trésor",
+    "source": "reviewed"
+  },
   "Upgrade component": {
     "de": "Aufwertung",
     "es": "Componente de mejora",
     "fr": "Composant d'amélioration",
     "source": "wiki"
+  },
+  "Utility skill": {
+    "es": "Habilidad de apoyo",
+    "source": "reviewed"
   },
   "Vista": {
     "de": "Panorama",
